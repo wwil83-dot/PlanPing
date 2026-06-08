@@ -2,8 +2,8 @@ name: PlanPing scraper
 
 on:
   schedule:
-    - cron: '0 3 * * *'    # 3am UTC nightly
-    - cron: '0 9 * * *'    # 9am UTC — send morning digests
+    - cron: '0 3 * * *'
+    - cron: '0 9 * * *'
   workflow_dispatch:
     inputs:
       job:
@@ -23,7 +23,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
+        with:
+          python-version: '3.12'
       - run: pip install asyncpg httpx beautifulsoup4 lxml
       - name: Run scrapers
         env:
@@ -38,17 +39,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
+        with:
+          python-version: '3.12'
       - run: pip install asyncpg httpx
       - name: Dispatch alerts
         env:
-          DATABASE_URL:   ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          FROM_EMAIL:     ${{ secrets.FROM_EMAIL }}
-          BASE_URL:       ${{ secrets.BASE_URL }}
-        run: python -c "
-import asyncio, sys
-sys.path.insert(0, 'app')
-from app.alerts import dispatch_alerts
-asyncio.run(dispatch_alerts())
-"
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          BASE_URL: ${{ secrets.BASE_URL }}
+        run: python dispatch_alerts.py
