@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Coverage — PlanPing{% endblock %}
+{% block content %}
+<main class="main">
+  <h1 style="font-size:1.6rem;font-weight:600;margin-bottom:.5rem">Coverage</h1>
+  <p style="color:var(--muted);margin-bottom:2rem">We cover {{ covered_count }} of {{ total }} councils. More being added weekly.</p>
+  <h2 style="font-size:1rem;font-weight:600;margin-bottom:.75rem;color:var(--green)">✓ Covered ({{ covered_count }})</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.5rem;margin-bottom:2rem">
+    {% for c in covered %}
+    <a href="/council/{{ c.slug }}" style="background:#fff;border:1px solid var(--border);border-radius:7px;padding:.6rem .9rem;font-size:.85rem;text-decoration:none;color:var(--text);display:flex;justify-content:space-between;align-items:center">
+      {{ c.name }}
+      <span style="font-size:.72rem;color:var(--muted)">{{ c.system }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  <h2 style="font-size:1rem;font-weight:600;margin-bottom:.75rem;color:var(--amber)">⏳ Coming soon ({{ total - covered_count }})</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.5rem">
+    {% for c in uncovered %}
+    <div style="background:#fff;border:1px solid var(--border);border-radius:7px;padding:.6rem .9rem;font-size:.85rem;color:var(--muted);display:flex;justify-content:space-between">
+      {{ c.name }}
+      {% if c.portal_url %}<a href="{{ c.portal_url }}" target="_blank" style="font-size:.72rem;color:var(--blue)">Portal →</a>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</main>
+{% endblock %}

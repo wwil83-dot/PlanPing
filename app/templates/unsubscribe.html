@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<main class="main" style="max-width:520px;text-align:center;padding-top:4rem">
+  <h1 style="font-size:1.8rem;font-weight:600;margin-bottom:.5rem">{% if removed %}Unsubscribed{% else %}Already removed{% endif %}</h1>
+  <p style="color:var(--muted);margin-bottom:1.5rem">{% if removed %}You've been removed from PlanPing alerts.{% else %}This link has already been used.{% endif %}</p>
+  <a href="/" class="btn btn-primary">Back to search</a>
+</main>
+{% endblock %}

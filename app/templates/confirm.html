@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<main class="main" style="max-width:520px;text-align:center;padding-top:4rem">
+  {% if confirmed %}
+  <div style="font-size:3rem;margin-bottom:1rem">✓</div>
+  <h1 style="font-size:1.8rem;font-weight:600;margin-bottom:.5rem">You're all set</h1>
+  <p style="color:var(--muted);margin-bottom:1.5rem">Your alert is confirmed. We'll email you when new planning applications appear near your postcode.</p>
+  {% else %}
+  <h1 style="font-size:1.8rem;font-weight:600;margin-bottom:.5rem">Link already used</h1>
+  <p style="color:var(--muted);margin-bottom:1.5rem">This confirmation link has already been used or has expired.</p>
+  {% endif %}
+  <a href="/" class="btn btn-primary">Back to search</a>
+</main>
+{% endblock %}

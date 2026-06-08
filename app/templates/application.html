@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ app.reference }} — PlanPing{% endblock %}
+{% block content %}
+<main class="main" style="max-width:680px">
+  <a href="javascript:history.back()" class="btn" style="margin-bottom:1.25rem;display:inline-flex">← Back</a>
+  <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:1.5rem">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+      <div>
+        <div style="font-size:.8rem;color:var(--muted);margin-bottom:.3rem">{{ app.council_name }}</div>
+        <h1 style="font-size:1.3rem;font-weight:600;margin-bottom:.25rem">{{ app.reference }}</h1>
+        <p style="font-size:1rem;font-weight:500">{{ app.address }}</p>
+      </div>
+      <span class="badge badge-status badge-{{ 'approved' if app.status in ('approved','granted') else 'refused' if app.status == 'refused' else 'pending' }}">
+        {{ app.status | title }}
+      </span>
+    </div>
+    <p style="font-size:.9rem;color:var(--muted);margin-bottom:1rem">{{ app.description }}</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;font-size:.85rem">
+      <div><span style="color:var(--muted)">Type</span><br><strong>{{ app.application_type or '—' }}</strong></div>
+      <div><span style="color:var(--muted)">Submitted</span><br><strong>{{ app.submitted_date.strftime('%-d %b %Y') if app.submitted_date else '—' }}</strong></div>
+      {% if app.decision_date %}<div><span style="color:var(--muted)">Decision</span><br><strong>{{ app.decision_date.strftime('%-d %b %Y') }}</strong></div>{% endif %}
+      {% if app.postcode %}<div><span style="color:var(--muted)">Postcode</span><br><strong>{{ app.postcode }}</strong></div>{% endif %}
+    </div>
+    {% if app.council_url %}
+    <div style="margin-top:1.25rem">
+      <a href="{{ app.council_url }}" target="_blank" rel="noopener" class="btn btn-primary">View on council portal →</a>
+    </div>
+    {% endif %}
+  </div>
+</main>
+{% endblock %}

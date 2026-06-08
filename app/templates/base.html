@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}PlanPing — Planning application alerts{% endblock %}</title>
+  <meta name="description" content="Get instant alerts when planning applications are submitted near your home. Free postcode search covering England and Wales.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Fraunces:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="brand">
+        <span class="brand-icon">📋</span>
+        <span class="brand-name">PlanPing</span>
+      </a>
+      <div class="nav-links">
+        <a href="/councils">Coverage</a>
+        <a href="/about">About</a>
+      </div>
+    </div>
+  </nav>
+
+  {% block content %}{% endblock %}
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <p>PlanPing is an independent service. Planning data sourced from council portals and planning.data.gov.uk under the Open Government Licence v3.0.</p>
+      <p><a href="/about">About</a> · <a href="/privacy">Privacy</a> · <a href="/councils">Coverage</a></p>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="alert"></div>
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3500);
+    }
+    function openModal(id) { document.getElementById(id).classList.add('open'); }
+    function closeModal(id, e) {
+      if (!e || e.target === document.getElementById(id))
+        document.getElementById(id).classList.remove('open');
+    }
+    function closeModalById(id) { document.getElementById(id).classList.remove('open'); }
+    document.querySelectorAll('[data-post]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const form = btn.closest('form');
+        if (!form) return;
+        try {
+          btn.disabled = true;
+          const r = await fetch(form.action, { method: 'POST', body: new FormData(form) });
+          const j = await r.json();
+          showToast(j.message || 'Done.');
+          document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
+          form.reset();
+        } catch { showToast('Something went wrong — please try again.'); }
+        finally { btn.disabled = false; }
+      });
+    });
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

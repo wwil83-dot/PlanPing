@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}PlanPing — Know what's being built near you{% endblock %}
+
+{% block content %}
+<header class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">Free planning application alerts</div>
+    <h1>Know what's being<br><em>built near you</em></h1>
+    <p class="hero-sub">Get email alerts when planning applications are submitted near your home. Extensions, new builds, HMOs, phone masts — all of it.</p>
+
+    <form class="search-form" action="/search" method="get">
+      <input type="text" name="postcode" id="postcode" class="search-input"
+        placeholder="Enter your postcode, e.g. BS1 3HD"
+        value="{{ postcode or '' }}"
+        autocomplete="postal-code" required autofocus>
+      <button type="submit" class="btn-search">Search</button>
+    </form>
+
+    {% if error %}
+    <p class="search-error">{{ error }}</p>
+    {% endif %}
+
+    <p class="hero-note">Free · No account needed · Covers England &amp; Wales</p>
+  </div>
+</header>
+
+<main class="main">
+  <section class="features">
+    <div class="feature">
+      <div class="feature-icon">🔔</div>
+      <h3>Instant alerts</h3>
+      <p>Email the moment a new application is submitted near your postcode — before the neighbour's letter even arrives.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🗺️</div>
+      <h3>All application types</h3>
+      <p>Extensions, new builds, HMOs, listed building consent, phone masts, commercial changes — we track them all.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🏛️</div>
+      <h3>Direct council links</h3>
+      <p>Every alert links directly to the council's planning portal so you can view documents and submit comments.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📍</div>
+      <h3>UK-wide coverage</h3>
+      <p>We scrape Idox and Northgate portals used by most English councils, plus the government planning data API.</p>
+    </div>
+  </section>
+
+  <div class="coverage-note">
+    <strong>Coverage is growing.</strong>
+    We currently cover <strong>Idox portals</strong> (used by ~75 councils) and <strong>Northgate portals</strong> (~8 councils).
+    If your council isn't covered yet, we'll show you a direct link to their portal and let you join a waitlist.
+    <a href="/councils">See full coverage →</a>
+  </div>
+</main>
+{% endblock %}

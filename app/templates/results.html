@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Planning applications near {{ postcode }} — PlanPing{% endblock %}
+
+{% block content %}
+<header class="hero hero-compact">
+  <div class="hero-inner">
+    <form class="search-form" action="/search" method="get">
+      <input type="text" name="postcode" class="search-input"
+        value="{{ postcode }}" autocomplete="postal-code" required>
+      <button type="submit" class="btn-search">Search</button>
+    </form>
+  </div>
+</header>
+
+<main class="main">
+
+  {# Coverage message #}
+  {% if coverage %}
+    {% if coverage.type == 'covered' %}
+    <div class="banner banner-green">✓ {{ coverage.message }}</div>
+    {% elif coverage.type in ('partial', 'pending') %}
+    <div class="banner banner-amber">
+      ⚠ {{ coverage.message }}
+      {% if coverage.portal_url %}
+        <a href="{{ coverage.portal_url }}" target="_blank" rel="noopener">
+          Visit {{ council_name }}'s planning portal →
+        </a>
+      {% endif %}
+      <button class="btn-link" onclick="openModal('modal-waitlist')">Notify me when covered</button>
+    </div>
+    {% endif %}
+  {% endif %}
+
+  {# Results header #}
+  <div class="results-header">
+    <div>
+      <h2 class="results-title">
+        {% if total > 0 %}
+          {{ total }} application{{ 's' if total != 1 }} within {{ radius }} mile{{ 's' if radius != 1 }} of <strong>{{ postcode }}</strong>
+        {% else %}
+          No applications found near <strong>{{ postcode }}</strong>
+        {% endif %}
+      </h2>
+      <p class="results-sub">Last {{ days }} days</p>
+    </div>
+    <button class="btn btn-primary" onclick="openModal('modal-alert')">
+      🔔 Alert me
+    </button>
+  </div>
+
+  {% if total == 0 %}
+  <div class="empty-state">
+    <div class="empty-icon">📭</div>
+    <h3>No applications found</h3>
+    <p>No planning applications were submitted within {{ radius }} mile{{ 's' if radius != 1 }} of {{ postcode }} in the last {{ days }} days.</p>
+    <p>This could mean your council isn't yet covered, or there genuinely haven't been any applications.</p>
+    <button class="btn btn-primary" onclick="openModal('modal-alert')">Set up an alert for future applications</button>
+  </div>
+  {% else %}
+  <div class="app-list">
+    {% for app in applications %}
+    <article class="app-card status-{{ app.status_class }}">
+      <div class="app-card-top">
+        <div class="app-meta">
+          <span class="app-ref">{{ app.reference }}</span>
+          <span class="app-council">{{ app.council_name }}</span>
+          <span class="app-distance">{{ app.distance_miles }} mi</span>
+        </div>
+        <div class="app-badges">
+          <span class="badge badge-type badge-{{ app.type_badge }}">{{ app.application_type or 'Unknown type' }}</span>
+          <span class="badge badge-status badge-{{ app.status_class }}">{{ app.status | title }}</span>
+        </div>
+      </div>
+
+      <h3 class="app-address">{{ app.address or 'Address not available' }}</h3>
+      <p class="app-description">{{ app.description or 'No description provided' }}</p>
+
+      <div class="app-footer">
+        <span class="app-date">{{ app.days_ago }}</span>
+        <div class="app-actions">
+          {% if app.council_url %}
+          <a href="{{ app.council_url }}" target="_blank" rel="noopener" class="btn btn-sm">
+            View on council portal →
+          </a>
+          {% endif %}
+          <a href="/application/{{ app.id }}" class="btn btn-sm">Details</a>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+
+  <div class="cta-band">
+    <div>
+      <strong>Want to know about future applications?</strong>
+      <span>Get a free weekly digest for {{ postcode }}.</span>
+    </div>
+    <button class="btn btn-primary" onclick="openModal('modal-alert')">Set up free alert</button>
+  </div>
+  {% endif %}
+
+</main>
+
+{# Alert modal #}
+<div class="modal-overlay" id="modal-alert" onclick="closeModal('modal-alert', event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModalById('modal-alert')">✕</button>
+    <h3 class="modal-title">Get planning alerts</h3>
+    <p class="modal-sub">Free weekly digest of new applications near {{ postcode }}.</p>
+    <form action="/api/alert" method="post">
+      <input type="hidden" name="postcode" value="{{ postcode }}">
+      <div class="form-group">
+        <label class="form-label" for="alert-email">Email address</label>
+        <input type="email" id="alert-email" name="email" class="form-input"
+          placeholder="you@example.com" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="alert-radius">Radius</label>
+        <select id="alert-radius" name="radius_miles" class="form-input">
+          <option value="0.25">¼ mile — just my street</option>
+          <option value="0.5">½ mile</option>
+          <option value="1" selected>1 mile</option>
+          <option value="2">2 miles</option>
+          <option value="5">5 miles</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="alert-freq">How often</label>
+        <select id="alert-freq" name="frequency" class="form-input">
+          <option value="weekly" selected>Weekly digest (free)</option>
+          <option value="daily">Daily digest (free)</option>
+          <option value="instant">Instant — as they happen (coming soon)</option>
+        </select>
+      </div>
+      <button type="button" class="btn btn-primary btn-full" data-post>Set up alert</button>
+    </form>
+    <p class="privacy-note">Free. One-click unsubscribe. We never sell your data.</p>
+  </div>
+</div>
+
+{# Waitlist modal #}
+{% if coverage and coverage.type in ('partial', 'pending') %}
+<div class="modal-overlay" id="modal-waitlist" onclick="closeModal('modal-waitlist', event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModalById('modal-waitlist')">✕</button>
+    <h3 class="modal-title">Join the waitlist</h3>
+    <p class="modal-sub">We'll notify you when {{ council_name or 'your council' }} is covered.</p>
+    <form action="/api/waitlist" method="post">
+      <input type="hidden" name="postcode" value="{{ postcode }}">
+      <input type="hidden" name="council_id" value="{{ council.id if council else '' }}">
+      <div class="form-group">
+        <label class="form-label" for="waitlist-email">Email address</label>
+        <input type="email" id="waitlist-email" name="email" class="form-input"
+          placeholder="you@example.com" required>
+      </div>
+      <button type="button" class="btn btn-primary btn-full" data-post>Join waitlist</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
