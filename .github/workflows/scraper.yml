@@ -1,0 +1,54 @@
+name: PlanPing scraper
+
+on:
+  schedule:
+    - cron: '0 3 * * *'    # 3am UTC nightly
+    - cron: '0 9 * * *'    # 9am UTC — send morning digests
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Which job to run'
+        required: true
+        default: 'scrape'
+        type: choice
+        options: [scrape, alerts]
+
+jobs:
+  scrape:
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape') ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 3 * * *')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install asyncpg httpx beautifulsoup4 lxml
+      - name: Run scrapers
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: cd scrapers && python run_scrapers.py
+
+  alerts:
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'alerts') ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 9 * * *')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install asyncpg httpx
+      - name: Dispatch alerts
+        env:
+          DATABASE_URL:   ${{ secrets.DATABASE_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          FROM_EMAIL:     ${{ secrets.FROM_EMAIL }}
+          BASE_URL:       ${{ secrets.BASE_URL }}
+        run: python -c "
+import asyncio, sys
+sys.path.insert(0, 'app')
+from app.alerts import dispatch_alerts
+asyncio.run(dispatch_alerts())
+"
