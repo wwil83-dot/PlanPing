@@ -149,7 +149,7 @@ def best_csv_resource(dataset: dict) -> Optional[dict]:
                 continue
         fmt_score = {"csv": 3, "geojson": 2, "json": 1}.get(fmt, 0)
         year_score = 0
-        name = (res.get("name", "") + url).lower()
+        name = ((res.get("name") or "") + url).lower()
         for yr in range(2026, 2018, -1):
             if str(yr) in name:
                 year_score = yr - 2018
@@ -179,7 +179,7 @@ def dedup_by_council(datasets: list[dict]) -> list[dict]:
             if res_existing and res_new:
                 # Compare year scores
                 def year_score(res):
-                    name = (res.get("name","") + res.get("url","")).lower()
+                    name = ((res.get("name") or "") + (res.get("url") or "")).lower()
                     for yr in range(2026, 2018, -1):
                         if str(yr) in name:
                             return yr
