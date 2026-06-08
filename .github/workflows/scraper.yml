@@ -26,10 +26,10 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install asyncpg httpx beautifulsoup4 lxml
-      - name: Run scrapers
+      - name: Run data.gov.uk harvester
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: cd scrapers && python run_scrapers.py
+        run: cd scrapers && python data_gov_harvester.py
 
   alerts:
     if: >
