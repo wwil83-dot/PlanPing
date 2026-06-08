@@ -102,17 +102,31 @@ async def search_ckan_datasets(client: httpx.AsyncClient, rows: int = 500) -> li
                 f"{CKAN_API}/package_search",
                 params={
                     "q": "planning applications",
-                    "fq": "res_format:CSV OR res_format:GeoJSON OR res_format:JSON",
                     "rows": 100,
                     "start": start,
                     "sort": "metadata_modified desc",
                 },
                 headers=HEADERS,
                 timeout=30,
+                follow_redirects=True,
             )
             if r.status_code != 200:
-                print(f"  [CKAN] Search returned {r.status_code}")
-                break
+                print(f"  [CKAN] Search returned {r.status_code} — trying alternate URL")
+                # Try the alternate data.gov.uk CKAN endpoint
+                r = await client.get(
+                    "https://ckan.publishing.service.gov.uk/api/3/action/package_search",
+                    params={
+                        "q": "planning applications",
+                        "rows": 100,
+                        "start": start,
+                    },
+                    headers=HEADERS,
+                    timeout=30,
+                    follow_redirects=True,
+                )
+                if r.status_code != 200:
+                    print(f"  [CKAN] Alternate also returned {r.status_code}")
+                    break
 
             data = r.json()
             results = data.get("result", {}).get("results", [])
@@ -547,6 +561,10 @@ async def main():
             datasets = await search_ckan_datasets(client, rows=500)
 
         print(f"  Found {len(datasets)} total datasets")
+
+        # Debug: show first few titles
+        for d in datasets[:8]:
+            print(f"    Sample: {d.get("title", "no title")}")
 
         # Filter to actual planning application datasets
         planning_datasets = [d for d in datasets if is_planning_applications_dataset(d)]
