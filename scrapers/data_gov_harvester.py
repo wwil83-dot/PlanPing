@@ -323,7 +323,7 @@ async def download_and_parse(client, resource: dict, council_name: str) -> list[
     fmt = resource.get("_detected_format", resource.get("format","").lower())
 
     try:
-        r = await client.get(url, timeout=60, follow_redirects=True)
+        r = await client.get(url, timeout=20, follow_redirects=True)
         if r.status_code != 200:
             print(f"    Download {r.status_code} — {url[:60]}")
             return []
@@ -503,6 +503,11 @@ async def main():
         # Deduplicate — one dataset per council
         planning = dedup_by_council(planning)
         print(f"  {len(planning)} unique councils after dedup")
+
+        # Limit to 30 councils per run to stay within GitHub Actions 60min limit
+        # Nightly runs will rotate through all councils over time
+        planning = planning[:30]
+        print(f"  Processing first 30 this run")
 
         async with httpx.AsyncClient(
             timeout=60, follow_redirects=True, headers=HEADERS
