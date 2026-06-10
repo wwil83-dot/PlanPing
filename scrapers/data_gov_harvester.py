@@ -191,7 +191,8 @@ def find_field(row: dict, key: str) -> Optional[str]:
 
 def parse_csv(content: str, council: str, url: str) -> list[dict]:
     apps = []
-    cutoff = date.today() - timedelta(days=90)
+    # No cutoff on import — store all applications, UI filters by date
+    # This is important for historic datasets like Canterbury
     try:
         # Strip BOM if present (some councils export UTF-8 with BOM)
         content = content.lstrip("\ufeff").lstrip("\xef\xbb\xbf")
@@ -241,14 +242,6 @@ def parse_csv(content: str, council: str, url: str) -> list[dict]:
                 continue
 
             submitted = _parse_date(find_field(row, "submitted_date") or "")
-            # Only exclude if date is present AND old — keep undated records
-            if submitted and submitted < cutoff:
-                continue
-            # For Canterbury: try alternate date format dd/mm/yyyy hh:mm
-            if submitted is None:
-                raw_date = find_field(row, "submitted_date") or ""
-                if raw_date and " " in raw_date:
-                    submitted = _parse_date(raw_date.split(" ")[0])
 
             address = find_field(row, "address") or ""
             postcode = find_field(row, "postcode") or _extract_postcode(address)
@@ -277,7 +270,6 @@ def parse_csv(content: str, council: str, url: str) -> list[dict]:
 def parse_ckan_json(content: str, council: str, url: str) -> list[dict]:
     """Parse CKAN datastore JSON response."""
     apps = []
-    cutoff = date.today() - timedelta(days=90)
     try:
         data = json.loads(content)
         records = data.get("result", {}).get("records", [])
@@ -293,8 +285,6 @@ def parse_ckan_json(content: str, council: str, url: str) -> list[dict]:
                 continue
 
             submitted = _parse_date(find_field(row, "submitted_date") or "")
-            if submitted and submitted < cutoff:
-                continue
 
             address = find_field(row, "address") or ""
             postcode = find_field(row, "postcode") or _extract_postcode(address)
@@ -320,7 +310,6 @@ def parse_ckan_json(content: str, council: str, url: str) -> list[dict]:
 
 def parse_geojson(content: str, council: str, url: str) -> list[dict]:
     apps = []
-    cutoff = date.today() - timedelta(days=90)
     try:
         data = json.loads(content)
         features = data.get("features", data if isinstance(data, list) else [])
@@ -341,8 +330,6 @@ def parse_geojson(content: str, council: str, url: str) -> list[dict]:
                 continue
 
             submitted = _parse_date(find_field(props, "submitted_date") or "")
-            if submitted and submitted < cutoff:
-                continue
 
             lat = lng = None
             if geom.get("type") == "Point":
@@ -579,7 +566,10 @@ def _parse_date(s: str) -> Optional[date]:
     if not s:
         return None
     s = str(s).strip()
-    # Strip time component if present
+    # Strip timezone suffix e.g. "+00" or "Z"
+    if "+" in s:
+        s = s.split("+")[0].strip()
+    # Strip time component
     if " " in s:
         s = s.split(" ")[0]
     if "T" in s:
