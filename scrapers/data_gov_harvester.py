@@ -223,8 +223,13 @@ def parse_csv(content: str, council: str, url: str) -> list[dict]:
 
         cols = list(rows[0].keys())
         print(f"    Columns: {', '.join(cols[:10])}{'...' if len(cols)>10 else ''}")
-        print(f"    Total rows: {len(rows)}")
-        print(f"    Delimiter used: '{delimiter}'")
+        print(f"    Total rows: {len(rows)}, delimiter: '{delimiter}'")
+
+        # Limit to most recent 5000 rows to avoid timeout
+        MAX_ROWS = 5000
+        if len(rows) > MAX_ROWS:
+            rows = rows[-MAX_ROWS:]
+            print(f"    Limiting to last {MAX_ROWS} rows")
         # Show first row raw to debug field matching
         if rows:
             first = rows[0]
