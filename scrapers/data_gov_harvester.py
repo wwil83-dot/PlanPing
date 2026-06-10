@@ -30,41 +30,41 @@ HEADERS = {
 # All verified as working public feeds
 # ─────────────────────────────────────────────
 COUNCIL_FEEDS = [
-    # ── ArcGIS FeatureServer query API ──────────────────────────────────────
+    # ── ArcGIS Hub download API ──────────────────────────────────────────────
     # These use ArcGIS hosted services — very reliable, returns GeoJSON
     # URL pattern: .../FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson
 
-    # Wigan — very active publisher, 2026 dataset
+    # Wigan — 2026 dataset via ArcGIS Hub CSV
     ("Wigan Metropolitan Borough Council",
-     "https://services3.arcgis.com/SkGMXdADhfTD8JFY/arcgis/rest/services/Planning_Applications_2026/FeatureServer/0/query?where=1%3D1&outFields=*&resultRecordCount=2000&f=geojson",
-     "geojson"),
+     "https://opendata.wigan.gov.uk/datasets/Wigan::planning-applications-2026/about",
+     "arcgis_hub"),
 
-    # York — last 12 months, live API
+    # York — last 12 months
     ("City of York Council",
-     "https://services5.arcgis.com/0LUkZPmAKlO3c2Mh/arcgis/rest/services/Planning_Applications/FeatureServer/0/query?where=1%3D1&outFields=*&resultRecordCount=2000&f=geojson",
-     "geojson"),
+     "https://data-cyc.opendata.arcgis.com/datasets/CYC::planning-applications/about",
+     "arcgis_hub"),
 
     # Sunderland
     ("Sunderland City Council",
-     "https://services1.arcgis.com/esriEU/arcgis/rest/services/Planning_Applications/FeatureServer/0/query?where=1%3D1&outFields=*&resultRecordCount=2000&f=geojson",
-     "geojson"),
+     "https://opendata-sunderlandcc.hub.arcgis.com/datasets/planning-applications/about",
+     "arcgis_hub"),
 
-    # Nottingham — 10 years of data (large dataset)
+    # Nottingham
     ("Nottingham City Council",
-     "https://services1.arcgis.com/VkLvRKlhCwKnllFl/arcgis/rest/services/Planning_Application_Points/FeatureServer/0/query?where=1%3D1&outFields=*&resultRecordCount=2000&f=geojson",
-     "geojson"),
+     "https://geoportal-nottmcitycouncil.opendata.arcgis.com/datasets/a5d0258d12be4148a8d252a02a86aa8d_81/about",
+     "arcgis_hub"),
 
-    # Canterbury/Medway area
+    # Canterbury/Medway — filter to last 90 days to avoid 400MB download
     ("Canterbury City Council",
-     "https://spatialdata-cbmdc.hub.arcgis.com/api/download/v1/items/eeb3ad1f520a45eea580506c8f097f3f/geojson?layers=0",
-     "geojson"),
+     "https://spatialdata-cbmdc.hub.arcgis.com/api/download/v1/items/eeb3ad1f520a45eea580506c8f097f3f/csv?layers=0",
+     "csv"),
 
     # ── Socrata open data portals ────────────────────────────────────────────
     # These councils publish via Socrata — consistent CSV API
 
-    # Camden
+    # Camden — Socrata API
     ("Camden LBC",
-     "https://opendata.camden.gov.uk/resource/2eiu-s2cw.csv?$limit=5000&$order=decision_issued_date+DESC",
+     "https://opendata.camden.gov.uk/api/views/2eiu-s2cw/rows.csv?accessType=DOWNLOAD",
      "csv"),
 
     # ── LGA standard CSV feeds ───────────────────────────────────────────────
@@ -158,18 +158,28 @@ FIELD_MAPS = {
         "decision_date","date_of_decision","determination_date",
         "decision_issued_date","decisiondate","date decided","date_decided",
     ],
-    "lat": ["latitude","lat","y_coord","northing","grid_northing"],
-    "lng": ["longitude","lng","lon","x_coord","easting","grid_easting"],
+    "lat": ["latitude","lat","y_coord","northing","grid_northing","Y","NORTHING"],
+    "lng": ["longitude","lng","lon","x_coord","easting","grid_easting","X","EASTING"],
+    # Canterbury / Idox GeoJSON field names
+    "reference_alt": ["REFVAL","KEYVAL","REFERENCE","APPREF"],
+    "status_alt": ["DCSTAT","DECSN","STATUS","DECISION"],
+    "submitted_date_alt": ["DATEAPRECV","DATEAPVAL","DATERECV","DATE_RECEIVED"],
+    "address_alt": ["ADDRESS","SITEADDR","SITE_ADDRESS","LOCATION"],
 }
 
 
 def find_field(row: dict, key: str) -> Optional[str]:
-    candidates = FIELD_MAPS.get(key, [key])
-    lookup = {k.lower().strip().replace(" ","_"): v for k, v in row.items()}
-    lookup_orig = {k.lower().strip(): v for k, v in row.items()}
+    # Check main candidates + alt variants
+    candidates = FIELD_MAPS.get(key, [key]) + FIELD_MAPS.get(key + "_alt", [])
+    # Also try uppercase versions (some councils use ALL CAPS field names)
+    row_lookup = {}
+    for k, v in row.items():
+        row_lookup[k.lower().strip().replace(" ","_")] = v
+        row_lookup[k.lower().strip()] = v
+        row_lookup[k.upper().strip()] = v  # exact uppercase match
     for c in candidates:
-        v = lookup.get(c.replace(" ","_")) or lookup_orig.get(c)
-        if v is not None and str(v).strip() not in ("","None","null","NULL","-"):
+        v = row_lookup.get(c.replace(" ","_")) or row_lookup.get(c) or row_lookup.get(c.upper())
+        if v is not None and str(v).strip() not in ("","None","null","NULL","-","0"):
             return str(v).strip()
     return None
 
@@ -443,6 +453,30 @@ async def main():
                     apps = parse_ckan_json(content, council_name, url)
                 elif fmt == "geojson":
                     apps = parse_geojson(content, council_name, url)
+                elif fmt == "arcgis_hub":
+                    # Extract CSV download URL from ArcGIS Hub page JSON API
+                    try:
+                        import re as _re
+                        # Try the ArcGIS Hub API to get direct download URL
+                        slug = url.split("/datasets/")[-1].split("/about")[0].split("/explore")[0]
+                        hub_api = f"https://hub.arcgis.com/api/v3/datasets/{slug}?fields[datasets]=url,landingPage,name"
+                        r2 = await client.get(hub_api, timeout=10)
+                        if r2.status_code == 200:
+                            hub_data = r2.json()
+                            csv_url = hub_data.get("data",{}).get("attributes",{}).get("url","")
+                            if csv_url:
+                                r3 = await client.get(csv_url, timeout=30)
+                                if r3.status_code == 200:
+                                    apps = parse_csv(r3.text, council_name, csv_url)
+                                else:
+                                    print(f"    ArcGIS CSV download HTTP {r3.status_code}")
+                            else:
+                                print(f"    No CSV URL in Hub API response")
+                        else:
+                            print(f"    ArcGIS Hub API HTTP {r2.status_code}")
+                    except Exception as e:
+                        print(f"    ArcGIS Hub error: {e}")
+                    apps = apps if 'apps' in dir() else []
                 else:
                     # Auto-detect
                     if content.strip().startswith("{") or content.strip().startswith("["):
