@@ -2,9 +2,9 @@ name: PlanPing scraper
 
 on:
   schedule:
-    - cron: '0 3 * * *'
-    - cron: '0 4 * * *'
-    - cron: '0 9 * * *'
+    - cron: '0 3 * * *'   # scrape nightly
+    - cron: '0 4 * * *'   # geocode nightly
+    - cron: '0 9 * * *'   # alerts morning
   workflow_dispatch:
     inputs:
       job:
@@ -12,7 +12,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, geocode, alerts]
+        options: [scrape, scrape_bulk, geocode, alerts]
 
 jobs:
   scrape:
@@ -20,17 +20,32 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape') ||
       (github.event_name == 'schedule' && github.event.schedule == '0 3 * * *')
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install asyncpg httpx beautifulsoup4 lxml
-      - name: Run harvester
+      - run: pip install asyncpg httpx
+      - name: Run fast harvester
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: cd scrapers && python data_gov_harvester.py
+
+  scrape_bulk:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_bulk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install asyncpg httpx
+      - name: Run bulk harvester (large historic datasets)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: cd scrapers && python data_gov_harvester.py --bulk
 
   geocode:
     if: >
