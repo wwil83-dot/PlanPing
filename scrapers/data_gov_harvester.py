@@ -398,10 +398,14 @@ async def main():
     mode = "BULK" if bulk_mode else "FAST"
     print(f"[{start.isoformat()}] PlanPing harvester starting ({mode} mode)...")
     print(f"Connecting to database...")
+    # Try connection with ssl in URL rather than as parameter
+    dsn = DATABASE_URL
+    if "sslmode" not in dsn:
+        dsn = dsn + "?sslmode=require"
     pool = await asyncpg.create_pool(
-        DATABASE_URL, min_size=1, max_size=3,
-        statement_cache_size=0, ssl="require",
-        command_timeout=30,
+        dsn, min_size=1, max_size=3,
+        statement_cache_size=0,
+        command_timeout=60,
     )
     print(f"Connected. Processing {len(feeds)} council feeds\n")
 
