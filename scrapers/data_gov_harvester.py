@@ -34,25 +34,25 @@ COUNCIL_FEEDS = [
     # These use ArcGIS hosted services — very reliable, returns GeoJSON
     # URL pattern: .../FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson
 
-    # Wigan — 2026 dataset via ArcGIS Hub CSV
+    # Wigan 2026 — direct GeoJSON from ArcGIS service
     ("Wigan Metropolitan Borough Council",
-     "https://opendata.wigan.gov.uk/datasets/Wigan::planning-applications-2026/about",
-     "arcgis_hub"),
+     "https://opendata.wigan.gov.uk/api/download/v1/items/planning-applications-2026/csv",
+     "csv"),
 
-    # York — last 12 months
+    # York — GeoJSON from ArcGIS
     ("City of York Council",
-     "https://data-cyc.opendata.arcgis.com/datasets/CYC::planning-applications/about",
-     "arcgis_hub"),
+     "https://data-cyc.opendata.arcgis.com/api/download/v1/items/planning-applications/csv",
+     "csv"),
 
-    # Sunderland
+    # Sunderland — try direct download
     ("Sunderland City Council",
-     "https://opendata-sunderlandcc.hub.arcgis.com/datasets/planning-applications/about",
-     "arcgis_hub"),
+     "https://www.sunderland.gov.uk/media/planning-applications-open-data.csv",
+     "csv"),
 
-    # Nottingham
+    # Nottingham — via geoportal CSV
     ("Nottingham City Council",
-     "https://geoportal-nottmcitycouncil.opendata.arcgis.com/datasets/a5d0258d12be4148a8d252a02a86aa8d_81/about",
-     "arcgis_hub"),
+     "https://geoportal-nottmcitycouncil.opendata.arcgis.com/api/download/v1/items/a5d0258d12be4148a8d252a02a86aa8d_81/csv?layers=0",
+     "csv"),
 
     # Canterbury/Medway — filter to last 90 days to avoid 400MB download
     ("Canterbury City Council",
@@ -71,24 +71,24 @@ COUNCIL_FEEDS = [
     # Councils publishing to the LGA open data schema
     # Updated daily/weekly from their planning systems
 
-    # Epsom and Ewell — confirmed active feed on data.gov.uk
+    # Epsom and Ewell
     ("Epsom and Ewell Borough Council",
-     "https://www.epsom-ewell.gov.uk/sites/default/files/documents/planning/planning-applications-open-data.csv",
+     "https://www.epsom-ewell.gov.uk/planningdata",
      "csv"),
 
-    # Waverley Borough Council — confirmed active
+    # Waverley Borough Council
     ("Waverley Borough Council",
-     "https://www.waverley.gov.uk/Portals/0/Documents/services/planning-and-development/planning-applications/WBC_Planning_Applications.csv",
+     "https://www.waverley.gov.uk/Portals/0/Documents/services/planning-and-development/planning-applications/WBC_Planning_ApplicationsCSV.csv",
      "csv"),
 
-    # Guildford Borough Council
-    ("Guildford Borough Council",
-     "https://www2.guildford.gov.uk/planning/opendata/planning-applications.csv",
+    # Buckinghamshire Council — large authority
+    ("Buckinghamshire Council",
+     "https://www.buckinghamshire.gov.uk/planning-and-building-control/planning-applications/open-data/planning-applications.csv",
      "csv"),
 
-    # Burnley Borough Council — confirmed publishes open data
-    ("Burnley Borough Council",
-     "https://burnley.gov.uk/sites/default/files/planning-applications.csv",
+    # South Oxfordshire / Vale of White Horse (joint authority)
+    ("South Oxfordshire District Council",
+     "https://www.southoxon.gov.uk/south-oxfordshire-district-council/planning-and-development/apply-for-planning-permission/search-for-planning-applications/open-data-planning-applications/",
      "csv"),
 
     # ── OpenDataSoft portals ─────────────────────────────────────────────────
@@ -102,15 +102,15 @@ COUNCIL_FEEDS = [
     # ── DataMill North ───────────────────────────────────────────────────────
     # Yorkshire councils via DataMill North CKAN
 
-    # Leeds
+    # Leeds — via datamillnorth (search for current resource ID if this fails)
     ("Leeds City Council",
-     "https://datamillnorth.org/api/3/action/datastore_search?resource_id=d6f7c20c-e93a-4c78-b5fe-a8a98ca1ee6d&limit=2000",
-     "ckan_json"),
+     "https://datamillnorth.org/download/planning-applications-in-leeds/e9c2948d-8e74-4f54-8ee3-9e2a3dc30ea3/Planning%20Applications.csv",
+     "csv"),
 
-    # Bradford
-    ("City of Bradford Metropolitan District Council",
-     "https://datamillnorth.org/api/3/action/datastore_search?resource_id=b8f9d36b-6c75-4d00-a9c3-7a7f7e3c9e4a&limit=2000",
-     "ckan_json"),
+    # Sheffield — Socrata
+    ("Sheffield City Council",
+     "https://data.sheffieldcityregion.org.uk/api/explore/v2.1/catalog/datasets/planning-applications/exports/csv",
+     "csv"),
 ]
 
 # Field name variants across council CSVs
@@ -120,12 +120,14 @@ FIELD_MAPS = {
         "planning_reference","ref","application_number","appref",
         "applicationreference","case_ref","application_no","app_no",
         "appl_ref","reference_number","app reference","casereference",
+        "REFVAL","KEYVAL","Application Number","application_no",
     ],
     "address": [
         "development_address","address","site_address","location",
         "site_location","property_address","siteaddress","site address",
         "development_location","full_address","location_text","premise",
         "address_of_proposal","development address",
+        "ADDRESS","Development Address",
     ],
     "postcode": [
         "postcode","post_code","site_postcode","development_postcode",
@@ -136,6 +138,7 @@ FIELD_MAPS = {
         "development_proposal","application_description",
         "developmentdescription","proposed_development","app_description",
         "development description","proposal_text","work_description",
+        "Development Description",
     ],
     "application_type": [
         "application_type","app_type","type","application_category",
@@ -146,6 +149,7 @@ FIELD_MAPS = {
         "decision","status","application_status","outcome",
         "current_status","decision_type","determination","app_status",
         "decision_description","case_status",
+        "DCSTAT","DECSN","Decision Type",
     ],
     "submitted_date": [
         "date_received","received_date","date_valid","valid_date",
@@ -153,6 +157,7 @@ FIELD_MAPS = {
         "date_of_application","application_date","date received",
         "registered_date","date_registered","validated_date",
         "date_validated","receipt_date",
+        "DATEAPRECV","DATEAPVAL","Valid From Date","Registered Date",
     ],
     "decision_date": [
         "decision_date","date_of_decision","determination_date",
@@ -188,6 +193,8 @@ def parse_csv(content: str, council: str, url: str) -> list[dict]:
     apps = []
     cutoff = date.today() - timedelta(days=90)
     try:
+        # Strip BOM if present (some councils export UTF-8 with BOM)
+        content = content.lstrip("\ufeff").lstrip("\xef\xbb\xbf")
         for encoding in ["utf-8", "latin-1", "cp1252"]:
             try:
                 if encoding != "utf-8":
