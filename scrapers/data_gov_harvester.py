@@ -34,24 +34,24 @@ COUNCIL_FEEDS = [
     # These use ArcGIS hosted services — very reliable, returns GeoJSON
     # URL pattern: .../FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson
 
-    # Wigan 2026 — direct GeoJSON from ArcGIS service
+    # Wigan 2026 — ArcGIS GeoJSON with correct feature service
     ("Wigan Metropolitan Borough Council",
-     "https://opendata.wigan.gov.uk/api/download/v1/items/planning-applications-2026/csv",
+     "https://wigancouncil-wigan.opendata.arcgis.com/api/download/v1/items/wigan-planning-applications-2026/csv?layers=0",
      "csv"),
 
-    # York — GeoJSON from ArcGIS
+    # York
     ("City of York Council",
-     "https://data-cyc.opendata.arcgis.com/api/download/v1/items/planning-applications/csv",
+     "https://data-cyc.opendata.arcgis.com/api/download/v1/items/CYC-planning-applications/csv?layers=0",
      "csv"),
 
-    # Sunderland — try direct download
+    # Sunderland — via Socrata
     ("Sunderland City Council",
-     "https://www.sunderland.gov.uk/media/planning-applications-open-data.csv",
+     "https://opendata-sunderlandcc.hub.arcgis.com/api/download/v1/items/SunderlandCC-planning-applications/csv?layers=0",
      "csv"),
 
-    # Nottingham — via geoportal CSV
+    # Nottingham
     ("Nottingham City Council",
-     "https://geoportal-nottmcitycouncil.opendata.arcgis.com/api/download/v1/items/a5d0258d12be4148a8d252a02a86aa8d_81/csv?layers=0",
+     "https://geoportal-nottmcitycouncil.opendata.arcgis.com/api/download/v1/items/a5d0258d12be4148a8d252a02a86aa8d/csv?layers=0",
      "csv"),
 
     # Canterbury/Medway — filter to last 90 days to avoid 400MB download
@@ -102,14 +102,14 @@ COUNCIL_FEEDS = [
     # ── DataMill North ───────────────────────────────────────────────────────
     # Yorkshire councils via DataMill North CKAN
 
-    # Leeds — via datamillnorth (search for current resource ID if this fails)
+    # Leeds — current resource ID from datamillnorth
     ("Leeds City Council",
-     "https://datamillnorth.org/download/planning-applications-in-leeds/e9c2948d-8e74-4f54-8ee3-9e2a3dc30ea3/Planning%20Applications.csv",
-     "csv"),
+     "https://datamillnorth.org/api/3/action/datastore_search_sql?sql=SELECT%20*%20FROM%20%22d6f7c20c-e93a-4c78-b5fe-a8a98ca1ee6d%22%20LIMIT%202000",
+     "ckan_json"),
 
-    # Sheffield — Socrata
+    # Sheffield — try their open data portal
     ("Sheffield City Council",
-     "https://data.sheffieldcityregion.org.uk/api/explore/v2.1/catalog/datasets/planning-applications/exports/csv",
+     "https://www.sheffield.gov.uk/planning-data/planning-applications.csv",
      "csv"),
 ]
 
@@ -217,8 +217,14 @@ def parse_csv(content: str, council: str, url: str) -> list[dict]:
                 continue
 
             submitted = _parse_date(find_field(row, "submitted_date") or "")
+            # Only exclude if date is present AND old — keep undated records
             if submitted and submitted < cutoff:
                 continue
+            # For Canterbury: try alternate date format dd/mm/yyyy hh:mm
+            if submitted is None:
+                raw_date = find_field(row, "submitted_date") or ""
+                if raw_date and " " in raw_date:
+                    submitted = _parse_date(raw_date.split(" ")[0])
 
             address = find_field(row, "address") or ""
             postcode = find_field(row, "postcode") or _extract_postcode(address)
@@ -454,6 +460,12 @@ async def main():
                 content = r.text
                 print(f"  Downloaded {len(content):,} chars")
 
+                # Guard: skip if we got an HTML page instead of data
+                stripped = content.lstrip()
+                if stripped.startswith("<!") or stripped.startswith("<html"):
+                    print(f"  Got HTML instead of data — skipping")
+                    continue
+
                 if fmt == "csv":
                     apps = parse_csv(content, council_name, url)
                 elif fmt == "ckan_json":
@@ -542,8 +554,15 @@ def _normalise(s: str) -> str:
 def _parse_date(s: str) -> Optional[date]:
     if not s:
         return None
-    s = str(s).strip()[:10]
-    for fmt in ("%Y-%m-%d","%d/%m/%Y","%d-%m-%Y","%d/%m/%y","%Y/%m/%d"):
+    s = str(s).strip()
+    # Strip time component if present
+    if " " in s:
+        s = s.split(" ")[0]
+    if "T" in s:
+        s = s.split("T")[0]
+    s = s[:10]
+    for fmt in ("%Y-%m-%d","%d/%m/%Y","%d-%m-%Y","%d/%m/%y",
+                "%Y/%m/%d","%m/%d/%Y","%d.%m.%Y"):
         try:
             return datetime.strptime(s, fmt).date()
         except ValueError:
