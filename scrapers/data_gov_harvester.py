@@ -102,6 +102,57 @@ def find_field(row: dict, key: str) -> Optional[str]:
     return None
 
 
+
+def _extract_postcode(text: str) -> Optional[str]:
+    if not text:
+        return None
+    m = re.search(r"\b([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2})\b", text.upper())
+    return m.group(1) if m else None
+
+
+def _normalise(s: str) -> str:
+    s = (s or "").lower()
+    if any(x in s for x in ("approv","grant","permit","allow")):
+        return "approved"
+    if any(x in s for x in ("refus","reject","dismiss")):
+        return "refused"
+    if "withdraw" in s:
+        return "withdrawn"
+    return "pending"
+
+
+def _parse_date(s: str) -> Optional[date]:
+    if not s:
+        return None
+    s = str(s).strip()
+    if "+" in s:
+        s = s.split("+")[0].strip()
+    if " " in s:
+        s = s.split(" ")[0]
+    if "T" in s:
+        s = s.split("T")[0]
+    s = s[:10]
+    for fmt in ("%Y-%m-%d","%d/%m/%Y","%d-%m-%Y","%d/%m/%y","%Y/%m/%d","%d.%m.%Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _safe_float(s: Optional[str], kind: str) -> Optional[float]:
+    if not s:
+        return None
+    try:
+        v = float(s)
+        if kind == "lat" and 49 < v < 62:
+            return v
+        if kind == "lng" and -9 < v < 3:
+            return v
+    except (ValueError, TypeError):
+        pass
+    return None
+
 def parse_csv_content(content: str, council: str, url: str) -> list[dict]:
     apps = []
     try:
