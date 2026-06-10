@@ -195,11 +195,23 @@ def parse_csv(content: str, council: str, url: str) -> list[dict]:
     try:
         # Strip BOM if present (some councils export UTF-8 with BOM)
         content = content.lstrip("\ufeff").lstrip("\xef\xbb\xbf")
+
+        # Auto-detect delimiter — check first line for semicolons, tabs, pipes
+        first_line = content.split("\n")[0]
+        if first_line.count(";") > first_line.count(","):
+            delimiter = ";"
+        elif first_line.count("\t") > first_line.count(","):
+            delimiter = "\t"
+        elif first_line.count("|") > first_line.count(","):
+            delimiter = "|"
+        else:
+            delimiter = ","
+
         for encoding in ["utf-8", "latin-1", "cp1252"]:
             try:
                 if encoding != "utf-8":
                     content = content.encode("utf-8","replace").decode(encoding,"replace")
-                reader = csv.DictReader(io.StringIO(content))
+                reader = csv.DictReader(io.StringIO(content), delimiter=delimiter)
                 rows = list(reader)
                 break
             except Exception:
