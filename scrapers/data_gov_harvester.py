@@ -394,14 +394,16 @@ async def main():
     bulk_mode = "--bulk" in sys.argv
     feeds = BULK_FEEDS if bulk_mode else COUNCIL_FEEDS
     
-    pool = await asyncpg.create_pool(
-        DATABASE_URL, min_size=1, max_size=3,
-        statement_cache_size=0, ssl="require"
-    )
     start = datetime.utcnow()
     mode = "BULK" if bulk_mode else "FAST"
     print(f"[{start.isoformat()}] PlanPing harvester starting ({mode} mode)...")
-    print(f"Processing {len(feeds)} council feeds\n")
+    print(f"Connecting to database...")
+    pool = await asyncpg.create_pool(
+        DATABASE_URL, min_size=1, max_size=3,
+        statement_cache_size=0, ssl="require",
+        command_timeout=30,
+    )
+    print(f"Connected. Processing {len(feeds)} council feeds\n")
 
     total_apps = total_new = 0
 
