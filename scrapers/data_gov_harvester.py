@@ -222,6 +222,18 @@ def parse_csv(content: str, council: str, url: str) -> list[dict]:
 
         cols = list(rows[0].keys())
         print(f"    Columns: {', '.join(cols[:10])}{'...' if len(cols)>10 else ''}")
+        print(f"    Total rows: {len(rows)}")
+        print(f"    Delimiter used: '{delimiter}'")
+        # Show first row raw to debug field matching
+        if rows:
+            first = rows[0]
+            ref_attempt = find_field(first, "reference")
+            date_attempt = find_field(first, "submitted_date")
+            addr_attempt = find_field(first, "address")
+            print(f"    Sample row - ref: '{ref_attempt}', date: '{date_attempt}', addr: '{addr_attempt}'")
+            # Show raw values for key fields
+            for k, v in list(first.items())[:5]:
+                print(f"      {k!r}: {str(v)[:40]!r}")
 
         for row in rows:
             ref = find_field(row, "reference")
