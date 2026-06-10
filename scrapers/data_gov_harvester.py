@@ -31,9 +31,9 @@ HEADERS = {
 # ─────────────────────────────────────────────
 # Fast feeds — run nightly (small files, quick to download)
 COUNCIL_FEEDS = [
-    # Camden — Socrata, ~65MB but fast to parse
+    # Camden — Socrata API with limit, only last 90 days
     ("Camden LBC",
-     "https://opendata.camden.gov.uk/api/views/2eiu-s2cw/rows.csv?accessType=DOWNLOAD",
+     "https://opendata.camden.gov.uk/resource/2eiu-s2cw.csv?$limit=2000&$order=registered_date+DESC",
      "csv"),
 ]
 
@@ -43,6 +43,10 @@ BULK_FEEDS = [
     # Canterbury — 85MB, 209,943 rows historic archive
     ("Canterbury City Council",
      "https://spatialdata-cbmdc.hub.arcgis.com/api/download/v1/items/eeb3ad1f520a45eea580506c8f097f3f/csv?layers=0",
+     "csv"),
+    # Camden full historic — 65MB
+    ("Camden LBC",
+     "https://opendata.camden.gov.uk/api/views/2eiu-s2cw/rows.csv?accessType=DOWNLOAD",
      "csv"),
 ]
 
