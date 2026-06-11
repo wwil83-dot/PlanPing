@@ -2,9 +2,8 @@ name: PlanPing scraper
 
 on:
   schedule:
-    - cron: '0 3 * * *'   # scrape nightly
-    - cron: '0 4 * * *'   # geocode nightly
-    - cron: '0 9 * * *'   # alerts morning
+    - cron: '0 3 * * *'
+    - cron: '0 9 * * *'
   workflow_dispatch:
     inputs:
       job:
@@ -12,7 +11,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, geocode, alerts]
+        options: [scrape, scrape_bulk, alerts]
 
 jobs:
   scrape:
@@ -26,10 +25,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install asyncpg httpx
-      - name: Run fast harvester
+      - run: pip install httpx
+      - name: Run harvester
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: cd scrapers && python data_gov_harvester.py
 
   scrape_bulk:
@@ -41,28 +41,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install asyncpg httpx
-      - name: Run bulk harvester (large historic datasets)
+      - run: pip install httpx
+      - name: Run bulk harvester
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: cd scrapers && python data_gov_harvester.py --bulk
-
-  geocode:
-    if: >
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'geocode') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 4 * * *')
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install asyncpg httpx
-      - name: Geocode missing coordinates
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: cd scrapers && python geocoder.py
 
   alerts:
     if: >
