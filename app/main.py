@@ -140,6 +140,11 @@ async def council_page(request: Request, slug: str):
     })
 
 
+@app.get("/about", response_class=HTMLResponse)
+async def about(request: Request):
+    return render("about.html", {"request": request})
+
+
 @app.get("/councils", response_class=HTMLResponse)
 async def councils_list(request: Request):
     async with get_db() as db:
