@@ -37,7 +37,7 @@ FIELD_MAPS = {
     "reference": ["application_reference","reference","app_ref","case_reference",
         "planning_reference","ref","application_number","appref","applicationreference",
         "case_ref","application_no","app_no","appl_ref","reference_number","casereference",
-        "REFVAL","KEYVAL","Application Number","pk"],
+        "REFVAL","KEYVAL","Application Number","pk","refval"],
     "address": ["development_address","site_address","location","site_location",
         "property_address","siteaddress","development_location","full_address","premise",
         "address_of_proposal","Development Address","development address",
@@ -49,16 +49,17 @@ FIELD_MAPS = {
     "description": ["development_description","description","proposal","development_proposal",
         "application_description","proposed_development","Development Description",
         "development description","proposal_description","work_description",
-        "DESCR","development_descr","app_description","PROPOSA","proposal_text"],
+        "DESCR","development_descr","app_description","PROPOSA","proposal_text",
+        "PROPOSAL"],
     "application_type": ["application_type","app_type","type","application_category",
         "type_of_application","applicationtype","case_type","app type",
         "development_type","Application Type","APPTYPE"],
     "status": ["decision","status","application_status","outcome","current_status",
-        "decision_type","determination","DCSTAT","DECSN","Decision Type"],
+        "decision_type","determination","DCSTAT","DECSN","Decision Type","APPLDECTYP"],
     "submitted_date": ["date_received","received_date","date_valid","valid_date",
         "submission_date","date_submitted","received","datereceived","date_of_application",
         "application_date","registered_date","date_registered","validated_date","receipt_date",
-        "DATEAPRECV","DATEAPVAL","Valid From Date","Registered Date"],
+        "DATEAPRECV","DATEAPVAL","Valid From Date","Registered Date","DATEAPPDEC","DATEDECISN"],
     "decision_date": ["decision_date","date_of_decision","determination_date",
         "decision_issued_date","decisiondate"],
     "lat": ["latitude","lat","y_coord","northing"],
@@ -130,15 +131,11 @@ def parse_csv(content, council, url):
             ref = find_field(row, "reference")
             if not ref or len(ref.strip()) < 3: continue
             address = find_field(row, "address") or ""
-            # Skip multiline applicant addresses (Canterbury uses \r as line separator)
+            # Clean multiline addresses - take first meaningful line
             if "\r" in address or address.count("\n") > 1:
-                # Try to use parish/ward as fallback location indicator
-                parish = row.get("PARISH") or row.get("parish") or ""
-                ward = row.get("WARD") or row.get("ward") or ""
-                if parish:
-                    address = f"{parish}, {ward}".strip(", ") if ward else parish
-                else:
-                    address = ""
+                lines = [l.strip() for l in address.replace("\r","\n").split("\n") if l.strip()]
+                if lines:
+                    address = ", ".join(lines[:3])  # Keep first 3 lines joined
             portal_url = find_field(row, "council_url_field") or url
             apps.append({
                 "reference": ref.strip(),
