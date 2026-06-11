@@ -115,6 +115,60 @@ def _parse_date(s):
     return None
 
 
+
+def parse_geojson(content, council, url):
+    apps = []
+    try:
+        data = json.loads(content)
+        features = data.get("features", data if isinstance(data, list) else [])
+
+        if features:
+            sample = features[0].get("properties", {}) if isinstance(features[0], dict) else {}
+            cols = list(sample.keys())
+            print(f"    GeoJSON props: {', '.join(cols[:8])}{'...' if len(cols)>8 else ''}")
+
+        for f in features:
+            if not isinstance(f, dict):
+                continue
+            props = f.get("properties", {}) or {}
+            geom = f.get("geometry", {}) or {}
+
+            ref = find_field(props, "reference")
+            if not ref or len(ref.strip()) < 3:
+                continue
+
+            lat = lng = None
+            if geom.get("type") == "Point":
+                coords = geom.get("coordinates", [])
+                if len(coords) >= 2 and 49 < coords[1] < 62 and -9 < coords[0] < 3:
+                    lng, lat = coords[0], coords[1]
+
+            address = find_field(props, "address") or ""
+            if "\r" in address or address.count("\n") > 1:
+                lines = [l.strip() for l in address.replace("\r","\n").split("\n") if l.strip()]
+                if lines:
+                    address = ", ".join(lines[:3])
+
+            postcode = find_field(props, "postcode") or _extract_postcode(address)
+
+            apps.append({
+                "reference": ref.strip(),
+                "address": address,
+                "postcode": postcode,
+                "lat": lat, "lng": lng,
+                "description": find_field(props, "description") or "",
+                "application_type": find_field(props, "application_type") or "",
+                "status": _normalise(find_field(props, "status") or ""),
+                "submitted_date": _parse_date(find_field(props, "submitted_date") or ""),
+                "decision_date": _parse_date(find_field(props, "decision_date") or ""),
+                "council_name": council,
+                "council_url": find_field(props, "council_url_field") or url,
+                "source": "data_gov_uk",
+            })
+    except Exception as e:
+        print(f"    GeoJSON error: {e}")
+    return apps
+
 def parse_csv(content, council, url):
     apps = []
     try:
