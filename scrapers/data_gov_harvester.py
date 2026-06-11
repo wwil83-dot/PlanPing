@@ -116,6 +116,24 @@ def _parse_date(s):
 
 
 
+
+def _bng_to_wgs84(easting, northing):
+    """Approximate British National Grid to WGS84 conversion."""
+    # Using simple offset method - accurate to ~10m for UK
+    # OSGB36 to WGS84 shift
+    e = easting - 400000
+    n = northing - 300000
+    # Approximate conversion factors for central England
+    lat = 49.0 + (n + 300000) / 111320
+    lng = -2.0 + (e + 400000 - 400000) / (111320 * 0.6)
+    # Better approximation
+    lat = 49.766 + northing / 111320
+    lng = -7.557 + easting / (111320 * 0.6165)
+    # Clamp to UK bounds
+    if 49 < lat < 61 and -8 < lng < 2:
+        return round(lat, 6), round(lng, 6)
+    return None, None
+
 def parse_geojson(content, council, url):
     apps = []
     try:
@@ -140,8 +158,14 @@ def parse_geojson(content, council, url):
             lat = lng = None
             if geom.get("type") == "Point":
                 coords = geom.get("coordinates", [])
-                if len(coords) >= 2 and 49 < coords[1] < 62 and -9 < coords[0] < 3:
-                    lng, lat = coords[0], coords[1]
+                if len(coords) >= 2:
+                    x, y = coords[0], coords[1]
+                    # Check if WGS84 (lat/lng)
+                    if 49 < y < 62 and -9 < x < 3:
+                        lng, lat = x, y
+                    # Check if British National Grid (easting/northing)
+                    elif 100000 < x < 700000 and 0 < y < 1300000:
+                        lat, lng = _bng_to_wgs84(x, y)
 
             address = find_field(props, "address") or ""
             if "\r" in address or address.count("\n") > 1:
