@@ -260,7 +260,10 @@ async def main():
                 if content.lstrip().startswith("<!"):
                     print("  Got HTML"); continue
 
-                apps = parse_csv(content, council_name, url)
+                if fmt == "geojson" or content.lstrip().startswith("{") or content.lstrip().startswith("["):
+                    apps = parse_geojson(content, council_name, url)
+                else:
+                    apps = parse_csv(content, council_name, url)
                 print(f"  Parsed {len(apps)}")
                 if not apps: continue
 
