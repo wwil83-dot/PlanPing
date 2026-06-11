@@ -15,9 +15,15 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 HEADERS = {"User-Agent": "PlanPing/1.0 (+https://planping.onrender.com)"}
 
 COUNCIL_FEEDS = [
+    # Camden — limited to 2000 most recent
     ("Camden LBC",
      "https://opendata.camden.gov.uk/resource/2eiu-s2cw.csv?$limit=2000&$order=registered_date+DESC",
      "csv"),
+
+    # Wigan 2021-2030 — direct GeoJSON API
+    ("Wigan Metropolitan Borough Council",
+     "https://maps.wigan.gov.uk/arcgis/rest/services/Planning_BuildingControl/Planning_Applications_2021_to_2030/MapServer/6/query?outFields=*&where=1%3D1&f=geojson",
+     "geojson"),
 ]
 
 BULK_FEEDS = [
