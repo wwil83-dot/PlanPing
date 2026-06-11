@@ -2,25 +2,49 @@
 {% block title %}Coverage — PlanPing{% endblock %}
 {% block content %}
 <main class="main">
-  <h1 style="font-size:1.6rem;font-weight:600;margin-bottom:.5rem">Coverage</h1>
-  <p style="color:var(--muted);margin-bottom:2rem">We cover {{ covered_count }} of {{ total }} councils. More being added weekly.</p>
-  <h2 style="font-size:1rem;font-weight:600;margin-bottom:.75rem;color:var(--green)">✓ Covered ({{ covered_count }})</h2>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.5rem;margin-bottom:2rem">
-    {% for c in covered %}
-    <a href="/council/{{ c.slug }}" style="background:#fff;border:1px solid var(--border);border-radius:7px;padding:.6rem .9rem;font-size:.85rem;text-decoration:none;color:var(--text);display:flex;justify-content:space-between;align-items:center">
-      {{ c.name }}
-      <span style="font-size:.72rem;color:var(--muted)">{{ c.system }}</span>
-    </a>
-    {% endfor %}
+  <div style="margin-bottom:1.75rem">
+    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Coverage</h1>
+    <p style="color:var(--muted)">We currently have live data for {{ covered_count }} council{{ 's' if covered_count != 1 }}. More being added regularly.</p>
   </div>
-  <h2 style="font-size:1rem;font-weight:600;margin-bottom:.75rem;color:var(--amber)">⏳ Coming soon ({{ total - covered_count }})</h2>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.5rem">
-    {% for c in uncovered %}
-    <div style="background:#fff;border:1px solid var(--border);border-radius:7px;padding:.6rem .9rem;font-size:.85rem;color:var(--muted);display:flex;justify-content:space-between">
-      {{ c.name }}
-      {% if c.portal_url %}<a href="{{ c.portal_url }}" target="_blank" style="font-size:.72rem;color:var(--blue)">Portal →</a>{% endif %}
+
+  {% if covered %}
+  <div style="margin-bottom:2rem">
+    <h2 style="font-size:1rem;font-weight:600;color:var(--green);margin-bottom:.75rem">✓ Live data ({{ covered_count }})</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.6rem">
+      {% for c in covered %}
+      <a href="/council/{{ c.slug }}" style="background:#fff;border:1px solid var(--border);border-left:3px solid var(--green);border-radius:8px;padding:.8rem 1rem;text-decoration:none;color:var(--text);display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,.04)">
+        <div>
+          <div style="font-size:.88rem;font-weight:600">{{ c.name }}</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:2px">{{ c.app_count }} applications</div>
+        </div>
+        <span style="font-size:.7rem;color:var(--green);background:var(--green-light);padding:2px 8px;border-radius:10px;font-weight:500">Live</span>
+      </a>
+      {% endfor %}
     </div>
-    {% endfor %}
   </div>
+  {% endif %}
+
+  <div style="background:var(--blue-light);border:1px solid #c3d9f0;border-radius:12px;padding:1.5rem;margin-bottom:2rem">
+    <h3 style="font-size:1rem;font-weight:600;color:var(--blue-dark);margin-bottom:.5rem">🚀 Coverage is growing</h3>
+    <p style="font-size:.88rem;color:var(--muted);line-height:1.7">We add new councils regularly as we find and verify their open data feeds. If your council isn't listed yet, join the waitlist below and we'll notify you when it's added. Most major councils publish planning data under the Open Government Licence — we're working through them systematically.</p>
+  </div>
+
+  <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:1.5rem;max-width:520px">
+    <h3 style="font-size:1rem;font-weight:600;color:var(--blue-dark);margin-bottom:.4rem">Join the waitlist</h3>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Tell us your postcode and we'll notify you when your council is covered.</p>
+    <form action="/api/waitlist" method="post">
+      <input type="hidden" name="council_id" value="0">
+      <div class="form-group">
+        <label class="form-label">Your postcode</label>
+        <input type="text" name="postcode" class="form-input" placeholder="e.g. L40 5AA" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email address</label>
+        <input type="email" name="email" class="form-input" placeholder="you@example.com" required>
+      </div>
+      <button type="button" class="btn btn-primary btn-full" data-post>Join waitlist</button>
+    </form>
+  </div>
+
 </main>
 {% endblock %}
