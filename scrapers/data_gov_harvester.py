@@ -139,8 +139,8 @@ def _bng_to_wgs84(easting, northing):
 COUNCIL_PORTAL_URLS = {
     "wigan": "https://planning.wigan.gov.uk/online-applications/",
     "camden": "https://planningrecords.camden.gov.uk/Northgate/PlanningExplorer/GeneralSearch.aspx",
-    "canterbury": "https://www.canterbury.gov.uk/planning/planning-applications/search-for-planning-applications",
-    "south lakeland": "https://www.southlakeland.gov.uk/planning-and-building/planning-applications/",
+    "canterbury": "https://pa.canterbury.gov.uk/online-applications/",
+    "south lakeland": "https://www.westmorlandandfurness.gov.uk/planning-and-building-control/planning/search-planning-application",
 }
 
 
