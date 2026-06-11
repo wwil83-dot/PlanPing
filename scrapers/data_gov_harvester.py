@@ -1,27 +1,18 @@
 #!/usr/bin/env python3
 """
-PlanPing — council open data harvester.
-Uses asyncpg with statement_cache_size=0 (required for Supabase pooler).
+PlanPing harvester — saves to JSON file, uploads to Supabase REST API.
+Bypasses asyncpg connection issues by using Supabase HTTP API instead.
 """
-import asyncio
-import csv
-import io
-import json
-import os
-import re
-import sys
-from datetime import date, datetime, timedelta
+import asyncio, csv, io, json, os, re, sys
+from datetime import date, datetime
 from typing import Optional
-
-import asyncpg
 import httpx
 
-DATABASE_URL = os.environ["DATABASE_URL"]
+# Supabase REST API — no TCP connection issues
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
-HEADERS = {
-    "User-Agent": "PlanPing/1.0 (+https://planping.onrender.com)",
-    "Accept": "text/csv,application/json,*/*",
-}
+HEADERS = {"User-Agent": "PlanPing/1.0 (+https://planping.onrender.com)"}
 
 COUNCIL_FEEDS = [
     ("Camden LBC",
@@ -39,53 +30,32 @@ BULK_FEEDS = [
 ]
 
 FIELD_MAPS = {
-    "reference": [
-        "application_reference","reference","app_ref","case_reference",
-        "planning_reference","ref","application_number","appref",
-        "applicationreference","case_ref","application_no","app_no",
-        "appl_ref","reference_number","casereference",
-        "REFVAL","KEYVAL","Application Number","pk",
-    ],
-    "address": [
-        "development_address","address","site_address","location",
-        "site_location","property_address","siteaddress",
-        "development_location","full_address","premise",
-        "address_of_proposal","ADDRESS","Development Address",
-    ],
-    "postcode": [
-        "postcode","post_code","site_postcode","development_postcode",
-    ],
-    "description": [
-        "development_description","description","proposal",
-        "development_proposal","application_description",
-        "proposed_development","Development Description",
-    ],
-    "application_type": [
-        "application_type","app_type","type","application_category",
-        "type_of_application","applicationtype","case_type",
-    ],
-    "status": [
-        "decision","status","application_status","outcome",
-        "current_status","decision_type","determination",
-        "DCSTAT","DECSN","Decision Type",
-    ],
-    "submitted_date": [
-        "date_received","received_date","date_valid","valid_date",
-        "submission_date","date_submitted","received","datereceived",
-        "date_of_application","application_date","registered_date",
-        "date_registered","validated_date","receipt_date",
-        "DATEAPRECV","DATEAPVAL","Valid From Date","Registered Date",
-    ],
-    "decision_date": [
-        "decision_date","date_of_decision","determination_date",
-        "decision_issued_date","decisiondate",
-    ],
+    "reference": ["application_reference","reference","app_ref","case_reference",
+        "planning_reference","ref","application_number","appref","applicationreference",
+        "case_ref","application_no","app_no","appl_ref","reference_number","casereference",
+        "REFVAL","KEYVAL","Application Number","pk"],
+    "address": ["development_address","address","site_address","location","site_location",
+        "property_address","siteaddress","development_location","full_address","premise",
+        "address_of_proposal","ADDRESS","Development Address"],
+    "postcode": ["postcode","post_code","site_postcode","development_postcode"],
+    "description": ["development_description","description","proposal","development_proposal",
+        "application_description","proposed_development","Development Description"],
+    "application_type": ["application_type","app_type","type","application_category",
+        "type_of_application","applicationtype","case_type"],
+    "status": ["decision","status","application_status","outcome","current_status",
+        "decision_type","determination","DCSTAT","DECSN","Decision Type"],
+    "submitted_date": ["date_received","received_date","date_valid","valid_date",
+        "submission_date","date_submitted","received","datereceived","date_of_application",
+        "application_date","registered_date","date_registered","validated_date","receipt_date",
+        "DATEAPRECV","DATEAPVAL","Valid From Date","Registered Date"],
+    "decision_date": ["decision_date","date_of_decision","determination_date",
+        "decision_issued_date","decisiondate"],
     "lat": ["latitude","lat","y_coord","northing"],
     "lng": ["longitude","lng","lon","x_coord","easting"],
 }
 
 
-def find_field(row: dict, key: str) -> Optional[str]:
+def find_field(row, key):
     candidates = FIELD_MAPS.get(key, [key])
     lookup = {}
     for k, v in row.items():
@@ -98,100 +68,58 @@ def find_field(row: dict, key: str) -> Optional[str]:
     return None
 
 
-def _extract_postcode(text: str) -> Optional[str]:
-    if not text:
-        return None
+def _extract_postcode(text):
+    if not text: return None
     m = re.search(r"\b([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2})\b", text.upper())
     return m.group(1) if m else None
 
 
-def _normalise(s: str) -> str:
+def _normalise(s):
     s = (s or "").lower()
-    if any(x in s for x in ("approv","grant","permit","allow")):
-        return "approved"
-    if any(x in s for x in ("refus","reject","dismiss")):
-        return "refused"
-    if "withdraw" in s:
-        return "withdrawn"
+    if any(x in s for x in ("approv","grant","permit","allow")): return "approved"
+    if any(x in s for x in ("refus","reject","dismiss")): return "refused"
+    if "withdraw" in s: return "withdrawn"
     return "pending"
 
 
-def _parse_date(s: str) -> Optional[date]:
-    if not s:
-        return None
+def _parse_date(s):
+    if not s: return None
     s = str(s).strip()
-    if "+" in s:
-        s = s.split("+")[0].strip()
-    if " " in s:
-        s = s.split(" ")[0]
-    if "T" in s:
-        s = s.split("T")[0]
+    if "+" in s: s = s.split("+")[0].strip()
+    if " " in s: s = s.split(" ")[0]
+    if "T" in s: s = s.split("T")[0]
     s = s[:10]
     for fmt in ("%Y-%m-%d","%d/%m/%Y","%d-%m-%Y","%d/%m/%y","%Y/%m/%d","%d.%m.%Y"):
         try:
-            return datetime.strptime(s, fmt).date()
+            return datetime.strptime(s, fmt).date().isoformat()
         except ValueError:
             continue
     return None
 
 
-def _safe_float(s: Optional[str], kind: str) -> Optional[float]:
-    if not s:
-        return None
-    try:
-        v = float(s)
-        if kind == "lat" and 49 < v < 62:
-            return v
-        if kind == "lng" and -9 < v < 3:
-            return v
-    except (ValueError, TypeError):
-        pass
-    return None
-
-
-def parse_csv_content(content: str, council: str, url: str) -> list[dict]:
+def parse_csv(content, council, url):
     apps = []
     try:
         content = content.lstrip("\ufeff")
         first_line = content.split("\n")[0]
-        if first_line.count(";") > first_line.count(","):
-            delimiter = ";"
-        elif first_line.count("\t") > first_line.count(","):
-            delimiter = "\t"
-        else:
-            delimiter = ","
-
+        delimiter = ";" if first_line.count(";") > first_line.count(",") else ","
         reader = csv.DictReader(io.StringIO(content), delimiter=delimiter)
         rows = list(reader)
-        if not rows:
-            return []
-
-        cols = list(rows[0].keys())
-        print(f"    {len(rows)} rows, delimiter='{delimiter}'")
-        print(f"    Cols: {', '.join(cols[:6])}...")
-
-        MAX_ROWS = 5000
-        if len(rows) > MAX_ROWS:
-            rows = rows[-MAX_ROWS:]
-
+        if not rows: return []
+        print(f"    {len(rows)} rows")
+        if len(rows) > 5000: rows = rows[-5000:]
         for row in rows:
             ref = find_field(row, "reference")
-            if not ref or len(ref.strip()) < 3:
-                continue
+            if not ref or len(ref.strip()) < 3: continue
             address = find_field(row, "address") or ""
-            postcode = find_field(row, "postcode") or _extract_postcode(address)
-            submitted = _parse_date(find_field(row, "submitted_date") or "")
-            lat = _safe_float(find_field(row, "lat"), "lat")
-            lng = _safe_float(find_field(row, "lng"), "lng")
             apps.append({
                 "reference": ref.strip(),
                 "address": address,
-                "postcode": postcode,
-                "lat": lat, "lng": lng,
+                "postcode": find_field(row, "postcode") or _extract_postcode(address),
                 "description": find_field(row, "description") or "",
                 "application_type": find_field(row, "application_type") or "",
                 "status": _normalise(find_field(row, "status") or ""),
-                "submitted_date": submitted,
+                "submitted_date": _parse_date(find_field(row, "submitted_date") or ""),
                 "decision_date": _parse_date(find_field(row, "decision_date") or ""),
                 "council_name": council,
                 "council_url": url,
@@ -202,154 +130,131 @@ def parse_csv_content(content: str, council: str, url: str) -> list[dict]:
     return apps
 
 
-async def geocode_batch(postcodes: list[str]) -> dict:
+async def geocode(postcodes):
     results = {}
     unique = list({p.strip().upper().replace(" ","") for p in postcodes if p})
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=15) as c:
         for i in range(0, len(unique), 100):
-            chunk = unique[i:i+100]
             try:
-                r = await client.post(
-                    "https://api.postcodes.io/postcodes",
-                    json={"postcodes": chunk}
-                )
+                r = await c.post("https://api.postcodes.io/postcodes",
+                                 json={"postcodes": unique[i:i+100]})
                 for item in r.json().get("result", []):
                     if item and item.get("result"):
                         results[item["query"]] = (
                             item["result"]["latitude"],
-                            item["result"]["longitude"]
-                        )
-            except Exception as e:
-                print(f"    Geocode error: {e}")
+                            item["result"]["longitude"])
+            except: pass
             await asyncio.sleep(0.2)
     return results
 
 
-async def upsert(conn, apps: list[dict]) -> tuple[int,int]:
-    new = 0
-    for app in apps:
-        ref = (app.get("reference") or "").strip()
-        council_name = (app.get("council_name") or "").strip()
-        if not ref or not council_name:
-            continue
+async def supabase_upsert(apps, council_name):
+    """Use Supabase REST API to upsert — no TCP connection needed."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("  No SUPABASE_URL/KEY — saving to JSON file instead")
+        with open(f"output_{council_name.replace(' ','_')}.json","w") as f:
+            json.dump(apps, f, default=str)
+        print(f"  Saved {len(apps)} to JSON")
+        return len(apps), len(apps)
 
-        council_id = await conn.fetchval(
-            "SELECT id FROM councils WHERE name ILIKE $1 LIMIT 1",
-            f"%{council_name}%"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates",
+    }
+
+    # First find council_id
+    async with httpx.AsyncClient(timeout=15) as c:
+        r = await c.get(
+            f"{SUPABASE_URL}/rest/v1/councils",
+            params={"name": f"ilike.*{council_name.split(' Council')[0]}*",
+                    "select": "id"},
+            headers=headers
         )
-        if not council_id:
-            slug = re.sub(r"[^a-z0-9]+","-",council_name.lower()).strip("-")
-            try:
-                council_id = await conn.fetchval("""
-                    INSERT INTO councils (name,slug,system,coverage_source)
-                    VALUES ($1,$2,'open_data','data_gov_uk')
-                    ON CONFLICT (slug) DO UPDATE
-                    SET coverage_source='data_gov_uk',updated_at=NOW()
-                    RETURNING id
-                """, council_name, slug)
-            except Exception:
-                continue
+        councils = r.json()
+        if not councils:
+            print(f"  Council not found in DB")
+            return 0, 0
+        council_id = councils[0]["id"]
 
-        try:
-            result = await conn.execute("""
-                INSERT INTO planning_applications
-                    (council_id,reference,address,postcode,lat,lng,
-                     description,application_type,status,
-                     submitted_date,decision_date,council_url,source)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-                ON CONFLICT (council_id,reference) DO UPDATE SET
-                    status=EXCLUDED.status,
-                    lat=COALESCE(EXCLUDED.lat,planning_applications.lat),
-                    lng=COALESCE(EXCLUDED.lng,planning_applications.lng),
-                    updated_at=NOW()
-            """,
-                council_id, ref,
-                app.get("address"), app.get("postcode"),
-                app.get("lat"), app.get("lng"),
-                app.get("description"), app.get("application_type"),
-                app.get("status","pending"),
-                app.get("submitted_date"), app.get("decision_date"),
-                app.get("council_url"), app.get("source","data_gov_uk"),
-            )
-            if result and result != "INSERT 0 0":
-                new += 1
-            await conn.execute("""
-                UPDATE councils SET coverage_source='data_gov_uk',
-                last_scraped_at=NOW(),updated_at=NOW() WHERE id=$1
-            """, council_id)
-        except Exception as e:
-            pass
+    # Batch upsert
+    batch_size = 100
+    new = 0
+    async with httpx.AsyncClient(timeout=30) as c:
+        for i in range(0, len(apps), batch_size):
+            batch = apps[i:i+batch_size]
+            records = []
+            for app in batch:
+                records.append({
+                    "council_id": council_id,
+                    "reference": app["reference"],
+                    "address": app.get("address"),
+                    "postcode": app.get("postcode"),
+                    "lat": app.get("lat"),
+                    "lng": app.get("lng"),
+                    "description": app.get("description"),
+                    "application_type": app.get("application_type"),
+                    "status": app.get("status","pending"),
+                    "submitted_date": app.get("submitted_date"),
+                    "decision_date": app.get("decision_date"),
+                    "council_url": app.get("council_url"),
+                    "source": app.get("source","data_gov_uk"),
+                })
+            try:
+                r = await c.post(
+                    f"{SUPABASE_URL}/rest/v1/planning_applications",
+                    json=records,
+                    headers=headers
+                )
+                if r.status_code in (200,201):
+                    new += len(batch)
+            except Exception as e:
+                print(f"  Batch error: {e}")
 
     return len(apps), new
 
 
 async def main():
-    bulk_mode = "--bulk" in sys.argv
-    feeds = BULK_FEEDS if bulk_mode else COUNCIL_FEEDS
-    mode = "BULK" if bulk_mode else "FAST"
+    bulk = "--bulk" in sys.argv
+    feeds = BULK_FEEDS if bulk else COUNCIL_FEEDS
+    print(f"[{datetime.utcnow().isoformat()}] PlanPing ({'BULK' if bulk else 'FAST'} mode)")
+    print(f"Using Supabase REST API (no TCP connection)")
+    print(f"SUPABASE_URL: {'set' if SUPABASE_URL else 'NOT SET'}")
+    print(f"SUPABASE_KEY: {'set' if SUPABASE_KEY else 'NOT SET'}\n")
 
-    start = datetime.utcnow()
-    print(f"[{start.isoformat()}] PlanPing harvester ({mode} mode)")
-    print("Connecting to database...")
-
-    # Use single connection (not pool) — more reliable with Supabase pooler
-    conn = await asyncpg.connect(
-        DATABASE_URL,
-        statement_cache_size=0,
-        ssl="require",
-        timeout=30,
-    )
-    print(f"Connected! Processing {len(feeds)} feeds\n")
-
-    total_apps = total_new = 0
-
-    async with httpx.AsyncClient(
-        timeout=30, follow_redirects=True, headers=HEADERS
-    ) as client:
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers=HEADERS) as c:
         for council_name, url, fmt in feeds:
             print(f"[{council_name}]")
             try:
-                r = await client.get(url)
+                r = await c.get(url)
                 if r.status_code != 200:
-                    print(f"  HTTP {r.status_code} — skipping")
-                    continue
-
+                    print(f"  HTTP {r.status_code}"); continue
                 content = r.text
                 print(f"  Downloaded {len(content):,} chars")
-
                 if content.lstrip().startswith("<!"):
-                    print(f"  Got HTML — skipping")
-                    continue
+                    print("  Got HTML"); continue
 
-                apps = parse_csv_content(content, council_name, url)
+                apps = parse_csv(content, council_name, url)
                 print(f"  Parsed {len(apps)}")
+                if not apps: continue
 
-                if not apps:
-                    continue
-
-                need_geo = [a["postcode"] for a in apps
-                            if not a.get("lat") and a.get("postcode")]
-                if need_geo:
-                    print(f"  Geocoding {len(set(need_geo))} postcodes...")
-                    coords = await geocode_batch(need_geo)
+                need = [a["postcode"] for a in apps if not a.get("lat") and a.get("postcode")]
+                if need:
+                    print(f"  Geocoding {len(set(need))} postcodes...")
+                    coords = await geocode(need)
                     for app in apps:
                         if not app.get("lat") and app.get("postcode"):
                             pc = app["postcode"].strip().upper().replace(" ","")
-                            c = coords.get(pc)
-                            if c:
-                                app["lat"], app["lng"] = c
+                            co = coords.get(pc)
+                            if co: app["lat"], app["lng"] = co
 
-                found, new = await upsert(conn, apps)
-                total_apps += found
-                total_new += new
-                print(f"  ✓ {new} new of {found} saved")
-
+                found, new = await supabase_upsert(apps, council_name)
+                print(f"  ✓ {new} new of {found}")
             except Exception as e:
                 print(f"  Error: {e}")
 
-    elapsed = (datetime.utcnow() - start).seconds
-    print(f"\nDone in {elapsed}s. Total={total_apps}, New={total_new}")
-    await conn.close()
+    print(f"\nDone.")
 
 
 if __name__ == "__main__":
