@@ -118,7 +118,7 @@ def parse_csv(content, council, url):
         rows = list(reader)
         if not rows: return []
         print(f"    {len(rows)} rows")
-        if len(rows) > 5000: rows = rows[-5000:]
+        # No row limit - process all rows
         # Debug first row
         if rows:
             addr_attempt = find_field(rows[0], "address")
@@ -130,6 +130,15 @@ def parse_csv(content, council, url):
             ref = find_field(row, "reference")
             if not ref or len(ref.strip()) < 3: continue
             address = find_field(row, "address") or ""
+            # Skip multiline applicant addresses (Canterbury uses \r as line separator)
+            if "\r" in address or address.count("\n") > 1:
+                # Try to use parish/ward as fallback location indicator
+                parish = row.get("PARISH") or row.get("parish") or ""
+                ward = row.get("WARD") or row.get("ward") or ""
+                if parish:
+                    address = f"{parish}, {ward}".strip(", ") if ward else parish
+                else:
+                    address = ""
             portal_url = find_field(row, "council_url_field") or url
             apps.append({
                 "reference": ref.strip(),
