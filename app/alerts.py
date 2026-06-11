@@ -1,5 +1,5 @@
 """
-PlanPing alert system.
+PlanFind alert system.
 Sends confirmation emails and dispatches new application alerts.
 """
 import os
@@ -7,8 +7,8 @@ import httpx
 from app.db import get_db
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-FROM_EMAIL     = os.environ.get("FROM_EMAIL", "alerts@planping.co.uk")
-BASE_URL       = os.environ.get("BASE_URL", "https://planping.onrender.com")
+FROM_EMAIL     = os.environ.get("FROM_EMAIL", "alerts@planfind.co.uk")
+BASE_URL       = os.environ.get("BASE_URL", "https://planfind.onrender.com")
 
 
 async def _send(to: str, subject: str, html: str):
@@ -42,10 +42,10 @@ async def send_confirmation(email: str, postcode: str):
     Confirm my alert</a></p>
     <p style="color:#6b7280;font-size:13px">
     If you didn't request this, just ignore this email.<br>
-    PlanPing · <a href="{BASE_URL}">planping.co.uk</a>
+    PlanFind · <a href="{BASE_URL}">planfind.co.uk</a>
     </p>
     """
-    await _send(email, f"Confirm your PlanPing alert for {postcode}", html)
+    await _send(email, f"Confirm your PlanFind alert for {postcode}", html)
 
 
 async def dispatch_alerts():
@@ -136,7 +136,7 @@ async def _send_alert_email(sub: dict, apps: list):
     html = f"""
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
       <div style="background:#1d4ed8;padding:20px 24px">
-        <h1 style="color:#fff;margin:0;font-size:20px">PlanPing</h1>
+        <h1 style="color:#fff;margin:0;font-size:20px">PlanFind</h1>
       </div>
       <div style="padding:24px">
         <p style="font-size:16px;color:#111827">
@@ -155,12 +155,12 @@ async def _send_alert_email(sub: dict, apps: list):
         <p style="margin-top:20px">
           <a href="{BASE_URL}/search?postcode={postcode}"
              style="background:#1d4ed8;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-size:14px">
-            View all on PlanPing
+            View all on PlanFind
           </a>
         </p>
       </div>
       <div style="padding:16px 24px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af">
-        PlanPing · <a href="{unsub_url}" style="color:#9ca3af">Unsubscribe</a>
+        PlanFind · <a href="{unsub_url}" style="color:#9ca3af">Unsubscribe</a>
       </div>
     </div>
     """
