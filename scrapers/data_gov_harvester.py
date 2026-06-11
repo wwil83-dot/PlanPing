@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PlanPing — council open data harvester.
-Uses psycopg2 (sync) for reliability with Supabase from GitHub Actions.
+Uses asyncpg with statement_cache_size=0 (required for Supabase pooler).
 """
 import asyncio
 import csv
@@ -13,13 +13,10 @@ import sys
 from datetime import date, datetime, timedelta
 from typing import Optional
 
+import asyncpg
 import httpx
-import psycopg2
-import psycopg2.extras
 
 DATABASE_URL = os.environ["DATABASE_URL"]
-if "sslmode" not in DATABASE_URL:
-    DATABASE_URL += "?sslmode=require"
 
 HEADERS = {
     "User-Agent": "PlanPing/1.0 (+https://planping.onrender.com)",
@@ -27,7 +24,6 @@ HEADERS = {
 }
 
 COUNCIL_FEEDS = [
-    # Camden — limited to 2000 most recent
     ("Camden LBC",
      "https://opendata.camden.gov.uk/resource/2eiu-s2cw.csv?$limit=2000&$order=registered_date+DESC",
      "csv"),
@@ -102,7 +98,6 @@ def find_field(row: dict, key: str) -> Optional[str]:
     return None
 
 
-
 def _extract_postcode(text: str) -> Optional[str]:
     if not text:
         return None
@@ -153,6 +148,7 @@ def _safe_float(s: Optional[str], kind: str) -> Optional[float]:
         pass
     return None
 
+
 def parse_csv_content(content: str, council: str, url: str) -> list[dict]:
     apps = []
     try:
@@ -173,6 +169,10 @@ def parse_csv_content(content: str, council: str, url: str) -> list[dict]:
         cols = list(rows[0].keys())
         print(f"    {len(rows)} rows, delimiter='{delimiter}'")
         print(f"    Cols: {', '.join(cols[:6])}...")
+
+        MAX_ROWS = 5000
+        if len(rows) > MAX_ROWS:
+            rows = rows[-MAX_ROWS:]
 
         for row in rows:
             ref = find_field(row, "reference")
@@ -202,39 +202,30 @@ def parse_csv_content(content: str, council: str, url: str) -> list[dict]:
     return apps
 
 
-def geocode_postcodes(postcodes: list[str]) -> dict:
-    """Synchronous geocoding via postcodes.io."""
+async def geocode_batch(postcodes: list[str]) -> dict:
     results = {}
     unique = list({p.strip().upper().replace(" ","") for p in postcodes if p})
-    if not unique:
-        return results
-
-    import urllib.request
-    for i in range(0, len(unique), 100):
-        chunk = unique[i:i+100]
-        try:
-            body = json.dumps({"postcodes": chunk}).encode()
-            req = urllib.request.Request(
-                "https://api.postcodes.io/postcodes",
-                data=body,
-                headers={"Content-Type": "application/json"},
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=15) as r:
-                data = json.loads(r.read())
-                for item in data.get("result", []):
+    async with httpx.AsyncClient(timeout=15) as client:
+        for i in range(0, len(unique), 100):
+            chunk = unique[i:i+100]
+            try:
+                r = await client.post(
+                    "https://api.postcodes.io/postcodes",
+                    json={"postcodes": chunk}
+                )
+                for item in r.json().get("result", []):
                     if item and item.get("result"):
                         results[item["query"]] = (
                             item["result"]["latitude"],
                             item["result"]["longitude"]
                         )
-        except Exception as e:
-            print(f"    Geocode error: {e}")
+            except Exception as e:
+                print(f"    Geocode error: {e}")
+            await asyncio.sleep(0.2)
     return results
 
 
-def db_upsert(conn, apps: list[dict]) -> tuple[int,int]:
-    cur = conn.cursor()
+async def upsert(conn, apps: list[dict]) -> tuple[int,int]:
     new = 0
     for app in apps:
         ref = (app.get("reference") or "").strip()
@@ -242,40 +233,36 @@ def db_upsert(conn, apps: list[dict]) -> tuple[int,int]:
         if not ref or not council_name:
             continue
 
-        # Find council
-        cur.execute("SELECT id FROM councils WHERE name ILIKE %s LIMIT 1",
-                    (f"%{council_name}%",))
-        row = cur.fetchone()
-        if not row:
+        council_id = await conn.fetchval(
+            "SELECT id FROM councils WHERE name ILIKE $1 LIMIT 1",
+            f"%{council_name}%"
+        )
+        if not council_id:
             slug = re.sub(r"[^a-z0-9]+","-",council_name.lower()).strip("-")
             try:
-                cur.execute("""
+                council_id = await conn.fetchval("""
                     INSERT INTO councils (name,slug,system,coverage_source)
-                    VALUES (%s,%s,'open_data','data_gov_uk')
+                    VALUES ($1,$2,'open_data','data_gov_uk')
                     ON CONFLICT (slug) DO UPDATE
                     SET coverage_source='data_gov_uk',updated_at=NOW()
                     RETURNING id
-                """, (council_name, slug))
-                conn.commit()
-                row = cur.fetchone()
+                """, council_name, slug)
             except Exception:
-                conn.rollback()
                 continue
-        council_id = row[0]
 
         try:
-            cur.execute("""
+            result = await conn.execute("""
                 INSERT INTO planning_applications
                     (council_id,reference,address,postcode,lat,lng,
                      description,application_type,status,
                      submitted_date,decision_date,council_url,source)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
                 ON CONFLICT (council_id,reference) DO UPDATE SET
                     status=EXCLUDED.status,
                     lat=COALESCE(EXCLUDED.lat,planning_applications.lat),
                     lng=COALESCE(EXCLUDED.lng,planning_applications.lng),
                     updated_at=NOW()
-            """, (
+            """,
                 council_id, ref,
                 app.get("address"), app.get("postcode"),
                 app.get("lat"), app.get("lng"),
@@ -283,80 +270,87 @@ def db_upsert(conn, apps: list[dict]) -> tuple[int,int]:
                 app.get("status","pending"),
                 app.get("submitted_date"), app.get("decision_date"),
                 app.get("council_url"), app.get("source","data_gov_uk"),
-            ))
-            if cur.rowcount > 0:
+            )
+            if result and result != "INSERT 0 0":
                 new += 1
-            cur.execute("""
+            await conn.execute("""
                 UPDATE councils SET coverage_source='data_gov_uk',
-                last_scraped_at=NOW(),updated_at=NOW() WHERE id=%s
-            """, (council_id,))
-            conn.commit()
+                last_scraped_at=NOW(),updated_at=NOW() WHERE id=$1
+            """, council_id)
         except Exception as e:
-            conn.rollback()
+            pass
 
-    cur.close()
     return len(apps), new
 
 
-def main():
+async def main():
     bulk_mode = "--bulk" in sys.argv
     feeds = BULK_FEEDS if bulk_mode else COUNCIL_FEEDS
     mode = "BULK" if bulk_mode else "FAST"
 
     start = datetime.utcnow()
     print(f"[{start.isoformat()}] PlanPing harvester ({mode} mode)")
-    print(f"Connecting to database...")
+    print("Connecting to database...")
 
-    conn = psycopg2.connect(DATABASE_URL, connect_timeout=30)
-    conn.autocommit = False
+    # Use single connection (not pool) — more reliable with Supabase pooler
+    conn = await asyncpg.connect(
+        DATABASE_URL,
+        statement_cache_size=0,
+        ssl="require",
+        timeout=30,
+    )
     print(f"Connected! Processing {len(feeds)} feeds\n")
 
     total_apps = total_new = 0
 
-    for council_name, url, fmt in feeds:
-        print(f"[{council_name}]")
-        try:
-            import urllib.request
-            req = urllib.request.Request(url, headers=HEADERS)
-            with urllib.request.urlopen(req, timeout=30) as r:
-                content = r.read().decode("utf-8", errors="replace")
-            print(f"  Downloaded {len(content):,} chars")
+    async with httpx.AsyncClient(
+        timeout=30, follow_redirects=True, headers=HEADERS
+    ) as client:
+        for council_name, url, fmt in feeds:
+            print(f"[{council_name}]")
+            try:
+                r = await client.get(url)
+                if r.status_code != 200:
+                    print(f"  HTTP {r.status_code} — skipping")
+                    continue
 
-            if content.lstrip().startswith("<!"):
-                print(f"  Got HTML — skipping")
-                continue
+                content = r.text
+                print(f"  Downloaded {len(content):,} chars")
 
-            apps = parse_csv_content(content, council_name, url)
-            print(f"  Parsed {len(apps)} applications")
+                if content.lstrip().startswith("<!"):
+                    print(f"  Got HTML — skipping")
+                    continue
 
-            if not apps:
-                continue
+                apps = parse_csv_content(content, council_name, url)
+                print(f"  Parsed {len(apps)}")
 
-            # Geocode missing postcodes
-            need_geo = [a["postcode"] for a in apps
-                        if not a.get("lat") and a.get("postcode")]
-            if need_geo:
-                print(f"  Geocoding {len(set(need_geo))} postcodes...")
-                coords = geocode_postcodes(need_geo)
-                for app in apps:
-                    if not app.get("lat") and app.get("postcode"):
-                        pc = app["postcode"].strip().upper().replace(" ","")
-                        c = coords.get(pc)
-                        if c:
-                            app["lat"], app["lng"] = c
+                if not apps:
+                    continue
 
-            found, new = db_upsert(conn, apps)
-            total_apps += found
-            total_new += new
-            print(f"  ✓ {new} new of {found} saved")
+                need_geo = [a["postcode"] for a in apps
+                            if not a.get("lat") and a.get("postcode")]
+                if need_geo:
+                    print(f"  Geocoding {len(set(need_geo))} postcodes...")
+                    coords = await geocode_batch(need_geo)
+                    for app in apps:
+                        if not app.get("lat") and app.get("postcode"):
+                            pc = app["postcode"].strip().upper().replace(" ","")
+                            c = coords.get(pc)
+                            if c:
+                                app["lat"], app["lng"] = c
 
-        except Exception as e:
-            print(f"  Error: {e}")
+                found, new = await upsert(conn, apps)
+                total_apps += found
+                total_new += new
+                print(f"  ✓ {new} new of {found} saved")
+
+            except Exception as e:
+                print(f"  Error: {e}")
 
     elapsed = (datetime.utcnow() - start).seconds
     print(f"\nDone in {elapsed}s. Total={total_apps}, New={total_new}")
-    conn.close()
+    await conn.close()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
