@@ -134,6 +134,34 @@ def _bng_to_wgs84(easting, northing):
         return round(lat, 6), round(lng, 6)
     return None, None
 
+
+# Known council portal URL patterns
+COUNCIL_PORTAL_URLS = {
+    "wigan": "https://www.wigan.gov.uk/Resident/Planning-Building/Planning-applications/Planning-application-search.aspx",
+    "camden": "https://planningrecords.camden.gov.uk/Northgate/PlanningExplorer/GeneralSearch.aspx",
+    "canterbury": "https://www.canterbury.gov.uk/planning/planning-applications/search-for-planning-applications",
+    "south lakeland": "https://www.southlakeland.gov.uk/planning-and-building/planning-applications/",
+}
+
+
+def _build_council_url(props: dict, council: str, reference: str) -> str:
+    """Get the best URL for this application — prefer PA_LINK, fall back to portal search."""
+    # Try PA_LINK field first
+    pa_link = find_field(props, "council_url_field")
+    if pa_link and pa_link.startswith("http") and "arcgis" not in pa_link and "wigan.gov.uk/arcgis" not in pa_link:
+        return pa_link
+    # Fall back to known portal URL
+    return _build_portal_url(council, reference)
+
+
+def _build_portal_url(council: str, reference: str) -> str:
+    """Build a council portal search URL for a given reference."""
+    council_lower = council.lower()
+    for key, url in COUNCIL_PORTAL_URLS.items():
+        if key in council_lower:
+            return url
+    return ""
+
 def parse_geojson(content, council, url):
     apps = []
     try:
@@ -186,7 +214,7 @@ def parse_geojson(content, council, url):
                 "submitted_date": _parse_date(find_field(props, "submitted_date") or ""),
                 "decision_date": _parse_date(find_field(props, "decision_date") or ""),
                 "council_name": council,
-                "council_url": find_field(props, "council_url_field") or url,
+                "council_url": _build_council_url(props, council, ref.strip()),
                 "source": "data_gov_uk",
             })
     except Exception as e:
@@ -220,7 +248,7 @@ def parse_csv(content, council, url):
                 lines = [l.strip() for l in address.replace("\r","\n").split("\n") if l.strip()]
                 if lines:
                     address = ", ".join(lines[:3])  # Keep first 3 lines joined
-            portal_url = find_field(row, "council_url_field") or url
+            portal_url = find_field(row, "council_url_field") or _build_portal_url(council, ref)
             apps.append({
                 "reference": ref.strip(),
                 "address": address,
