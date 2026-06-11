@@ -27,6 +27,10 @@ BULK_FEEDS = [
     ("Canterbury City Council",
      "https://spatialdata-cbmdc.hub.arcgis.com/api/download/v1/items/eeb3ad1f520a45eea580506c8f097f3f/csv?layers=0",
      "csv"),
+    # Wigan historic years
+    ("Wigan Metropolitan Borough Council",
+     "https://opendata.wigan.gov.uk/api/download/v1/items/2c2afd8ff5c74eeab248a0a0909e0b62/csv?layers=8",
+     "csv"),
 ]
 
 FIELD_MAPS = {
