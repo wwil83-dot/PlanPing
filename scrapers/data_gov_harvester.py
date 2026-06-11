@@ -36,12 +36,17 @@ FIELD_MAPS = {
         "REFVAL","KEYVAL","Application Number","pk"],
     "address": ["development_address","address","site_address","location","site_location",
         "property_address","siteaddress","development_location","full_address","premise",
-        "address_of_proposal","ADDRESS","Development Address"],
-    "postcode": ["postcode","post_code","site_postcode","development_postcode"],
+        "address_of_proposal","ADDRESS","Development Address","development address",
+        "site address","SITEADDR","site_addr","location_description","Location"],
+    "postcode": ["postcode","post_code","site_postcode","development_postcode",
+        "POSTCODE","site_post_code","post code","PostCode"],
     "description": ["development_description","description","proposal","development_proposal",
-        "application_description","proposed_development","Development Description"],
+        "application_description","proposed_development","Development Description",
+        "development description","proposal_description","work_description",
+        "DESCR","development_descr","app_description"],
     "application_type": ["application_type","app_type","type","application_category",
-        "type_of_application","applicationtype","case_type"],
+        "type_of_application","applicationtype","case_type","app type",
+        "development_type","Application Type","APPTYPE"],
     "status": ["decision","status","application_status","outcome","current_status",
         "decision_type","determination","DCSTAT","DECSN","Decision Type"],
     "submitted_date": ["date_received","received_date","date_valid","valid_date",
@@ -108,6 +113,13 @@ def parse_csv(content, council, url):
         if not rows: return []
         print(f"    {len(rows)} rows")
         if len(rows) > 5000: rows = rows[-5000:]
+        # Debug first row
+        if rows:
+            addr_attempt = find_field(rows[0], "address")
+            desc_attempt = find_field(rows[0], "description")
+            pc_attempt = find_field(rows[0], "postcode")
+            print(f"    Sample - addr: {addr_attempt!r}, desc: {str(desc_attempt)[:30]!r}, pc: {pc_attempt!r}")
+
         for row in rows:
             ref = find_field(row, "reference")
             if not ref or len(ref.strip()) < 3: continue
