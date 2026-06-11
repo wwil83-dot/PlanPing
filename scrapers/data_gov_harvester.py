@@ -38,16 +38,18 @@ FIELD_MAPS = {
         "planning_reference","ref","application_number","appref","applicationreference",
         "case_ref","application_no","app_no","appl_ref","reference_number","casereference",
         "REFVAL","KEYVAL","Application Number","pk"],
-    "address": ["development_address","address","site_address","location","site_location",
+    "address": ["development_address","site_address","location","site_location",
         "property_address","siteaddress","development_location","full_address","premise",
-        "address_of_proposal","ADDRESS","Development Address","development address",
-        "site address","SITEADDR","site_addr","location_description","Location"],
+        "address_of_proposal","Development Address","development address",
+        "site address","SITEADDR","site_addr","location_description","Location",
+        "LOCATION","LOCDESC","site_description","SITEDESCRIPTION",
+        "address_description","ADDRDESC","ADDRESS","address"],
     "postcode": ["postcode","post_code","site_postcode","development_postcode",
         "POSTCODE","site_post_code","post code","PostCode"],
     "description": ["development_description","description","proposal","development_proposal",
         "application_description","proposed_development","Development Description",
         "development description","proposal_description","work_description",
-        "DESCR","development_descr","app_description"],
+        "DESCR","development_descr","app_description","PROPOSA","proposal_text"],
     "application_type": ["application_type","app_type","type","application_category",
         "type_of_application","applicationtype","case_type","app type",
         "development_type","Application Type","APPTYPE"],
@@ -128,6 +130,7 @@ def parse_csv(content, council, url):
             ref = find_field(row, "reference")
             if not ref or len(ref.strip()) < 3: continue
             address = find_field(row, "address") or ""
+            portal_url = find_field(row, "council_url_field") or url
             apps.append({
                 "reference": ref.strip(),
                 "address": address,
@@ -138,7 +141,7 @@ def parse_csv(content, council, url):
                 "submitted_date": _parse_date(find_field(row, "submitted_date") or ""),
                 "decision_date": _parse_date(find_field(row, "decision_date") or ""),
                 "council_name": council,
-                "council_url": url,
+                "council_url": portal_url,
                 "source": "data_gov_uk",
             })
     except Exception as e:
