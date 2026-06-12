@@ -29,6 +29,11 @@ COUNCIL_FEEDS = [
     ("City of York Council",
      "https://data-cyc.opendata.arcgis.com/datasets/7044d1920639460da3fc4a3fa9273107_5.csv",
      "csv"),
+
+    # Bristol — ArcGIS Hub CSV (updated regularly, includes addresses)
+    ("Bristol City Council",
+     "https://opendata.bristol.gov.uk/api/download/v1/items/3d58faee1240476380d30b8276142f86/csv?layers=0",
+     "csv"),
 ]
 
 BULK_FEEDS = [
@@ -45,6 +50,14 @@ BULK_FEEDS = [
     # City of York — same feed as nightly (covers last 12 months)
     ("City of York Council",
      "https://data-cyc.opendata.arcgis.com/datasets/7044d1920639460da3fc4a3fa9273107_5.csv",
+     "csv"),
+    # Leeds — full dataset CSV, updated monthly, includes addresses
+    ("Leeds City Council",
+     "https://opendata.leeds.gov.uk/downloads/planning/applications/apps.csv",
+     "csv"),
+    # Bristol — full dataset
+    ("Bristol City Council",
+     "https://opendata.bristol.gov.uk/api/download/v1/items/3d58faee1240476380d30b8276142f86/csv?layers=0",
      "csv"),
 ]
 
@@ -148,6 +161,8 @@ COUNCIL_PORTAL_URLS = {
     "canterbury": "https://pa.canterbury.gov.uk/online-applications/",
     "south lakeland": "https://www.westmorlandandfurness.gov.uk/planning-and-building-control/planning/search-planning-application",
     "york": "https://www.york.gov.uk/SearchPlanningApplications",
+    "leeds": "https://publicaccess.leeds.gov.uk/online-applications/search.do?action=advanced",
+    "bristol": "https://planningonline.bristol.gov.uk/online-applications/search.do?action=advanced",
 }
 
 
