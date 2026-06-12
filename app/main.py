@@ -312,7 +312,7 @@ def _coverage_message(council, council_name: str) -> dict:
     name = council["name"]
     portal = council["portal_url"] or ""
 
-    if source in ("idox_scraper", "northgate_scraper", "gov_api"):
+    if source in ("idox_scraper", "northgate_scraper", "gov_api", "data_gov_uk"):
         return {
             "type": "covered",
             "message": f"{name} is fully covered — results below are live.",
