@@ -12,7 +12,7 @@ import httpx
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
-HEADERS = {"User-Agent": "PlanPing/1.0 (+https://planping.onrender.com)"}
+HEADERS = {"User-Agent": "PlanPing/1.0 (+https://planfind.co.uk)"}
 
 COUNCIL_FEEDS = [
     # Camden — limited to 2000 most recent
@@ -24,6 +24,11 @@ COUNCIL_FEEDS = [
     ("Wigan Metropolitan Borough Council",
      "https://maps.wigan.gov.uk/arcgis/rest/services/Planning_BuildingControl/Planning_Applications_2021_to_2030/MapServer/6/query?outFields=*&where=1%3D1&f=geojson",
      "geojson"),
+
+    # City of York — live ArcGIS CSV, last 12 months, includes lat/lng
+    ("City of York Council",
+     "https://data-cyc.opendata.arcgis.com/datasets/7044d1920639460da3fc4a3fa9273107_5.csv",
+     "csv"),
 ]
 
 BULK_FEEDS = [
@@ -37,39 +42,45 @@ BULK_FEEDS = [
     ("Wigan Metropolitan Borough Council",
      "https://opendata.wigan.gov.uk/api/download/v1/items/2c2afd8ff5c74eeab248a0a0909e0b62/csv?layers=8",
      "csv"),
+    # City of York — same feed as nightly (covers last 12 months)
+    ("City of York Council",
+     "https://data-cyc.opendata.arcgis.com/datasets/7044d1920639460da3fc4a3fa9273107_5.csv",
+     "csv"),
 ]
 
 FIELD_MAPS = {
     "reference": ["application_reference","reference","app_ref","case_reference",
         "planning_reference","ref","application_number","appref","applicationreference",
         "case_ref","application_no","app_no","appl_ref","reference_number","casereference",
-        "REFVAL","KEYVAL","Application Number","pk","refval"],
+        "REFVAL","KEYVAL","Application Number","pk","refval","appno","app_number"],
     "address": ["development_address","site_address","location","site_location",
         "property_address","siteaddress","development_location","full_address","premise",
         "address_of_proposal","Development Address","development address",
         "site address","SITEADDR","site_addr","location_description","Location",
         "LOCATION","LOCDESC","site_description","SITEDESCRIPTION",
-        "address_description","ADDRDESC","ADDRESS","address"],
+        "address_description","ADDRDESC","ADDRESS","address","site_name"],
     "postcode": ["postcode","post_code","site_postcode","development_postcode",
         "POSTCODE","site_post_code","post code","PostCode"],
     "description": ["development_description","description","proposal","development_proposal",
         "application_description","proposed_development","Development Description",
         "development description","proposal_description","work_description",
         "DESCR","development_descr","app_description","PROPOSA","proposal_text",
-        "PROPOSAL"],
+        "PROPOSAL","development_description","app_proposal"],
     "application_type": ["application_type","app_type","type","application_category",
         "type_of_application","applicationtype","case_type","app type",
-        "development_type","Application Type","APPTYPE"],
+        "development_type","Application Type","APPTYPE","apptype","app_cat"],
     "status": ["decision","status","application_status","outcome","current_status",
-        "decision_type","determination","DCSTAT","DECSN","Decision Type","APPLDECTYP"],
+        "decision_type","determination","DCSTAT","DECSN","Decision Type","APPLDECTYP",
+        "app_status","decision_description"],
     "submitted_date": ["date_received","received_date","date_valid","valid_date",
         "submission_date","date_submitted","received","datereceived","date_of_application",
         "application_date","registered_date","date_registered","validated_date","receipt_date",
-        "DATEAPRECV","DATEAPVAL","Valid From Date","Registered Date","DATEAPPDEC","DATEDECISN"],
+        "DATEAPRECV","DATEAPVAL","Valid From Date","Registered Date","DATEAPPDEC","DATEDECISN",
+        "date_validated","valid_from","reg_date","date_received_valid"],
     "decision_date": ["decision_date","date_of_decision","determination_date",
-        "decision_issued_date","decisiondate"],
-    "lat": ["latitude","lat","y_coord","northing"],
-    "lng": ["longitude","lng","lon","x_coord","easting"],
+        "decision_issued_date","decisiondate","date_decision","decision_made_date"],
+    "lat": ["latitude","lat","y_coord","northing","x","y"],
+    "lng": ["longitude","lng","lon","x_coord","easting","x","long"],
 }
 
 
@@ -115,24 +126,18 @@ def _parse_date(s):
     return None
 
 
-
-
 def _bng_to_wgs84(easting, northing):
     """Approximate British National Grid to WGS84 conversion."""
-    # Using simple offset method - accurate to ~10m for UK
-    # OSGB36 to WGS84 shift
-    e = easting - 400000
-    n = northing - 300000
-    # Approximate conversion factors for central England
-    lat = 49.0 + (n + 300000) / 111320
-    lng = -2.0 + (e + 400000 - 400000) / (111320 * 0.6)
-    # Better approximation
     lat = 49.766 + northing / 111320
     lng = -7.557 + easting / (111320 * 0.6165)
-    # Clamp to UK bounds
     if 49 < lat < 61 and -8 < lng < 2:
         return round(lat, 6), round(lng, 6)
     return None, None
+
+
+def _is_wgs84(x, y):
+    """Check if coordinates look like WGS84 lat/lng rather than BNG."""
+    return 49 < y < 62 and -9 < x < 3
 
 
 # Known council portal URL patterns
@@ -141,16 +146,15 @@ COUNCIL_PORTAL_URLS = {
     "camden": "https://planningrecords.camden.gov.uk/Northgate/PlanningExplorer/GeneralSearch.aspx",
     "canterbury": "https://pa.canterbury.gov.uk/online-applications/",
     "south lakeland": "https://www.westmorlandandfurness.gov.uk/planning-and-building-control/planning/search-planning-application",
+    "york": "https://www.york.gov.uk/SearchPlanningApplications",
 }
 
 
 def _build_council_url(props: dict, council: str, reference: str) -> str:
     """Get the best URL for this application — prefer PA_LINK, fall back to portal search."""
-    # Try PA_LINK field first
     pa_link = find_field(props, "council_url_field")
     if pa_link and pa_link.startswith("http") and "arcgis" not in pa_link and "wigan.gov.uk/arcgis" not in pa_link:
         return pa_link
-    # Fall back to known portal URL
     return _build_portal_url(council, reference)
 
 
@@ -161,6 +165,7 @@ def _build_portal_url(council: str, reference: str) -> str:
         if key in council_lower:
             return url
     return ""
+
 
 def parse_geojson(content, council, url):
     apps = []
@@ -188,10 +193,8 @@ def parse_geojson(content, council, url):
                 coords = geom.get("coordinates", [])
                 if len(coords) >= 2:
                     x, y = coords[0], coords[1]
-                    # Check if WGS84 (lat/lng)
-                    if 49 < y < 62 and -9 < x < 3:
+                    if _is_wgs84(x, y):
                         lng, lat = x, y
-                    # Check if British National Grid (easting/northing)
                     elif 100000 < x < 700000 and 0 < y < 1300000:
                         lat, lng = _bng_to_wgs84(x, y)
 
@@ -221,6 +224,7 @@ def parse_geojson(content, council, url):
         print(f"    GeoJSON error: {e}")
     return apps
 
+
 def parse_csv(content, council, url):
     apps = []
     try:
@@ -231,28 +235,45 @@ def parse_csv(content, council, url):
         rows = list(reader)
         if not rows: return []
         print(f"    {len(rows)} rows")
-        # No row limit - process all rows
-        # Debug first row
+
         if rows:
             addr_attempt = find_field(rows[0], "address")
             desc_attempt = find_field(rows[0], "description")
             pc_attempt = find_field(rows[0], "postcode")
-            print(f"    Sample - addr: {addr_attempt!r}, desc: {str(desc_attempt)[:30]!r}, pc: {pc_attempt!r}")
+            lat_attempt = find_field(rows[0], "lat")
+            print(f"    Sample - addr: {addr_attempt!r}, desc: {str(desc_attempt)[:30]!r}, pc: {pc_attempt!r}, lat: {lat_attempt!r}")
 
         for row in rows:
             ref = find_field(row, "reference")
             if not ref or len(ref.strip()) < 3: continue
+
             address = find_field(row, "address") or ""
-            # Clean multiline addresses - take first meaningful line
             if "\r" in address or address.count("\n") > 1:
                 lines = [l.strip() for l in address.replace("\r","\n").split("\n") if l.strip()]
                 if lines:
-                    address = ", ".join(lines[:3])  # Keep first 3 lines joined
+                    address = ", ".join(lines[:3])
+
+            # Extract lat/lng from CSV if present
+            lat = lng = None
+            raw_lat = find_field(row, "lat")
+            raw_lng = find_field(row, "lng")
+            if raw_lat and raw_lng:
+                try:
+                    flat, flng = float(raw_lat), float(raw_lng)
+                    if _is_wgs84(flng, flat):
+                        lat, lng = flat, flng
+                    elif 100000 < flat < 700000 and 0 < flng < 1300000:
+                        lat, lng = _bng_to_wgs84(flat, flng)
+                except (ValueError, TypeError):
+                    pass
+
             portal_url = find_field(row, "council_url_field") or _build_portal_url(council, ref)
             apps.append({
                 "reference": ref.strip(),
                 "address": address,
                 "postcode": find_field(row, "postcode") or _extract_postcode(address),
+                "lat": lat,
+                "lng": lng,
                 "description": find_field(row, "description") or "",
                 "application_type": find_field(row, "application_type") or "",
                 "status": _normalise(find_field(row, "status") or ""),
@@ -311,7 +332,7 @@ async def supabase_upsert(apps, council_name):
         )
         councils = r.json()
         if not councils:
-            print(f"  Council not found in DB")
+            print(f"  Council not found in DB: {council_name}")
             return 0, 0
         council_id = councils[0]["id"]
 
@@ -349,7 +370,7 @@ async def supabase_upsert(apps, council_name):
             except Exception as e:
                 print(f"  Batch error: {e}")
 
-    # Mark council as covered so the UI shows the green banner automatically
+    # Mark council as covered in the DB so the UI shows the green banner
     if new > 0:
         try:
             async with httpx.AsyncClient(timeout=10) as c:
