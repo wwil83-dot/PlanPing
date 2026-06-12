@@ -94,9 +94,9 @@ FIELD_MAPS = {
         "application_date","registered_date","date_registered","validated_date","receipt_date",
         "DATEAPRECV","DATEAPVAL","Valid From Date","Registered Date","DATEAPPDEC","DATEDECISN",
         "date_validated","valid_from","reg_date","date_received_valid",
-        "casedate"],  # Leeds
+        "casedate","dec_date"],  # Leeds uses caseDate, Bristol uses DEC_DATE as proxy
     "decision_date": ["decision_date","date_of_decision","determination_date",
-        "decision_issued_date","decisiondate","date_decision","decision_made_date"],
+        "decision_issued_date","decisiondate","date_decision","decision_made_date","dec_date"],
     "council_url": ["council_url","caseurl","case_url","application_url","pa_link"],
     "lat": ["latitude","lat","y_coord","northing"],
     "lng": ["longitude","lng","lon","x_coord","easting"],
