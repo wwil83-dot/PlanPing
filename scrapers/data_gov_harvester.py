@@ -71,18 +71,21 @@ FIELD_MAPS = {
         "address_of_proposal","Development Address","development address",
         "site address","SITEADDR","site_addr","location_description","Location",
         "LOCATION","LOCDESC","site_description","SITEDESCRIPTION",
-        "address_description","ADDRDESC","ADDRESS","address","site_name"],
+        "address_description","ADDRDESC","ADDRESS","address","site_name",
+        "locationtext"],  # Leeds uses locationText
     "postcode": ["postcode","post_code","site_postcode","development_postcode",
         "POSTCODE","site_post_code","post code","PostCode"],
     "description": ["development_description","description","proposal","development_proposal",
         "application_description","proposed_development","Development Description",
         "development description","proposal_description","work_description",
         "DESCR","development_descr","app_description","PROPOSA","proposal_text",
-        "PROPOSAL","development_description","app_proposal"],
+        "PROPOSAL","app_proposal",
+        "casetext"],  # Leeds uses caseText
     "application_type": ["application_type","app_type","type","application_category",
         "type_of_application","applicationtype","case_type","app type",
         "development_type","Application Type","APPTYPE","apptype","app_cat",
-        "DCAPPTYP","dcapptyp"],
+        "DCAPPTYP","dcapptyp",
+        "classificationlabel"],  # Leeds uses classificationLabel
     "status": ["decision","status","application_status","outcome","current_status",
         "decision_type","determination","DCSTAT","DECSN","Decision Type","APPLDECTYP",
         "app_status","decision_description"],
@@ -90,11 +93,13 @@ FIELD_MAPS = {
         "submission_date","date_submitted","received","datereceived","date_of_application",
         "application_date","registered_date","date_registered","validated_date","receipt_date",
         "DATEAPRECV","DATEAPVAL","Valid From Date","Registered Date","DATEAPPDEC","DATEDECISN",
-        "date_validated","valid_from","reg_date","date_received_valid"],
+        "date_validated","valid_from","reg_date","date_received_valid",
+        "casedate"],  # Leeds uses caseDate
     "decision_date": ["decision_date","date_of_decision","determination_date",
         "decision_issued_date","decisiondate","date_decision","decision_made_date"],
-    "lat": ["latitude","lat","y_coord","northing","x","y"],
-    "lng": ["longitude","lng","lon","x_coord","easting","x","long"],
+    "council_url": ["council_url","caseurl","case_url","application_url","pa_link"],
+    "lat": ["latitude","lat","y_coord","northing"],
+    "lng": ["longitude","lng","lon","x_coord","easting"],
 }
 
 
@@ -260,7 +265,6 @@ def parse_csv(content, council, url):
             print(f"    Sample - addr: {addr_attempt!r}, desc: {str(desc_attempt)[:30]!r}, pc: {pc_attempt!r}, lat: {lat_attempt!r}")
             if not addr_attempt:
                 print(f"    All columns: {', '.join(rows[0].keys())}")
-
         for row in rows:
             ref = find_field(row, "reference")
             if not ref or len(ref.strip()) < 3: continue
@@ -285,7 +289,7 @@ def parse_csv(content, council, url):
                 except (ValueError, TypeError):
                     pass
 
-            portal_url = find_field(row, "council_url_field") or _build_portal_url(council, ref)
+            portal_url = find_field(row, "council_url") or _build_portal_url(council, ref)
             apps.append({
                 "reference": ref.strip(),
                 "address": address,
