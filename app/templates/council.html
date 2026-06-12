@@ -1,1 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ council.name }} Planning Applications — PlanFind{% endblock %}
 
+{% block content %}
+<header class="hero hero-compact">
+  <div class="hero-inner">
+    <form class="search-form" action="/search" method="get">
+      <input type="text" name="postcode" class="search-input"
+        placeholder="Enter a postcode in {{ council.name }}"
+        autocomplete="postal-code" required>
+      <button type="submit" class="btn-search">Search</button>
+    </form>
+  </div>
+</header>
+
+<main class="main">
+  <div class="results-header">
+    <div>
+      <h2 class="results-title">{{ council.name }}</h2>
+      <p class="results-sub">
+        {% if council.coverage_source in ('data_gov_uk', 'gov_api', 'idox_scraper', 'northgate_scraper') %}
+          ✓ Fully covered — data updated nightly
+        {% else %}
+          Coverage coming soon
+        {% endif %}
+        {% if council.portal_url %}
+        · <a href="{{ council.portal_url }}" target="_blank" rel="noopener">Visit council portal →</a>
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  {% if recent %}
+  <div class="app-list">
+    <h3 style="margin-bottom:1rem;color:var(--text-secondary);font-size:.9rem;font-weight:500;text-transform:uppercase;letter-spacing:.05em">
+      20 most recent applications
+    </h3>
+    {% for app in recent %}
+    <article class="app-card status-{{ app.status | lower }}">
+      <div class="app-card-top">
+        <div class="app-meta">
+          <span class="app-ref">{{ app.reference }}</span>
+        </div>
+        <div class="app-badges">
+          <span class="badge badge-status badge-{{ app.status | lower }}">{{ app.status | title }}</span>
+        </div>
+      </div>
+      <h3 class="app-address">{{ app.address or 'Address not available' }}</h3>
+      <p class="app-description">{{ app.description or 'No description provided' }}</p>
+      <div class="app-footer">
+        <span class="app-date">
+          {% if app.submitted_date %}{{ app.submitted_date }}{% else %}Date unknown{% endif %}
+        </span>
+        <a href="/application/{{ app.id }}" class="btn btn-sm">Details</a>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📭</div>
+    <h3>No applications yet</h3>
+    <p>Data for {{ council.name }} hasn't been loaded yet — check back soon.</p>
+  </div>
+  {% endif %}
+</main>
+{% endblock %}
