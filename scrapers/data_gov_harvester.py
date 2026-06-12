@@ -4,7 +4,7 @@ PlanPing harvester — saves to JSON file, uploads to Supabase REST API.
 Bypasses asyncpg connection issues by using Supabase HTTP API instead.
 """
 import asyncio, csv, io, json, os, re, sys
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 import httpx
 
@@ -68,7 +68,8 @@ FIELD_MAPS = {
         "PROPOSAL","development_description","app_proposal"],
     "application_type": ["application_type","app_type","type","application_category",
         "type_of_application","applicationtype","case_type","app type",
-        "development_type","Application Type","APPTYPE","apptype","app_cat"],
+        "development_type","Application Type","APPTYPE","apptype","app_cat",
+        "DCAPPTYP","dcapptyp"],
     "status": ["decision","status","application_status","outcome","current_status",
         "decision_type","determination","DCSTAT","DECSN","Decision Type","APPLDECTYP",
         "app_status","decision_description"],
@@ -379,7 +380,7 @@ async def supabase_upsert(apps, council_name):
                 await c.patch(
                     f"{SUPABASE_URL}/rest/v1/councils",
                     params={"id": f"eq.{council_id}"},
-                    json={"coverage_source": "data_gov_uk", "last_scraped_at": datetime.utcnow().isoformat()},
+                    json={"coverage_source": "data_gov_uk", "last_scraped_at": datetime.now(timezone.utc).isoformat()},
                     headers={**headers, "Prefer": "return=minimal"},
                 )
         except Exception as e:
@@ -391,7 +392,7 @@ async def supabase_upsert(apps, council_name):
 async def main():
     bulk = "--bulk" in sys.argv
     feeds = BULK_FEEDS if bulk else COUNCIL_FEEDS
-    print(f"[{datetime.utcnow().isoformat()}] PlanPing ({'BULK' if bulk else 'FAST'} mode)")
+    print(f"[{datetime.now(timezone.utc).isoformat()}] PlanPing ({'BULK' if bulk else 'FAST'} mode)")
     print(f"Using Supabase REST API (no TCP connection)")
     print(f"SUPABASE_URL: {'set' if SUPABASE_URL else 'NOT SET'}")
     print(f"SUPABASE_KEY: {'set' if SUPABASE_KEY else 'NOT SET'}\n")
