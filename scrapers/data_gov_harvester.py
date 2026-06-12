@@ -242,6 +242,8 @@ def parse_csv(content, council, url):
             pc_attempt = find_field(rows[0], "postcode")
             lat_attempt = find_field(rows[0], "lat")
             print(f"    Sample - addr: {addr_attempt!r}, desc: {str(desc_attempt)[:30]!r}, pc: {pc_attempt!r}, lat: {lat_attempt!r}")
+            if not addr_attempt:
+                print(f"    All columns: {', '.join(rows[0].keys())}")
 
         for row in rows:
             ref = find_field(row, "reference")
