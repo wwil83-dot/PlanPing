@@ -68,7 +68,3 @@ jobs:
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
           BASE_URL: ${{ secrets.BASE_URL }}
         run: python dispatch_alerts.py
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
-          BASE_URL: ${{ secrets.BASE_URL }}
-        run: python dispatch_alerts.py
