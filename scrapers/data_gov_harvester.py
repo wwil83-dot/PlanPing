@@ -51,7 +51,7 @@ BULK_FEEDS = [
     ("City of York Council",
      "https://data-cyc.opendata.arcgis.com/datasets/7044d1920639460da3fc4a3fa9273107_5.csv",
      "csv"),
-    # Leeds — full dataset CSV, updated monthly, includes addresses
+    # Leeds — historical completed applications, monthly update
     ("Leeds City Council",
      "https://opendata.leeds.gov.uk/downloads/planning/applications/apps.csv",
      "csv"),
@@ -72,7 +72,7 @@ FIELD_MAPS = {
         "site address","SITEADDR","site_addr","location_description","Location",
         "LOCATION","LOCDESC","site_description","SITEDESCRIPTION",
         "address_description","ADDRDESC","ADDRESS","address","site_name",
-        "locationtext"],  # Leeds uses locationText
+        "locationtext"],  # Leeds
     "postcode": ["postcode","post_code","site_postcode","development_postcode",
         "POSTCODE","site_post_code","post code","PostCode"],
     "description": ["development_description","description","proposal","development_proposal",
@@ -80,12 +80,12 @@ FIELD_MAPS = {
         "development description","proposal_description","work_description",
         "DESCR","development_descr","app_description","PROPOSA","proposal_text",
         "PROPOSAL","app_proposal",
-        "casetext"],  # Leeds uses caseText
+        "casetext"],  # Leeds
     "application_type": ["application_type","app_type","type","application_category",
         "type_of_application","applicationtype","case_type","app type",
         "development_type","Application Type","APPTYPE","apptype","app_cat",
         "DCAPPTYP","dcapptyp",
-        "classificationlabel"],  # Leeds uses classificationLabel
+        "classificationlabel"],  # Leeds
     "status": ["decision","status","application_status","outcome","current_status",
         "decision_type","determination","DCSTAT","DECSN","Decision Type","APPLDECTYP",
         "app_status","decision_description"],
@@ -94,7 +94,7 @@ FIELD_MAPS = {
         "application_date","registered_date","date_registered","validated_date","receipt_date",
         "DATEAPRECV","DATEAPVAL","Valid From Date","Registered Date","DATEAPPDEC","DATEDECISN",
         "date_validated","valid_from","reg_date","date_received_valid",
-        "casedate"],  # Leeds uses caseDate
+        "casedate"],  # Leeds
     "decision_date": ["decision_date","date_of_decision","determination_date",
         "decision_issued_date","decisiondate","date_decision","decision_made_date"],
     "council_url": ["council_url","caseurl","case_url","application_url","pa_link"],
@@ -172,9 +172,9 @@ COUNCIL_PORTAL_URLS = {
 
 
 def _build_council_url(props: dict, council: str, reference: str) -> str:
-    """Get the best URL for this application — prefer PA_LINK, fall back to portal search."""
-    pa_link = find_field(props, "council_url_field")
-    if pa_link and pa_link.startswith("http") and "arcgis" not in pa_link and "wigan.gov.uk/arcgis" not in pa_link:
+    """Get the best URL for this application — prefer a direct link, fall back to portal."""
+    pa_link = find_field(props, "council_url")
+    if pa_link and pa_link.startswith("http") and "arcgis" not in pa_link:
         return pa_link
     return _build_portal_url(council, reference)
 
@@ -258,13 +258,17 @@ def parse_csv(content, council, url):
         print(f"    {len(rows)} rows")
 
         if rows:
-            addr_attempt = find_field(rows[0], "address")
-            desc_attempt = find_field(rows[0], "description")
-            pc_attempt = find_field(rows[0], "postcode")
-            lat_attempt = find_field(rows[0], "lat")
-            print(f"    Sample - addr: {addr_attempt!r}, desc: {str(desc_attempt)[:30]!r}, pc: {pc_attempt!r}, lat: {lat_attempt!r}")
-            if not addr_attempt:
+            addr_attempt    = find_field(rows[0], "address")
+            desc_attempt    = find_field(rows[0], "description")
+            type_attempt    = find_field(rows[0], "application_type")
+            date_attempt    = find_field(rows[0], "submitted_date")
+            lat_attempt     = find_field(rows[0], "lat")
+            print(f"    Sample - addr: {addr_attempt!r}, desc: {str(desc_attempt)[:30]!r}, "
+                  f"type: {type_attempt!r}, date: {date_attempt!r}, lat: {lat_attempt!r}")
+            # Print all column names if type or date are missing — helps diagnose new councils
+            if not type_attempt or not date_attempt:
                 print(f"    All columns: {', '.join(rows[0].keys())}")
+
         for row in rows:
             ref = find_field(row, "reference")
             if not ref or len(ref.strip()) < 3: continue
@@ -399,7 +403,8 @@ async def supabase_upsert(apps, council_name):
                 await c.patch(
                     f"{SUPABASE_URL}/rest/v1/councils",
                     params={"id": f"eq.{council_id}"},
-                    json={"coverage_source": "data_gov_uk", "last_scraped_at": datetime.now(timezone.utc).isoformat()},
+                    json={"coverage_source": "data_gov_uk",
+                          "last_scraped_at": datetime.now(timezone.utc).isoformat()},
                     headers={**headers, "Prefer": "return=minimal"},
                 )
         except Exception as e:
