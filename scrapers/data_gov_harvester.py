@@ -349,6 +349,19 @@ async def supabase_upsert(apps, council_name):
             except Exception as e:
                 print(f"  Batch error: {e}")
 
+    # Mark council as covered so the UI shows the green banner automatically
+    if new > 0:
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                await c.patch(
+                    f"{SUPABASE_URL}/rest/v1/councils",
+                    params={"id": f"eq.{council_id}"},
+                    json={"coverage_source": "data_gov_uk", "last_scraped_at": datetime.utcnow().isoformat()},
+                    headers={**headers, "Prefer": "return=minimal"},
+                )
+        except Exception as e:
+            print(f"  Warning: couldn't update coverage_source: {e}")
+
     return len(apps), new
 
 
