@@ -2,8 +2,9 @@ name: PlanPing scraper
 
 on:
   schedule:
-    - cron: '0 3 * * *'
-    - cron: '0 9 * * *'
+    - cron: '0 3 * * *'   # open data scrape
+    - cron: '0 4 * * *'   # idox nightly scrape
+    - cron: '0 9 * * *'   # alerts
   workflow_dispatch:
     inputs:
       job:
@@ -11,7 +12,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, alerts]
+        options: [scrape, scrape_bulk, scrape_idox, scrape_idox_bulk, alerts]
 
 jobs:
   scrape:
@@ -47,6 +48,46 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: cd scrapers && python data_gov_harvester.py --bulk
+
+  scrape_idox:
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox') ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 4 * * *')
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install httpx beautifulsoup4
+      - name: Run Idox scraper (nightly — last 7 days)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_MINUTES: "40"
+          DAYS_BACK: "7"
+          CONCURRENCY: "3"
+        run: cd scrapers && python idox_scraper.py
+
+  scrape_idox_bulk:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_bulk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install httpx beautifulsoup4
+      - name: Run Idox scraper (bulk — last 365 days)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_MINUTES: "40"
+          DAYS_BACK: "365"
+          CONCURRENCY: "2"
+        run: cd scrapers && python idox_scraper.py --bulk
 
   alerts:
     if: >
