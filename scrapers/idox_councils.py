@@ -41,10 +41,10 @@ IDOX_COUNCILS = [
      "https://planning.bury.gov.uk/online-applications"),
 
     ("Oldham Metropolitan Borough Council",
-     "https://online.oldham.gov.uk/online-applications"),
+     "https://planning.oldham.gov.uk/online-applications"),
 
     ("Rochdale Borough Council",
-     "https://planning.rochdale.gov.uk/online-applications"),
+     "https://publicaccess.rochdale.gov.uk/online-applications"),
 
     ("Tameside Metropolitan Borough Council",
      "https://www.tameside.gov.uk/online-applications"),
@@ -56,7 +56,7 @@ IDOX_COUNCILS = [
      "https://planningapps.sheffield.gov.uk/online-applications"),
 
     ("Bradford Metropolitan District Council",
-     "https://publicaccess.bradford.gov.uk/online-applications"),
+     "https://planning.bradford.gov.uk/online-applications"),
 
     ("Calderdale Metropolitan Borough Council",
      "https://www.calderdale.gov.uk/online-applications"),
@@ -125,19 +125,19 @@ IDOX_COUNCILS = [
      "https://eplanning.derby.gov.uk/online-applications"),
 
     ("Nottinghamshire County Council",
-     "https://publicaccess.nottinghamshire.gov.uk/online-applications"),
+     "https://www.nottinghamshire.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # NORTH EAST
     # -------------------------------------------------------------------------
     ("Newcastle City Council",
-     "https://publicaccess.newcastle.gov.uk/online-applications"),
+     "https://www.newcastle.gov.uk/planning-and-buildings/planning-applications/planning-applications-search/online-applications"),
 
     ("Sunderland City Council",
      "https://www.sunderland.gov.uk/online-applications"),
 
     ("Gateshead Council",
-     "https://planning.gateshead.gov.uk/online-applications"),
+     "https://www.gateshead.gov.uk/online-applications"),
 
     ("South Tyneside Metropolitan Borough Council",
      "https://www.southtyneside.gov.uk/online-applications"),
@@ -149,7 +149,7 @@ IDOX_COUNCILS = [
      "https://publicaccess.durham.gov.uk/online-applications"),
 
     ("Middlesbrough Council",
-     "https://planning.middlesbrough.gov.uk/online-applications"),
+     "https://www.middlesbrough.gov.uk/online-applications"),
 
     ("Stockton-on-Tees Borough Council",
      "https://www.stockton.gov.uk/online-applications"),
