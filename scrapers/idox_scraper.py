@@ -296,13 +296,23 @@ class IdoxPortal:
         soup = BeautifulSoup(html, "html.parser")
         apps = []
 
-        # Idox wraps results in <ul class="searchresults">
-        container = soup.find("ul", class_="searchresults")
+        # Try multiple container patterns — Idox versions vary
+        container = (
+            soup.find("ul", class_="searchresults")
+            or soup.find("ul", id="searchresults")
+            or soup.find("div", class_="searchresults")
+            or soup.find("div", id="searchresults")
+            or soup.find("table", id="searchresults")
+        )
+
         if not container:
             return apps, False
 
-        for li in container.find_all("li", class_="searchresult"):
-            app = self._parse_result(li)
+        # Handle both <li> items and <tr> rows
+        items = container.find_all("li", class_="searchresult") or container.find_all("tr")
+
+        for item in items:
+            app = self._parse_result(item)
             if app:
                 apps.append(app)
 
@@ -427,6 +437,7 @@ class IdoxPortal:
             },
             follow_redirects=True,
             timeout=20,
+            verify=False,  # Some councils have cert mismatches on cloud-hosted Idox
         ) as client:
 
             # Step 1 — establish session and get CSRF (empty string = no token needed)
@@ -464,6 +475,18 @@ class IdoxPortal:
                     break
 
             print(f"    {len(all_apps)} applications across {page} page(s)")
+
+            # Debug: when 0 results, show what page we actually got
+            if not all_apps and html:
+                soup = BeautifulSoup(html, "html.parser")
+                title = soup.find("title")
+                title_str = title.get_text(strip=True)[:60] if title else "no title"
+                # Get meaningful text — skip scripts/styles
+                for tag in soup(["script", "style"]):
+                    tag.decompose()
+                body_text = " ".join(soup.get_text().split())[:200]
+                print(f"    Debug — title: '{title_str}'")
+                print(f"    Debug — text:  {body_text}")
 
         return all_apps
 
