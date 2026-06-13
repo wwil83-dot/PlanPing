@@ -175,37 +175,67 @@ class IdoxPortal:
         return f"{self.base_url}/{href.lstrip('/')}"
 
     async def _init_session(self, client: httpx.AsyncClient) -> Optional[str]:
-        """GET the advanced search page; return CSRF token or None."""
+        """
+        GET the search page to establish session and find CSRF token.
+        Returns:
+          str  — the CSRF token value (could be empty string if not needed)
+          None — hard failure (can't reach the portal at all)
+        """
         try:
+            # Step 1: visit base URL first to establish session cookies
+            await client.get(f"{self.base_url}/", timeout=10)
+            await asyncio.sleep(0.5)
+
+            # Step 2: get the advanced search page
             r = await client.get(
                 f"{self.base_url}/search.do",
                 params={"action": "advanced"},
                 timeout=15,
             )
-            if r.status_code != 200:
+
+            if r.status_code not in (200, 302):
+                print(f"    HTTP {r.status_code} on search page — skipping")
                 return None
+
             soup = BeautifulSoup(r.text, "html.parser")
 
-            # Hidden input field (most common)
+            # Method 1: Classic Idox — hidden input field
             el = soup.find("input", {"name": "_csrf"})
             if el and el.get("value"):
                 return el["value"]
 
-            # Meta tag fallback
+            # Method 2: Meta tag (some Idox versions)
             el = soup.find("meta", {"name": "_csrf"})
             if el and el.get("content"):
                 return el["content"]
 
-            # Embedded in form action URL
-            el = soup.find("form")
-            if el:
-                action = el.get("action", "")
+            # Method 3: Modern Idox v5 — cookie-based CSRF
+            # Spring Security sets XSRF-TOKEN cookie; we pass it back as form field
+            for cookie_name in ("XSRF-TOKEN", "CSRF-TOKEN", "_csrf", "csrftoken"):
+                val = client.cookies.get(cookie_name)
+                if val:
+                    return val
+
+            # Method 4: CSRF in form action URL
+            form = soup.find("form")
+            if form:
+                action = form.get("action", "")
                 m = re.search(r"[?&]_csrf=([^&]+)", action)
                 if m:
                     return m.group(1)
 
-            return None
-        except Exception:
+            # Method 5: No CSRF — try submitting without it
+            # Many Idox read-only searches don't enforce CSRF
+            # Debug info to help diagnose
+            title = soup.find("title")
+            title_text = title.get_text(strip=True)[:60] if title else "no title"
+            has_form = bool(form)
+            print(f"    ⚠ No CSRF — page: '{title_text}' | form: {has_form} | cookies: {list(client.cookies.keys())}")
+            # Return empty string = proceed without CSRF token
+            return ""
+
+        except Exception as e:
+            print(f"    Session error: {e}")
             return None
 
     async def _post_search(
@@ -221,8 +251,11 @@ class IdoxPortal:
             "date(applicationReceived)": "",
             "dateReceivedStart": date_from,
             "dateReceivedEnd": date_to,
-            "_csrf": csrf,
         }
+        # Only include CSRF if we have one
+        if csrf:
+            form["_csrf"] = csrf
+
         try:
             r = await client.post(
                 f"{self.base_url}/search.do",
@@ -230,8 +263,17 @@ class IdoxPortal:
                 data=form,
                 timeout=20,
             )
-            return r.text if r.status_code == 200 else None
-        except Exception:
+            if r.status_code != 200:
+                print(f"    POST returned HTTP {r.status_code}")
+                return None
+            # Quick check: did we get a results page or an error/redirect page?
+            if "searchresults" not in r.text and "no results" not in r.text.lower():
+                soup = BeautifulSoup(r.text, "html.parser")
+                title = soup.find("title")
+                print(f"    ⚠ Unexpected response: '{title.get_text(strip=True)[:60] if title else 'no title'}'")
+            return r.text
+        except Exception as e:
+            print(f"    POST error: {e}")
             return None
 
     async def _get_page(self, client: httpx.AsyncClient, page_num: int) -> Optional[str]:
@@ -387,12 +429,12 @@ class IdoxPortal:
             timeout=20,
         ) as client:
 
-            # Step 1 — establish session and get CSRF
+            # Step 1 — establish session and get CSRF (empty string = no token needed)
             csrf = await self._init_session(client)
             await asyncio.sleep(REQ_DELAY)
 
-            if not csrf:
-                print(f"    ✗ No CSRF token — portal may have changed structure")
+            if csrf is None:
+                # Hard failure — couldn't reach the portal
                 return []
 
             # Step 2 — submit date-range search
@@ -400,7 +442,6 @@ class IdoxPortal:
             await asyncio.sleep(REQ_DELAY)
 
             if not html:
-                print(f"    ✗ Search POST failed or empty response")
                 return []
 
             # Step 3 — parse pages
