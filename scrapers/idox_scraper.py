@@ -562,6 +562,16 @@ async def process_council(
             "source":           "idox_scraper",
         } for a in apps]
 
+        # Deduplicate by reference — Idox monthly list sometimes returns the
+        # same application on multiple pages, causing upsert to fail
+        seen: set[str] = set()
+        unique_records = []
+        for r in records:
+            if r["reference"] not in seen:
+                seen.add(r["reference"])
+                unique_records.append(r)
+        records = unique_records
+
         # Upsert in small batches — one bad record kills a whole batch
         # so keep batches small to isolate failures
         BATCH = 20
