@@ -2,12 +2,17 @@
 """
 PlanFind Idox scraper — scrapes UK councils running the Idox planning portal.
 
-Design decisions:
-  - Async with bounded concurrency (3 councils at once, each a different server)
-  - Soft time budget: stops gracefully before GitHub Actions kills the job
-  - Priority queue: always scrapes least-recently-updated councils first
-  - Session + CSRF handled properly per council
-  - Pagination follows Idox's pagedSearchResults.do pattern
+Approach: uses the monthlyList endpoint (GET, no CSRF, no JS needed on classic Idox)
+rather than the advanced search POST form (which requires JavaScript on Idox v5+).
+
+For each council:
+  1. GET /online-applications/search.do?action=monthlyList&searchType=Application
+  2. Parse the monthlyListForm and submit (date received, current month)
+  3. Follow pagination via pagedSearchResults.do
+  4. Filter results by submitted_date in Python (last N days)
+
+Portals returning "Browser does not support script" are flagged as Idox v5 
+(cloud-hosted, JS-required) — these need Playwright and are tracked for future work.
 """
 import asyncio
 import os
@@ -16,20 +21,20 @@ import sys
 import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
 
 import httpx
 from bs4 import BeautifulSoup
 
 # ---------------------------------------------------------------------------
-# Config — all overridable via environment variables
+# Config
 # ---------------------------------------------------------------------------
-SUPABASE_URL  = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY  = os.environ.get("SUPABASE_KEY", "")
-MAX_MINUTES   = int(os.environ.get("MAX_MINUTES", "40"))   # soft stop
-DAYS_BACK     = int(os.environ.get("DAYS_BACK", "7"))      # 7 nightly, 365 bulk
-CONCURRENCY   = int(os.environ.get("CONCURRENCY", "3"))    # parallel councils
-REQ_DELAY     = 1.5  # seconds between requests to same server
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "40"))
+DAYS_BACK    = int(os.environ.get("DAYS_BACK", "7"))
+CONCURRENCY  = int(os.environ.get("CONCURRENCY", "3"))
+REQ_DELAY    = 1.5  # seconds between requests to same server
 
 START_TIME = time.monotonic()
 
@@ -37,7 +42,6 @@ def elapsed_minutes() -> float:
     return (time.monotonic() - START_TIME) / 60
 
 def should_stop() -> bool:
-    """True when we're 2 minutes from the budget — stop cleanly."""
     return elapsed_minutes() >= MAX_MINUTES - 2
 
 
@@ -45,12 +49,11 @@ def should_stop() -> bool:
 # Helpers
 # ---------------------------------------------------------------------------
 def _normalise_status(s: str) -> str:
-    if not s:
-        return "pending"
+    if not s: return "pending"
     s = s.lower()
-    if any(x in s for x in ("approv", "grant", "permit", "allow", "no objection")):
+    if any(x in s for x in ("approv","grant","permit","allow","no objection")):
         return "approved"
-    if any(x in s for x in ("refus", "reject", "dismiss", "not permit")):
+    if any(x in s for x in ("refus","reject","dismiss","not permit")):
         return "refused"
     if "withdraw" in s:
         return "withdrawn"
@@ -58,20 +61,16 @@ def _normalise_status(s: str) -> str:
 
 
 def _extract_postcode(text: str) -> Optional[str]:
-    if not text:
-        return None
+    if not text: return None
     m = re.search(r"\b([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2})\b", text.upper())
     return m.group(1) if m else None
 
 
 def _parse_date(s: str) -> Optional[str]:
-    if not s:
-        return None
+    if not s: return None
     s = str(s).strip()
-    # Strip timezone offsets and time parts
     for sep in ("+", "T", " "):
-        if sep in s:
-            s = s.split(sep)[0].strip()
+        if sep in s: s = s.split(sep)[0].strip()
     s = s[:10]
     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y", "%Y/%m/%d"):
         try:
@@ -81,28 +80,34 @@ def _parse_date(s: str) -> Optional[str]:
     return None
 
 
+def _is_js_required(html: str) -> bool:
+    """Detect Idox v5 cloud portal (PublicAccess 5) which requires JavaScript."""
+    lower = html.lower()
+    return "browser does not support script" in lower or "noscript" in lower and "please enable javascript" in lower
+
+
 # ---------------------------------------------------------------------------
-# Supabase REST API helpers
+# Supabase
 # ---------------------------------------------------------------------------
-_H = lambda: {
-    "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}",
-    "Content-Type": "application/json",
-}
+def _h():
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
 
 async def _supa_get(table: str, **params) -> list:
     async with httpx.AsyncClient(timeout=20) as c:
-        r = await c.get(f"{SUPABASE_URL}/rest/v1/{table}", params=params, headers=_H())
+        r = await c.get(f"{SUPABASE_URL}/rest/v1/{table}", params=params, headers=_h())
         r.raise_for_status()
         return r.json()
 
 async def _supa_upsert(records: list) -> bool:
-    headers = {**_H(), "Prefer": "resolution=merge-duplicates,return=minimal"}
+    headers = {**_h(), "Prefer": "resolution=merge-duplicates,return=minimal"}
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post(
             f"{SUPABASE_URL}/rest/v1/planning_applications",
-            json=records,
-            headers=headers,
+            json=records, headers=headers,
         )
         return r.status_code in (200, 201, 204)
 
@@ -112,7 +117,7 @@ async def _supa_patch_council(council_id: int, data: dict):
             f"{SUPABASE_URL}/rest/v1/councils",
             params={"id": f"eq.{council_id}"},
             json=data,
-            headers={**_H(), "Prefer": "return=minimal"},
+            headers={**_h(), "Prefer": "return=minimal"},
         )
 
 
@@ -122,14 +127,13 @@ async def _supa_patch_council(council_id: int, data: dict):
 async def geocode(postcodes: list[str]) -> dict:
     results = {}
     unique = list({p.strip().upper().replace(" ", "") for p in postcodes if p})
-    if not unique:
-        return results
+    if not unique: return results
     async with httpx.AsyncClient(timeout=15) as c:
         for i in range(0, len(unique), 100):
             try:
                 r = await c.post(
                     "https://api.postcodes.io/postcodes",
-                    json={"postcodes": unique[i:i + 100]},
+                    json={"postcodes": unique[i:i+100]},
                 )
                 for item in r.json().get("result", []):
                     if item and item.get("result"):
@@ -151,172 +155,123 @@ USER_AGENT = "PlanFind/1.0 (+https://planfind.co.uk; planning data aggregator)"
 
 class IdoxPortal:
     """
-    Handles one Idox planning portal:
-      1. GET search page  → session cookies + CSRF token
-      2. POST search form → first results page
-      3. GET paginated    → remaining pages
-      4. Parse HTML       → list of application dicts
+    Scrapes one Idox planning portal using the monthlyList endpoint.
+    This avoids the CSRF/JavaScript requirements of the advanced search form.
     """
 
     def __init__(self, council_name: str, base_url: str):
         self.council_name = council_name
         self.base_url = base_url.rstrip("/")
-        # Extract domain for building absolute URLs
         parsed = urlparse(self.base_url)
         self.domain_root = f"{parsed.scheme}://{parsed.netloc}"
 
     def _abs_url(self, href: str) -> str:
-        if not href:
-            return ""
-        if href.startswith("http"):
-            return href
-        if href.startswith("/"):
-            return f"{self.domain_root}{href}"
+        if not href: return ""
+        if href.startswith("http"): return href
+        if href.startswith("/"): return f"{self.domain_root}{href}"
         return f"{self.base_url}/{href.lstrip('/')}"
 
-    async def _init_session(self, client: httpx.AsyncClient) -> Optional[str]:
+    async def _get_monthly_list_html(
+        self, client: httpx.AsyncClient, for_date: date
+    ) -> Optional[str]:
         """
-        GET the search page to establish session and find CSRF token.
-        Returns:
-          str  — the CSRF token value (could be empty string if not needed)
-          None — hard failure (can't reach the portal at all)
+        GET the monthly list page and submit the form to get results.
+        Returns the results HTML, or None on failure.
         """
+        # Step 1: load the monthly list form page
         try:
-            # Step 1: visit base URL first to establish session cookies
-            await client.get(f"{self.base_url}/", timeout=10)
-            await asyncio.sleep(0.5)
-
-            # Step 2: get the advanced search page
             r = await client.get(
                 f"{self.base_url}/search.do",
-                params={"action": "advanced"},
+                params={"action": "monthlyList", "searchType": "Application"},
                 timeout=15,
             )
+            await asyncio.sleep(REQ_DELAY)
+        except Exception as e:
+            print(f"    GET monthly list error: {e}")
+            return None
 
-            if r.status_code not in (200, 302):
-                print(f"    HTTP {r.status_code} on search page — skipping")
-                return None
+        if r.status_code != 200:
+            print(f"    HTTP {r.status_code} on monthly list page — skipping")
+            return None
 
-            soup = BeautifulSoup(r.text, "html.parser")
+        if _is_js_required(r.text):
+            print(f"    ⚠ PublicAccess 5 (JS required) — needs Playwright upgrade")
+            return None
 
-            # Method 1: Classic Idox — hidden input field
-            el = soup.find("input", {"name": "_csrf"})
-            if el and el.get("value"):
-                return el["value"]
-
-            # Method 2: Meta tag (some Idox versions)
-            el = soup.find("meta", {"name": "_csrf"})
-            if el and el.get("content"):
-                return el["content"]
-
-            # Method 3: Modern Idox v5 — cookie-based CSRF
-            # Spring Security sets XSRF-TOKEN cookie; we pass it back as form field
-            for cookie_name in ("XSRF-TOKEN", "CSRF-TOKEN", "_csrf", "csrftoken"):
-                val = client.cookies.get(cookie_name)
-                if val:
-                    return val
-
-            # Method 4: CSRF in form action URL
-            form = soup.find("form")
-            if form:
-                action = form.get("action", "")
-                m = re.search(r"[?&]_csrf=([^&]+)", action)
-                if m:
-                    return m.group(1)
-
-            # Method 5: No CSRF — try submitting without it
-            # Many Idox read-only searches don't enforce CSRF
-            # Debug info to help diagnose
+        soup = BeautifulSoup(r.text, "html.parser")
+        form = soup.find("form", id="monthlyListForm") or soup.find("form")
+        if not form:
             title = soup.find("title")
-            title_text = title.get_text(strip=True)[:60] if title else "no title"
-            has_form = bool(form)
-            print(f"    ⚠ No CSRF — page: '{title_text}' | form: {has_form} | cookies: {list(client.cookies.keys())}")
-            # Return empty string = proceed without CSRF token
-            return ""
-
-        except Exception as e:
-            print(f"    Session error: {e}")
+            print(f"    No monthly list form found — page: '{title.get_text(strip=True)[:50] if title else 'none'}'")
             return None
 
-    async def _post_search(
-        self,
-        client: httpx.AsyncClient,
-        csrf: str,
-        date_from: str,
-        date_to: str,
-    ) -> Optional[str]:
-        """POST the search form; return response HTML or None."""
-        form = {
-            "searchType": "Application",
-            "date(applicationReceived)": "",
-            "dateReceivedStart": date_from,
-            "dateReceivedEnd": date_to,
-        }
-        # Only include CSRF if we have one
-        if csrf:
-            form["_csrf"] = csrf
+        # Step 2: build form data from all hidden inputs + set date received
+        form_data: dict[str, str] = {}
+        for inp in form.find_all("input"):
+            name = inp.get("name")
+            val = inp.get("value", "")
+            itype = inp.get("type", "text").lower()
+            if name and itype not in ("submit", "button", "image"):
+                form_data[name] = val
 
+        # Override: request by date received, for target month
+        form_data["searchType"] = "Application"
+        # Try both common field names for the date received radio
+        for radio_name in ("dateReceived", "date(applicationReceived)", "type"):
+            form_data[radio_name] = "receivedDate"
+
+        # Set month and year (some forms have selects for this)
+        form_data["month"] = str(for_date.month)
+        form_data["year"] = str(for_date.year)
+
+        # Get form action
+        action = form.get("action", "search.do?action=monthlyList")
+        post_url = self._abs_url(action) if action else f"{self.base_url}/search.do"
+
+        # Step 3: submit the form
         try:
-            r = await client.post(
-                f"{self.base_url}/search.do",
-                params={"action": "advanced"},
-                data=form,
+            r2 = await client.post(
+                post_url,
+                data=form_data,
                 timeout=20,
             )
-            if r.status_code != 200:
-                print(f"    POST returned HTTP {r.status_code}")
-                return None
-            # Quick check: did we get a results page or an error/redirect page?
-            if "searchresults" not in r.text and "no results" not in r.text.lower():
-                soup = BeautifulSoup(r.text, "html.parser")
-                title = soup.find("title")
-                print(f"    ⚠ Unexpected response: '{title.get_text(strip=True)[:60] if title else 'no title'}'")
-            return r.text
+            await asyncio.sleep(REQ_DELAY)
         except Exception as e:
-            print(f"    POST error: {e}")
+            print(f"    Monthly list POST error: {e}")
             return None
 
-    async def _get_page(self, client: httpx.AsyncClient, page_num: int) -> Optional[str]:
-        """GET a subsequent results page."""
-        try:
-            r = await client.get(
-                f"{self.base_url}/pagedSearchResults.do",
-                params={"action": "page", "searchCriteria.page": page_num},
-                timeout=20,
-            )
-            return r.text if r.status_code == 200 else None
-        except Exception:
+        if r2.status_code != 200:
+            print(f"    Monthly list POST returned HTTP {r2.status_code}")
             return None
+
+        return r2.text
 
     def _parse_page(self, html: str) -> tuple[list[dict], bool]:
-        """
-        Parse a results page.
-        Returns (list_of_app_dicts, has_next_page).
-        """
+        """Parse a results page. Returns (apps, has_next_page)."""
         soup = BeautifulSoup(html, "html.parser")
         apps = []
 
-        # Try multiple container patterns — Idox versions vary
+        # Try multiple container patterns
         container = (
             soup.find("ul", class_="searchresults")
             or soup.find("ul", id="searchresults")
             or soup.find("div", class_="searchresults")
-            or soup.find("div", id="searchresults")
-            or soup.find("table", id="searchresults")
+            or soup.find("div", id="searchResultsContainer")
         )
 
         if not container:
             return apps, False
 
-        # Handle both <li> items and <tr> rows
-        items = container.find_all("li", class_="searchresult") or container.find_all("tr")
+        items = (
+            container.find_all("li", class_="searchresult")
+            or container.find_all("tr")
+        )
 
         for item in items:
             app = self._parse_result(item)
             if app:
                 apps.append(app)
 
-        # Next page exists if there's a "Next" pagination link
         has_next = bool(
             soup.find("a", string=re.compile(r"^Next$", re.I))
             or soup.find("a", {"class": "next"})
@@ -324,82 +279,70 @@ class IdoxPortal:
         )
         return apps, has_next
 
-    def _parse_result(self, li) -> Optional[dict]:
-        """Parse a single <li class='searchresult'> into a dict."""
-        # Reference + portal URL from the anchor link
-        link = li.find("a", href=True)
-        if not link:
-            return None
+    def _parse_result(self, item) -> Optional[dict]:
+        """Parse one search result element."""
+        link = item.find("a", href=True)
+        if not link: return None
 
         ref = link.get_text(strip=True)
         portal_url = self._abs_url(link.get("href", ""))
 
-        # Some Idox versions wrap the ref in a heading tag
-        heading = li.find(re.compile(r"h[2-4]"))
+        heading = item.find(re.compile(r"h[2-4]"))
         if heading:
             ref = heading.get_text(strip=True)
 
         if not ref or len(ref) < 3:
             return None
 
-        # Address — Idox usually has <p class="address"> or <span class="address">
         address = ""
-        addr_el = li.find(class_=re.compile(r"\baddress\b", re.I))
+        addr_el = item.find(class_=re.compile(r"\baddress\b", re.I))
         if addr_el:
             address = addr_el.get_text(" ", strip=True)
 
-        # Parse key:value metadata from <dl><dt><dd> blocks
+        # Parse metadata from dl/dt/dd or p.metaInfo
         fields: dict[str, str] = {}
-        for dl in li.find_all("dl"):
+        meta = item.find(class_=re.compile(r"metaInfo|meta-info|metadata", re.I))
+        if meta:
+            text = meta.get_text(" | ", strip=True)
+            # Idox metaInfo format: "Ref. No: X | Status: Y | Received: Z | Validated: W"
+            for part in text.split("|"):
+                part = part.strip()
+                if ":" in part:
+                    k, _, v = part.partition(":")
+                    fields[k.strip().lower()] = v.strip()
+
+        for dl in item.find_all("dl"):
             for dt, dd in zip(dl.find_all("dt"), dl.find_all("dd")):
-                key = dt.get_text(strip=True).lower().rstrip(":").strip()
-                val = dd.get_text(" ", strip=True)
-                fields[key] = val
+                k = dt.get_text(strip=True).lower().rstrip(":")
+                v = dd.get_text(" ", strip=True)
+                fields[k] = v
 
-        # Also handle table-based layouts (some Idox versions)
-        for row in li.find_all("tr"):
-            cells = row.find_all(["th", "td"])
-            if len(cells) >= 2:
-                key = cells[0].get_text(strip=True).lower().rstrip(":")
-                val = cells[1].get_text(" ", strip=True)
-                if key:
-                    fields[key] = val
-
-        # Fallback: address from fields if not found above
         if not address:
-            address = (
-                fields.get("address")
-                or fields.get("site address")
-                or fields.get("location")
-                or ""
-            )
+            address = fields.get("address") or fields.get("site address") or fields.get("location") or ""
 
         description = (
-            fields.get("proposal")
-            or fields.get("description")
-            or fields.get("development description")
-            or ""
+            fields.get("proposal") or fields.get("description") or
+            fields.get("development description") or ""
         )
         app_type = (
-            fields.get("application type")
-            or fields.get("type")
-            or fields.get("app type")
-            or ""
+            fields.get("application type") or fields.get("type") or
+            fields.get("app type") or ""
         )
         status_raw = (
-            fields.get("status")
-            or fields.get("decision")
-            or fields.get("current status")
-            or ""
+            fields.get("status") or fields.get("decision") or
+            fields.get("current status") or ""
         )
         date_raw = (
-            fields.get("date received")
-            or fields.get("received")
-            or fields.get("date validated")
-            or fields.get("date registered")
-            or fields.get("valid from date")
-            or ""
+            fields.get("date received") or fields.get("received") or
+            fields.get("date validated") or fields.get("validated") or
+            fields.get("date registered") or ""
         )
+
+        # Also try the description from the link text if not in fields
+        if not description:
+            description = link.get_text(strip=True)
+            if description == ref:
+                description = ""
 
         return {
             "reference":        ref.strip(),
@@ -419,80 +362,70 @@ class IdoxPortal:
 
     async def scrape(self, days_back: int = 7) -> list[dict]:
         """
-        Main entry point: scrapes recent applications and returns them.
-        Handles session, CSRF, search, and pagination.
+        Scrape recent applications. Uses monthlyList for current month,
+        and previous month if within the lookback window.
         """
-        d_to   = date.today()
-        d_from = d_to - timedelta(days=days_back)
-        str_from = d_from.strftime("%d/%m/%Y")
-        str_to   = d_to.strftime("%d/%m/%Y")
+        cutoff = date.today() - timedelta(days=days_back)
+        months_to_scrape = [date.today()]
+
+        # If the lookback window crosses into the previous month, scrape that too
+        if cutoff.month != date.today().month or cutoff.year != date.today().year:
+            months_to_scrape.append(cutoff)
 
         all_apps: list[dict] = []
 
         async with httpx.AsyncClient(
             headers={
                 "User-Agent":      USER_AGENT,
-                "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept":          "text/html,application/xhtml+xml",
                 "Accept-Language": "en-GB,en;q=0.9",
             },
             follow_redirects=True,
             timeout=20,
-            verify=False,  # Some councils have cert mismatches on cloud-hosted Idox
+            verify=False,
         ) as client:
 
-            # Step 1 — establish session and get CSRF (empty string = no token needed)
-            csrf = await self._init_session(client)
-            await asyncio.sleep(REQ_DELAY)
-
-            if csrf is None:
-                # Hard failure — couldn't reach the portal
-                return []
-
-            # Step 2 — submit date-range search
-            html = await self._post_search(client, csrf, str_from, str_to)
-            await asyncio.sleep(REQ_DELAY)
-
-            if not html:
-                return []
-
-            # Step 3 — parse pages
-            page = 1
-            while True:
-                apps, has_next = self._parse_page(html)
-                all_apps.extend(apps)
-
-                if not has_next or not apps:
-                    break
-
-                page += 1
-                if page > 50:  # safety cap
-                    print(f"    ⚠ Hit 50-page cap")
-                    break
-
-                html = await self._get_page(client, page)
-                await asyncio.sleep(REQ_DELAY)
+            for target_month in months_to_scrape:
+                html = await self._get_monthly_list_html(client, target_month)
                 if not html:
-                    break
+                    continue
 
-            print(f"    {len(all_apps)} applications across {page} page(s)")
+                page = 1
+                while True:
+                    apps, has_next = self._parse_page(html)
+                    all_apps.extend(apps)
 
-            # Debug: when 0 results, show what page we actually got
-            if not all_apps and html:
-                soup = BeautifulSoup(html, "html.parser")
-                title = soup.find("title")
-                title_str = title.get_text(strip=True)[:60] if title else "no title"
-                # Get meaningful text — skip scripts/styles
-                for tag in soup(["script", "style"]):
-                    tag.decompose()
-                body_text = " ".join(soup.get_text().split())[:200]
-                print(f"    Debug — title: '{title_str}'")
-                print(f"    Debug — text:  {body_text}")
+                    if not has_next or not apps:
+                        break
+                    page += 1
+                    if page > 50:
+                        print(f"    ⚠ Hit 50-page cap")
+                        break
 
-        return all_apps
+                    try:
+                        r = await client.get(
+                            f"{self.base_url}/pagedSearchResults.do",
+                            params={"action": "page", "searchCriteria.page": page},
+                            timeout=20,
+                        )
+                        html = r.text
+                        await asyncio.sleep(REQ_DELAY)
+                    except Exception as e:
+                        print(f"    Page {page} error: {e}")
+                        break
+
+        # Filter to only applications within the lookback window
+        recent = [
+            a for a in all_apps
+            if not a.get("submitted_date") or a["submitted_date"] >= cutoff.isoformat()
+        ]
+
+        print(f"    {len(all_apps)} this month → {len(recent)} in last {days_back} days")
+        return recent
 
 
 # ---------------------------------------------------------------------------
-# Per-council orchestration
+# Per-council processing
 # ---------------------------------------------------------------------------
 async def process_council(
     portal: IdoxPortal,
@@ -500,13 +433,12 @@ async def process_council(
     sem: asyncio.Semaphore,
     days_back: int,
 ) -> int:
-    """Scrape, geocode, and upsert one council. Returns count saved."""
     async with sem:
         print(f"\n[{portal.council_name}]")
         try:
             apps = await portal.scrape(days_back)
         except Exception as e:
-            print(f"    ✗ Scrape error: {e}")
+            print(f"    ✗ Error: {e}")
             return 0
 
         if not apps:
@@ -515,7 +447,6 @@ async def process_council(
             })
             return 0
 
-        # Geocode postcodes that have no coordinates
         need = [a["postcode"] for a in apps if not a.get("lat") and a.get("postcode")]
         if need:
             print(f"    Geocoding {len(set(need))} postcodes…")
@@ -526,39 +457,32 @@ async def process_council(
                     if pc in coords:
                         app["lat"], app["lng"] = coords[pc]
 
-        # Build upsert records
-        records = [
-            {
-                "council_id":       council_id,
-                "reference":        a["reference"],
-                "address":          a.get("address"),
-                "postcode":         a.get("postcode"),
-                "lat":              a.get("lat"),
-                "lng":              a.get("lng"),
-                "description":      a.get("description"),
-                "application_type": a.get("application_type"),
-                "status":           a.get("status", "pending"),
-                "submitted_date":   a.get("submitted_date"),
-                "decision_date":    a.get("decision_date"),
-                "council_url":      a.get("council_url"),
-                "source":           "idox_scraper",
-            }
-            for a in apps
-        ]
+        records = [{
+            "council_id":       council_id,
+            "reference":        a["reference"],
+            "address":          a.get("address"),
+            "postcode":         a.get("postcode"),
+            "lat":              a.get("lat"),
+            "lng":              a.get("lng"),
+            "description":      a.get("description"),
+            "application_type": a.get("application_type"),
+            "status":           a.get("status", "pending"),
+            "submitted_date":   a.get("submitted_date"),
+            "decision_date":    a.get("decision_date"),
+            "council_url":      a.get("council_url"),
+            "source":           "idox_scraper",
+        } for a in apps]
 
-        # Upsert in batches of 100
         ok = True
         for i in range(0, len(records), 100):
-            if not await _supa_upsert(records[i:i + 100]):
+            if not await _supa_upsert(records[i:i+100]):
                 ok = False
-                print(f"    ⚠ Batch upsert issue")
 
         if ok:
             await _supa_patch_council(council_id, {
                 "coverage_source": "idox_scraper",
                 "last_scraped_at": datetime.now(timezone.utc).isoformat(),
             })
-
         print(f"    ✓ Saved {len(apps)}")
         return len(apps)
 
@@ -567,7 +491,6 @@ async def process_council(
 # Main
 # ---------------------------------------------------------------------------
 async def main():
-    # Import council list
     try:
         from idox_councils import IDOX_COUNCILS
     except ImportError:
@@ -577,7 +500,7 @@ async def main():
     bulk = "--bulk" in sys.argv
     days = int(os.environ.get("DAYS_BACK", "365" if bulk else "7"))
 
-    print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Idox scraper")
+    print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Idox scraper (monthlyList approach)")
     print(f"Mode:        {'BULK' if bulk else 'FAST'} ({days} days back)")
     print(f"Councils:    {len(IDOX_COUNCILS)}")
     print(f"Concurrency: {CONCURRENCY}")
@@ -588,8 +511,6 @@ async def main():
         print("ERROR: Set SUPABASE_URL and SUPABASE_KEY")
         sys.exit(1)
 
-    # Fetch DB councils ordered by oldest last_scraped_at first
-    # so we always prioritise stale councils when time is short
     try:
         db_rows = await _supa_get(
             "councils",
@@ -603,14 +524,12 @@ async def main():
 
     db_by_name = {r["name"].lower(): r["id"] for r in db_rows}
 
-    # Match council list to DB IDs
     to_scrape: list[tuple[IdoxPortal, int]] = []
     missing: list[str] = []
 
     for name, url in IDOX_COUNCILS:
         council_id = db_by_name.get(name.lower())
         if not council_id:
-            # Try partial match
             for db_name, db_id in db_by_name.items():
                 if name.lower() in db_name or db_name in name.lower():
                     council_id = db_id
@@ -621,14 +540,13 @@ async def main():
             missing.append(name)
 
     if missing:
-        print(f"Not in DB — will skip: {', '.join(missing)}")
-        print(f"  → Run the SQL in idox_councils.py to insert them\n")
+        print(f"Not in DB (skipping): {', '.join(missing[:5])}{'...' if len(missing)>5 else ''}\n")
 
     print(f"Scraping {len(to_scrape)} councils…\n")
 
     sem = asyncio.Semaphore(CONCURRENCY)
-    tasks = []
     skipped = 0
+    tasks = []
 
     for portal, council_id in to_scrape:
         if should_stop():
@@ -641,7 +559,7 @@ async def main():
     total  = sum(r for r in results if isinstance(r, int))
     errors = sum(1 for r in results if isinstance(r, Exception))
 
-    print(f"\n{'=' * 50}")
+    print(f"\n{'='*50}")
     print(f"Finished in {elapsed_minutes():.1f} minutes")
     print(f"Applications saved: {total}")
     if errors:  print(f"Errors:             {errors}")
