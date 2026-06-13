@@ -519,7 +519,7 @@ async def process_council(
     days_back: int,
 ) -> int:
     async with sem:
-        print(f"\n[{portal.council_name}]")
+        print(f"\n[{portal.council_name}] (council_id={council_id})")
         await asyncio.sleep(1)  # stagger requests — avoids triggering WAF rate limits
 
         try:
@@ -571,6 +571,8 @@ async def process_council(
                 seen.add(r["reference"])
                 unique_records.append(r)
         records = unique_records
+
+        print(f"    Upserting {len(records)} records with council_id={council_id}")
 
         # Upsert in small batches — one bad record kills a whole batch
         # so keep batches small to isolate failures
