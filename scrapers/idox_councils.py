@@ -206,14 +206,15 @@ IDOX_COUNCILS = [
      "https://planning.norwich.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
-    # LONDON BOROUGHS
-    # (Camden already covered by open data feed)
+    # LONDON BOROUGHS — URLs verified from known working Idox installations
+    # Note: some use non-standard subdomains (pa., pam., publicaccess2. etc)
+    # Camden already covered by open data feed
     # -------------------------------------------------------------------------
     ("London Borough of Hackney",
      "https://development.hackney.gov.uk/online-applications"),
 
     ("London Borough of Southwark",
-     "https://planning.southwark.gov.uk/online-applications"),
+     "https://planbuild.southwark.gov.uk:8190/online-applications"),
 
     ("London Borough of Lambeth",
      "https://planning.lambeth.gov.uk/online-applications"),
@@ -225,7 +226,7 @@ IDOX_COUNCILS = [
      "https://development.towerhamlets.gov.uk/online-applications"),
 
     ("London Borough of Newham",
-     "https://www.newham.gov.uk/online-applications"),
+     "https://pa.newham.gov.uk/online-applications"),
 
     ("London Borough of Waltham Forest",
      "https://www.walthamforest.gov.uk/online-applications"),
@@ -234,7 +235,7 @@ IDOX_COUNCILS = [
      "https://www.redbridge.gov.uk/online-applications"),
 
     ("London Borough of Barking and Dagenham",
-     "https://www.lbbd.gov.uk/online-applications"),
+     "https://paplan.lbbd.gov.uk/online-applications"),
 
     ("London Borough of Havering",
      "https://development.havering.gov.uk/online-applications"),
@@ -246,10 +247,10 @@ IDOX_COUNCILS = [
      "https://planning.royalgreenwich.gov.uk/online-applications"),
 
     ("London Borough of Bromley",
-     "https://www.bromley.gov.uk/online-applications"),
+     "https://searchapplications.bromley.gov.uk/onlineapplications"),
 
     ("London Borough of Croydon",
-     "https://www.croydon.gov.uk/online-applications"),
+     "https://publicaccess2.croydon.gov.uk/online-applications"),
 
     ("London Borough of Sutton",
      "https://www.sutton.gov.uk/online-applications"),
@@ -267,7 +268,7 @@ IDOX_COUNCILS = [
      "https://www.hounslow.gov.uk/online-applications"),
 
     ("London Borough of Ealing",
-     "https://www.ealing.gov.uk/online-applications"),
+     "https://pam.ealing.gov.uk/online-applications"),
 
     ("London Borough of Hillingdon",
      "https://www.hillingdon.gov.uk/online-applications"),
@@ -276,7 +277,7 @@ IDOX_COUNCILS = [
      "https://www.harrow.gov.uk/online-applications"),
 
     ("London Borough of Brent",
-     "https://www.brent.gov.uk/online-applications"),
+     "https://pa.brent.gov.uk/online-applications"),
 
     ("London Borough of Barnet",
      "https://publicaccess.barnet.gov.uk/online-applications"),
@@ -289,6 +290,15 @@ IDOX_COUNCILS = [
 
     ("London Borough of Islington",
      "https://www.islington.gov.uk/online-applications"),
+
+    ("London Borough of Hammersmith and Fulham",
+     "https://public-access.lbhf.gov.uk/online-applications"),
+
+    ("City of Westminster",
+     "https://idoxpa.westminster.gov.uk/online-applications"),
+
+    ("City of London Corporation",
+     "https://www.planning2.cityoflondon.gov.uk/online-applications"),
 
 ]
 
