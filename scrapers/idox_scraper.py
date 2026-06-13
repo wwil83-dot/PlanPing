@@ -111,7 +111,9 @@ async def _supa_upsert(records: list) -> bool:
     try:
         async with httpx.AsyncClient(timeout=60) as c:
             r = await c.post(
-                f"{SUPABASE_URL}/rest/v1/planning_applications",
+                # on_conflict tells PostgREST which constraint to use for upsert
+                f"{SUPABASE_URL}/rest/v1/planning_applications"
+                f"?on_conflict=council_id,reference",
                 json=records, headers=headers,
             )
             if r.status_code not in (200, 201, 204):
@@ -173,27 +175,18 @@ def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> O
     link = item.find("a", href=True)
     if not link: return None
 
-    ref = link.get_text(strip=True)
     portal_url = _abs_url(base_url, domain_root, link.get("href", ""))
 
+    # In Idox MONTHLY LIST the <h2> heading is the DESCRIPTION, not the reference.
+    # The planning reference (e.g. "25/01234/FUL") is in p.metaInfo as "Ref. No: ..."
     heading = item.find(re.compile(r"h[2-4]"))
-    if heading:
-        ref = heading.get_text(strip=True)
+    heading_text = heading.get_text(strip=True) if heading else link.get_text(strip=True)
 
-    if not ref or len(ref) < 3:
-        return None
-
-    # Address
-    address = ""
-    addr_el = item.find(class_=re.compile(r"\baddress\b", re.I))
-    if addr_el:
-        address = addr_el.get_text(" ", strip=True)
-
-    # Metadata from dl/dt/dd or p.metaInfo
+    # Parse metadata fields first (metaInfo contains the real reference)
     fields: dict[str, str] = {}
     meta = item.find(class_=re.compile(r"metaInfo|meta-info|metadata", re.I))
     if meta:
-        for part in meta.get_text(" | ", strip=True).split("|"):
+        for part in meta.get_text(strip=True).split("|"):
             part = part.strip()
             if ":" in part:
                 k, _, v = part.partition(":")
@@ -205,6 +198,32 @@ def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> O
             v = dd.get_text(" ", strip=True)
             fields[k] = v
 
+    # ── REFERENCE: metaInfo first (e.g. "Ref. No: 25/01234/FUL") ──────────
+    ref = (
+        fields.get("ref. no") or
+        fields.get("ref no") or
+        fields.get("reference") or
+        fields.get("ref") or
+        fields.get("app. no") or
+        fields.get("application no") or
+        ""
+    ).strip()
+
+    # Fallback: heading text if it looks like a real reference (has digits + slash)
+    if not ref:
+        if re.search(r'\d', heading_text) and ('/' in heading_text or '-' in heading_text):
+            ref = heading_text
+        else:
+            ref = link.get_text(strip=True)
+
+    if not ref or len(ref) < 3:
+        return None
+
+    # ── ADDRESS ─────────────────────────────────────────────────────────────
+    address = ""
+    addr_el = item.find(class_=re.compile(r"\baddress\b", re.I))
+    if addr_el:
+        address = addr_el.get_text(" ", strip=True)
     if not address:
         address = (
             fields.get("address") or
@@ -212,10 +231,16 @@ def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> O
             fields.get("location") or ""
         )
 
+    # ── DESCRIPTION: heading IS the description in monthly list mode ────────
     description = (
-        fields.get("proposal") or fields.get("description") or
-        fields.get("development description") or ""
+        fields.get("proposal") or
+        fields.get("description") or
+        fields.get("development description") or
+        heading_text
     )
+    if description == ref:
+        description = ""
+
     app_type  = fields.get("application type") or fields.get("type") or ""
     status_raw = fields.get("status") or fields.get("decision") or ""
     date_raw   = (
