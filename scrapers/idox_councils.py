@@ -2,20 +2,35 @@
 PlanFind — Idox portal council list.
 
 Format: (council_name_as_in_supabase_db, idox_base_url)
-
-IMPORTANT: The base_url should end at /online-applications (no trailing slash).
-The scraper appends /search.do and /pagedSearchResults.do automatically.
-
-Add new councils here after confirming:
-  1. The council uses Idox (not Northgate / OcellaAccess / Uniform)
-  2. The base URL resolves to a working Idox search page
-  3. The council name matches the councils table in Supabase
-
-To add a new council to the database, run this in Supabase SQL editor:
-  INSERT INTO councils (name, slug, system, region, portal_url, coverage_source, active)
-  VALUES ('Council Name', 'council-name', 'idox', 'england', 'https://...', 'pending', true)
-  ON CONFLICT (name) DO UPDATE SET system = 'idox', active = true;
 """
+
+# ---------------------------------------------------------------------------
+# Hardcoded correct council IDs from the database.
+# These BYPASS the unreliable name-matching lookup in the scraper.
+# To add a new council: query Supabase for its id with:
+#   SELECT id, name FROM councils WHERE name = 'Council Name';
+# ---------------------------------------------------------------------------
+COUNCIL_DB_IDS: dict[str, int] = {
+    "Brighton and Hove City Council":           20,
+    "Cheshire West and Chester Council":         27,
+    "City of London":                            28,   # note: NOT "Corporation" in DB
+    "Gloucester City Council":                   37,
+    "Plymouth City Council":                     59,
+    "Wolverhampton City Council":                79,
+    "Rochdale Borough Council":                  172,
+    "Tameside Metropolitan Borough Council":     173,
+    "Bradford Metropolitan District Council":    175,
+    "Halton Borough Council":                    186,
+    "North Tyneside Council":                    200,
+    "Durham County Council":                     201,
+    "Cheltenham Borough Council":                213,
+    "Ipswich Borough Council":                   215,
+    "London Borough of Tower Hamlets":           222,
+    "London Borough of Newham":                  223,
+    "London Borough of Waltham Forest":          224,
+    "London Borough of Richmond upon Thames":    235,
+    "London Borough of Brent":                   240,
+}
 
 IDOX_COUNCILS = [
 
@@ -293,7 +308,7 @@ IDOX_COUNCILS = [
     ("City of Westminster",
      "https://idoxpa.westminster.gov.uk/online-applications"),
 
-    ("City of London Corporation",
+    ("City of London",
      "https://www.planning2.cityoflondon.gov.uk/online-applications"),
 
 ]
