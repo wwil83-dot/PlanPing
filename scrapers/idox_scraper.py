@@ -651,7 +651,9 @@ async def main():
                     break
 
         if council_id:
-            source = "hardcoded" if name in COUNCIL_DB_IDS else "db-lookup"
+            id_source = "HARDCODED" if name in COUNCIL_DB_IDS else "db-lookup"
+            if id_source == "HARDCODED":
+                print(f"  [HARDCODED] {name} → id={council_id}")
             to_scrape.append((IdoxPortal(name, url), council_id))
         else:
             missing.append(name)
