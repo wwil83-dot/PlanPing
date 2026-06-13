@@ -108,12 +108,19 @@ async def _supa_get(table: str, **params) -> list:
 
 async def _supa_upsert(records: list) -> bool:
     headers = {**_h(), "Prefer": "resolution=merge-duplicates,return=minimal"}
-    async with httpx.AsyncClient(timeout=30) as c:
-        r = await c.post(
-            f"{SUPABASE_URL}/rest/v1/planning_applications",
-            json=records, headers=headers,
-        )
-        return r.status_code in (200, 201, 204)
+    try:
+        async with httpx.AsyncClient(timeout=60) as c:
+            r = await c.post(
+                f"{SUPABASE_URL}/rest/v1/planning_applications",
+                json=records, headers=headers,
+            )
+            if r.status_code not in (200, 201, 204):
+                print(f"    ✗ Upsert HTTP {r.status_code}: {r.text[:300]}")
+                return False
+            return True
+    except Exception as e:
+        print(f"    ✗ Upsert exception: {e}")
+        return False
 
 
 async def _supa_patch_council(council_id: int, data: dict):
@@ -513,7 +520,7 @@ async def process_council(
                     if pc in coords:
                         app["lat"], app["lng"] = coords[pc]
 
-        # Build and upsert records
+        # Build upsert records
         records = [{
             "council_id":       council_id,
             "reference":        a["reference"],
@@ -530,9 +537,15 @@ async def process_council(
             "source":           "idox_scraper",
         } for a in apps]
 
+        # Upsert in small batches — one bad record kills a whole batch
+        # so keep batches small to isolate failures
+        BATCH = 20
+        saved = 0
         ok = True
-        for i in range(0, len(records), 100):
-            if not await _supa_upsert(records[i:i + 100]):
+        for i in range(0, len(records), BATCH):
+            if await _supa_upsert(records[i:i + BATCH]):
+                saved += len(records[i:i + BATCH])
+            else:
                 ok = False
 
         if ok:
@@ -540,8 +553,10 @@ async def process_council(
                 "coverage_source": "idox_scraper",
                 "last_scraped_at": datetime.now(timezone.utc).isoformat(),
             })
-        print(f"    ✓ Saved {len(apps)}")
-        return len(apps)
+            print(f"    ✓ Saved {saved}")
+        else:
+            print(f"    ⚠ Partial save: {saved} of {len(apps)} (see upsert errors above)")
+        return saved
 
 
 # ---------------------------------------------------------------------------
