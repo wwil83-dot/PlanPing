@@ -447,7 +447,11 @@ class IdoxPortal:
             )
             all_apps.extend(apps)
 
-            if not has_next or not apps or page_num >= 50:
+            # Continue if: explicit Next link found OR got a full page (always try next)
+            # Idox shows 10 per page — if we got 10, there's likely a page 2
+            should_continue = has_next or (len(apps) >= 10)
+
+            if not should_continue or not apps or page_num >= 50:
                 break
 
             page_num += 1
@@ -460,6 +464,7 @@ class IdoxPortal:
                 await page.wait_for_selector(
                     "ul.searchresults, .no-results", timeout=10_000
                 )
+                await asyncio.sleep(1)  # polite delay between pages
             except PlaywrightTimeout:
                 break
 
@@ -478,6 +483,7 @@ async def process_council(
 ) -> int:
     async with sem:
         print(f"\n[{portal.council_name}]")
+        await asyncio.sleep(1)  # stagger requests — avoids triggering WAF rate limits
 
         try:
             apps = await portal.scrape(browser, days_back)
