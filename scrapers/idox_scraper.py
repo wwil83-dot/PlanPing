@@ -257,12 +257,40 @@ def parse_results_page(
         if app:
             apps.append(app)
 
+    # Idox pagination — try multiple patterns
     has_next = bool(
+        # Text-based "Next" link
         soup.find("a", string=re.compile(r"^Next$", re.I))
+        or soup.find("a", string=re.compile(r"Next page", re.I))
+        # Class-based
         or soup.find("a", {"class": "next"})
         or soup.find("li", {"class": "next"})
+        or soup.find("span", {"class": "next"})
+        # Common Idox pager with ">" or ">>" symbols
+        or soup.find("a", string=re.compile(r"^[>»]$"))
+        # Page count indicator: "1 - 10 of 45" → more pages exist
+        or _has_more_pages(soup)
     )
     return apps, has_next
+
+
+def _has_more_pages(soup) -> bool:
+    """Detect pagination from 'Displaying X to Y of Z' style counters."""
+    # Pattern: "Displaying 1 to 10 of 45 results"
+    text = soup.get_text()
+    m = re.search(
+        r"(?:displaying|showing|results?)\s+(\d+)\s+(?:to|-)\s+(\d+)\s+of\s+(\d+)",
+        text, re.I
+    )
+    if m:
+        end, total = int(m.group(2)), int(m.group(3))
+        return end < total
+    # Pattern: "Page 1 of 5"
+    m = re.search(r"page\s+(\d+)\s+of\s+(\d+)", text, re.I)
+    if m:
+        current, total_pages = int(m.group(1)), int(m.group(2))
+        return current < total_pages
+    return False
 
 
 # ---------------------------------------------------------------------------
