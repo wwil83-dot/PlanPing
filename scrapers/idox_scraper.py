@@ -589,7 +589,7 @@ async def process_council(
 # ---------------------------------------------------------------------------
 async def main():
     try:
-        from idox_councils import IDOX_COUNCILS
+        from idox_councils import IDOX_COUNCILS, COUNCIL_DB_IDS
     except ImportError:
         print("ERROR: idox_councils.py not found")
         sys.exit(1)
@@ -626,13 +626,22 @@ async def main():
     missing: list[str] = []
 
     for name, url in IDOX_COUNCILS:
-        council_id = db_by_name.get(name.lower())
+        # Use hardcoded ID if available — bypasses unreliable name matching
+        council_id = COUNCIL_DB_IDS.get(name)
+
         if not council_id:
+            # Fall back to exact name match
+            council_id = db_by_name.get(name.lower())
+
+        if not council_id:
+            # Last resort: partial name match
             for db_name, db_id in db_by_name.items():
                 if name.lower() in db_name or db_name in name.lower():
                     council_id = db_id
                     break
+
         if council_id:
+            source = "hardcoded" if name in COUNCIL_DB_IDS else "db-lookup"
             to_scrape.append((IdoxPortal(name, url), council_id))
         else:
             missing.append(name)
