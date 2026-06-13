@@ -351,9 +351,10 @@ CONTEXT_OPTIONS = {
 class IdoxPortal:
     """Scrapes one Idox planning portal via Playwright."""
 
-    def __init__(self, council_name: str, base_url: str):
+    def __init__(self, council_name: str, base_url: str, db_council_id: int):
         self.council_name = council_name
         self.base_url = base_url.rstrip("/")
+        self.db_council_id = db_council_id   # ← locked to this portal, immune to concurrency
         parsed = urlparse(self.base_url)
         self.domain_root = f"{parsed.scheme}://{parsed.netloc}"
 
@@ -513,13 +514,18 @@ class IdoxPortal:
 # ---------------------------------------------------------------------------
 async def process_council(
     portal: IdoxPortal,
-    council_id: int,
+    council_id: int,           # kept for signature compat but NOT used for DB ops
     browser: Browser,
     sem: asyncio.Semaphore,
     days_back: int,
 ) -> int:
+    # Use portal.db_council_id for ALL database operations.
+    # This value is set at portal creation and is immune to async variable
+    # capture bugs — it travels with the portal object, not as a loose int.
+    cid = portal.db_council_id
+
     async with sem:
-        print(f"\n[{portal.council_name}] (council_id={council_id})")
+        print(f"\n[{portal.council_name}] (council_id={cid})")
         await asyncio.sleep(1)  # stagger requests — avoids triggering WAF rate limits
 
         try:
@@ -529,7 +535,7 @@ async def process_council(
             return 0
 
         if not apps:
-            await _supa_patch_council(council_id, {
+            await _supa_patch_council(cid, {
                 "last_scraped_at": datetime.now(timezone.utc).isoformat()
             })
             return 0
@@ -545,9 +551,9 @@ async def process_council(
                     if pc in coords:
                         app["lat"], app["lng"] = coords[pc]
 
-        # Build upsert records
+        # Build upsert records — cid is captured from portal object, not the parameter
         records = [{
-            "council_id":       council_id,
+            "council_id":       cid,
             "reference":        a["reference"],
             "address":          a.get("address"),
             "postcode":         a.get("postcode"),
@@ -572,7 +578,7 @@ async def process_council(
                 unique_records.append(r)
         records = unique_records
 
-        print(f"    Upserting {len(records)} records with council_id={council_id}")
+        print(f"    Upserting {len(records)} records with council_id={cid}")
 
         # Upsert in small batches — one bad record kills a whole batch
         # so keep batches small to isolate failures
@@ -586,7 +592,7 @@ async def process_council(
                 ok = False
 
         if ok:
-            await _supa_patch_council(council_id, {
+            await _supa_patch_council(cid, {
                 "coverage_source": "idox_scraper",
                 "last_scraped_at": datetime.now(timezone.utc).isoformat(),
             })
@@ -656,7 +662,7 @@ async def main():
             id_source = "HARDCODED" if name in COUNCIL_DB_IDS else "db-lookup"
             if id_source == "HARDCODED":
                 print(f"  [HARDCODED] {name} → id={council_id}")
-            to_scrape.append((IdoxPortal(name, url), council_id))
+            to_scrape.append((IdoxPortal(name, url, council_id), council_id))
         else:
             missing.append(name)
 
