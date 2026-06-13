@@ -41,7 +41,7 @@ IDOX_COUNCILS = [
      "https://planning.bury.gov.uk/online-applications"),
 
     ("Oldham Metropolitan Borough Council",
-     "https://planning.oldham.gov.uk/online-applications"),
+     "https://planningpa.oldham.gov.uk/online-applications"),
 
     ("Rochdale Borough Council",
      "https://publicaccess.rochdale.gov.uk/online-applications"),
@@ -80,10 +80,10 @@ IDOX_COUNCILS = [
      "https://www.sthelens.gov.uk/online-applications"),
 
     ("Warrington Borough Council",
-     "https://planning.warrington.gov.uk/online-applications"),
+     "https://publicaccess.warrington.gov.uk/online-applications"),
 
     ("Cheshire West and Chester Council",
-     "https://www.cheshirewestandchester.gov.uk/online-applications"),
+     "https://pa.cheshirewestandchester.gov.uk/online-applications"),
 
     ("Cheshire East Council",
      "https://planning.cheshireeast.gov.uk/online-applications"),
@@ -97,11 +97,10 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # WEST MIDLANDS
     # -------------------------------------------------------------------------
-    ("Coventry City Council",
-     "https://planningapps.coventry.gov.uk/online-applications"),
+    # Coventry moved to planandregulatory.coventry.gov.uk (not Idox) — removed
 
     ("Wolverhampton City Council",
-     "https://www.wolverhampton.gov.uk/online-applications"),
+     "https://www.wolverhampton.gov.uk/planning/search-planning-applications"),
 
     ("Walsall Metropolitan Borough Council",
      "https://www.walsall.gov.uk/online-applications"),
@@ -113,31 +112,31 @@ IDOX_COUNCILS = [
      "https://www.dudley.gov.uk/online-applications"),
 
     ("Solihull Metropolitan Borough Council",
-     "https://planning.solihull.gov.uk/online-applications"),
+     "https://eservices.solihull.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # EAST MIDLANDS
     # -------------------------------------------------------------------------
     ("Leicester City Council",
-     "https://planning.leicester.gov.uk/online-applications"),
+     "https://publicaccess.leicester.gov.uk/online-applications"),
 
     ("Derby City Council",
      "https://eplanning.derby.gov.uk/online-applications"),
 
     ("Nottinghamshire County Council",
-     "https://www.nottinghamshire.gov.uk/online-applications"),
+     "https://publicaccess.nottinghamshire.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # NORTH EAST
     # -------------------------------------------------------------------------
     ("Newcastle City Council",
-     "https://www.newcastle.gov.uk/planning-and-buildings/planning-applications/planning-applications-search/online-applications"),
+     "https://publicaccess.newcastle.gov.uk/online-applications"),
 
     ("Sunderland City Council",
-     "https://www.sunderland.gov.uk/online-applications"),
+     "https://publicaccess.sunderland.gov.uk/online-applications"),
 
     ("Gateshead Council",
-     "https://www.gateshead.gov.uk/online-applications"),
+     "https://public.gateshead.gov.uk/online-applications"),
 
     ("South Tyneside Metropolitan Borough Council",
      "https://www.southtyneside.gov.uk/online-applications"),
@@ -188,7 +187,7 @@ IDOX_COUNCILS = [
      "https://publicaccess.exeter.gov.uk/online-applications"),
 
     ("Cheltenham Borough Council",
-     "https://planning.cheltenham.gov.uk/online-applications"),
+     "https://publicaccess.cheltenham.gov.uk/online-applications"),
 
     ("Gloucester City Council",
      "https://www.gloucester.gov.uk/online-applications"),
@@ -211,7 +210,7 @@ IDOX_COUNCILS = [
     # Camden already covered by open data feed
     # -------------------------------------------------------------------------
     ("London Borough of Hackney",
-     "https://development.hackney.gov.uk/online-applications"),
+     "https://planning.hackney.gov.uk/online-applications"),
 
     ("London Borough of Southwark",
      "https://planbuild.southwark.gov.uk:8190/online-applications"),
@@ -235,7 +234,7 @@ IDOX_COUNCILS = [
      "https://www.redbridge.gov.uk/online-applications"),
 
     ("London Borough of Barking and Dagenham",
-     "https://paplan.lbbd.gov.uk/online-applications"),
+     "https://pa.lbbd.gov.uk/online-applications"),
 
     ("London Borough of Havering",
      "https://development.havering.gov.uk/online-applications"),
@@ -336,8 +335,8 @@ VALUES
   ('Walsall Metropolitan Borough Council','walsall-metropolitan-borough-council','idox','england','https://www.walsall.gov.uk/online-applications','pending',true),
   ('Sandwell Metropolitan Borough Council','sandwell-metropolitan-borough-council','idox','england','https://sandwell.gov.uk/online-applications','pending',true),
   ('Dudley Metropolitan Borough Council','dudley-metropolitan-borough-council','idox','england','https://www.dudley.gov.uk/online-applications','pending',true),
-  ('Solihull Metropolitan Borough Council','solihull-metropolitan-borough-council','idox','england','https://planning.solihull.gov.uk/online-applications','pending',true),
-  ('Leicester City Council','leicester-city-council','idox','england','https://planning.leicester.gov.uk/online-applications','pending',true),
+  ('Solihull Metropolitan Borough Council','solihull-metropolitan-borough-council','idox','england','https://eservices.solihull.gov.uk/online-applications','pending',true),
+  ('Leicester City Council','leicester-city-council','idox','england','https://publicaccess.leicester.gov.uk/online-applications','pending',true),
   ('Derby City Council','derby-city-council','idox','england','https://eplanning.derby.gov.uk/online-applications','pending',true),
   ('Nottinghamshire County Council','nottinghamshire-county-council','idox','england','https://publicaccess.nottinghamshire.gov.uk/online-applications','pending',true),
   ('Newcastle City Council','newcastle-city-council','idox','england','https://publicaccess.newcastle.gov.uk/online-applications','pending',true),
@@ -357,12 +356,12 @@ VALUES
   ('Medway Council','medway-council','idox','england','https://publicaccess.medway.gov.uk/online-applications','pending',true),
   ('Plymouth City Council','plymouth-city-council','idox','england','https://planning.plymouth.gov.uk/online-applications','pending',true),
   ('Exeter City Council','exeter-city-council','idox','england','https://publicaccess.exeter.gov.uk/online-applications','pending',true),
-  ('Cheltenham Borough Council','cheltenham-borough-council','idox','england','https://planning.cheltenham.gov.uk/online-applications','pending',true),
+  ('Cheltenham Borough Council','cheltenham-borough-council','idox','england','https://publicaccess.cheltenham.gov.uk/online-applications','pending',true),
   ('Gloucester City Council','gloucester-city-council','idox','england','https://www.gloucester.gov.uk/online-applications','pending',true),
   ('Ipswich Borough Council','ipswich-borough-council','idox','england','https://www.ipswich.gov.uk/online-applications','pending',true),
   ('Peterborough City Council','peterborough-city-council','idox','england','https://www.peterborough.gov.uk/online-applications','pending',true),
   ('Norwich City Council','norwich-city-council','idox','england','https://planning.norwich.gov.uk/online-applications','pending',true),
-  ('London Borough of Hackney','london-borough-of-hackney','idox','england','https://development.hackney.gov.uk/online-applications','pending',true),
+  ('London Borough of Hackney','london-borough-of-hackney','idox','england','https://planning.hackney.gov.uk/online-applications','pending',true),
   ('London Borough of Southwark','london-borough-of-southwark','idox','england','https://planning.southwark.gov.uk/online-applications','pending',true),
   ('London Borough of Lambeth','london-borough-of-lambeth','idox','england','https://planning.lambeth.gov.uk/online-applications','pending',true),
   ('London Borough of Lewisham','london-borough-of-lewisham','idox','england','https://planning.lewisham.gov.uk/online-applications','pending',true),
