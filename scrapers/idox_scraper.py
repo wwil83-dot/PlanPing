@@ -447,10 +447,11 @@ class IdoxPortal:
             )
             all_apps.extend(apps)
 
-            # Continue if: explicit Next link found OR got a full page (always try next)
-            # Idox shows 10 per page — if we got 10, there's likely a page 2
-            should_continue = has_next or (len(apps) >= 10)
+            if page_num == 1 and len(apps) > 0:
+                print(f"    Page 1: {len(apps)} results")
 
+            # Continue if explicit Next link OR got a full page (try page 2)
+            should_continue = has_next or (len(apps) >= 10)
             if not should_continue or not apps or page_num >= 50:
                 break
 
@@ -460,14 +461,18 @@ class IdoxPortal:
                 f"?action=page&searchCriteria.page={page_num}"
             )
             try:
-                await page.goto(next_url, wait_until="domcontentloaded", timeout=15_000)
-                await page.wait_for_selector(
-                    "ul.searchresults, .no-results", timeout=10_000
+                await page.goto(
+                    next_url, wait_until="domcontentloaded", timeout=15_000
                 )
-                await asyncio.sleep(1)  # polite delay between pages
-            except PlaywrightTimeout:
+                # Give JS time to render — don't use wait_for_selector here
+                # as it can time out on pages that use non-standard selectors
+                await asyncio.sleep(2)
+            except Exception as e:
+                print(f"    Page {page_num} nav error: {e}")
                 break
 
+        if page_num > 1:
+            print(f"    Total across {page_num} pages: {len(all_apps)}")
         return all_apps
 
 
