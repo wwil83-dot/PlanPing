@@ -80,7 +80,7 @@ IDOX_COUNCILS = [
      "https://www.sthelens.gov.uk/online-applications"),
 
     ("Warrington Borough Council",
-     "https://publicaccess.warrington.gov.uk/online-applications"),
+     "https://pa.warrington.gov.uk/online-applications"),
 
     ("Cheshire West and Chester Council",
      "https://pa.cheshirewestandchester.gov.uk/online-applications"),
@@ -130,7 +130,7 @@ IDOX_COUNCILS = [
     # NORTH EAST
     # -------------------------------------------------------------------------
     ("Newcastle City Council",
-     "https://publicaccess.newcastle.gov.uk/online-applications"),
+     "https://publicaccess.newcastle.gov.uk/pa/pa.nsf/SearchSimple?OpenForm"),
 
     ("Sunderland City Council",
      "https://publicaccess.sunderland.gov.uk/online-applications"),
@@ -233,9 +233,6 @@ IDOX_COUNCILS = [
     ("London Borough of Redbridge",
      "https://www.redbridge.gov.uk/online-applications"),
 
-    ("London Borough of Barking and Dagenham",
-     "https://pa.lbbd.gov.uk/online-applications"),
-
     ("London Borough of Havering",
      "https://development.havering.gov.uk/online-applications"),
 
@@ -249,7 +246,7 @@ IDOX_COUNCILS = [
      "https://searchapplications.bromley.gov.uk/onlineapplications"),
 
     ("London Borough of Croydon",
-     "https://publicaccess2.croydon.gov.uk/online-applications"),
+     "https://publicaccess3.croydon.gov.uk/online-applications"),
 
     ("London Borough of Sutton",
      "https://www.sutton.gov.uk/online-applications"),
@@ -339,7 +336,7 @@ VALUES
   ('Leicester City Council','leicester-city-council','idox','england','https://publicaccess.leicester.gov.uk/online-applications','pending',true),
   ('Derby City Council','derby-city-council','idox','england','https://eplanning.derby.gov.uk/online-applications','pending',true),
   ('Nottinghamshire County Council','nottinghamshire-county-council','idox','england','https://publicaccess.nottinghamshire.gov.uk/online-applications','pending',true),
-  ('Newcastle City Council','newcastle-city-council','idox','england','https://publicaccess.newcastle.gov.uk/online-applications','pending',true),
+  ('Newcastle City Council','newcastle-city-council','idox','england','https://publicaccess.newcastle.gov.uk/pa/pa.nsf/SearchSimple?OpenForm','pending',true),
   ('Sunderland City Council','sunderland-city-council','idox','england','https://www.sunderland.gov.uk/online-applications','pending',true),
   ('Gateshead Council','gateshead-council','idox','england','https://planning.gateshead.gov.uk/online-applications','pending',true),
   ('South Tyneside Metropolitan Borough Council','south-tyneside-metropolitan-borough-council','idox','england','https://www.southtyneside.gov.uk/online-applications','pending',true),
