@@ -360,9 +360,18 @@ class IdoxPortal:
 
     async def scrape(self, browser: Browser, days_back: int = 7) -> list[dict]:
         cutoff = date.today() - timedelta(days=days_back)
-        months = [date.today()]
-        if cutoff.month != date.today().month or cutoff.year != date.today().year:
-            months.append(cutoff)
+
+        # Build the full list of calendar months to scrape.
+        # Fast mode (7 days): 1-2 months. Bulk mode (365 days): up to 13 months.
+        months: list[date] = []
+        m = date.today().replace(day=1)
+        cutoff_month = cutoff.replace(day=1)
+        while m >= cutoff_month:
+            months.append(m)
+            if m.month == 1:
+                m = m.replace(year=m.year - 1, month=12)
+            else:
+                m = m.replace(month=m.month - 1)
 
         all_apps: list[dict] = []
 
@@ -615,12 +624,20 @@ async def main():
     bulk = "--bulk" in sys.argv
     days = int(os.environ.get("DAYS_BACK", "365" if bulk else "7"))
 
+    # Bulk runs scrape 13 months per council — use lower concurrency and longer budget
+    # to avoid hammering portals and hitting timeouts on slow servers.
+    if bulk:
+        concurrency = int(os.environ.get("CONCURRENCY", "1"))
+        budget = int(os.environ.get("MAX_MINUTES", "180"))
+    else:
+        concurrency = CONCURRENCY
+        budget = MAX_MINUTES
+
     print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Idox scraper (Playwright)")
-    print(f"Version:     portal-cid-fix-v2")   # ← remove once confirmed working
     print(f"Mode:        {'BULK' if bulk else 'FAST'} ({days} days back)")
     print(f"Councils:    {len(IDOX_COUNCILS)}")
-    print(f"Concurrency: {CONCURRENCY}")
-    print(f"Budget:      {MAX_MINUTES} minutes")
+    print(f"Concurrency: {concurrency}")
+    print(f"Budget:      {budget} minutes")
     print(f"SUPABASE:    {'set' if SUPABASE_URL else 'NOT SET'}\n")
 
     if not SUPABASE_URL or not SUPABASE_KEY:
@@ -679,12 +696,12 @@ async def main():
         )
         print(f"Chromium launched: {browser.version}\n")
 
-        sem = asyncio.Semaphore(CONCURRENCY)
+        sem = asyncio.Semaphore(concurrency)
         skipped = 0
         tasks = []
 
         for portal, council_id in to_scrape:
-            if should_stop():
+            if elapsed_minutes() >= budget - 3:
                 skipped += 1
                 continue
             tasks.append(
