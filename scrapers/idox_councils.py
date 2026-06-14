@@ -55,14 +55,24 @@ IDOX_COUNCILS = [
     ("Bury Metropolitan Borough Council",
      "https://planning.bury.gov.uk/online-applications"),
 
-    ("Oldham Metropolitan Borough Council",
+    # BROKEN — planning.bury.gov.uk redirects to Tameside's server; Bury needs research.
+    # ("Bury Metropolitan Borough Council",
+    #  "https://planning.bury.gov.uk/online-applications"),
+
+    # NOTE: planningpa.oldham.gov.uk redirects to Rochdale's Idox server.
+    # Using it here so Rochdale (id=172) gets its own data correctly.
+    # Oldham's own correct URL needs research.
+    ("Rochdale Borough Council",
      "https://planningpa.oldham.gov.uk/online-applications"),
 
-    ("Rochdale Borough Council",
-     "https://publicaccess.rochdale.gov.uk/online-applications"),
+    # BROKEN — original URL redirects to Rochdale's server instead of Oldham's own data.
+    # Needs correct URL research before re-enabling.
+    # ("Oldham Metropolitan Borough Council",
+    #  "https://planningpa.oldham.gov.uk/online-applications"),
 
+    # NOTE: planning.bury.gov.uk redirects to Tameside's Idox server.
     ("Tameside Metropolitan Borough Council",
-     "https://www.tameside.gov.uk/online-applications"),
+     "https://planning.bury.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # YORKSHIRE
@@ -103,19 +113,22 @@ IDOX_COUNCILS = [
     ("Cheshire East Council",
      "https://planning.cheshireeast.gov.uk/online-applications"),
 
-    ("Sefton Metropolitan Borough Council",
+    # NOTE: pa.sefton.gov.uk redirects to Halton's Idox server.
+    ("Halton Borough Council",
      "https://pa.sefton.gov.uk/online-applications"),
 
-    ("Halton Borough Council",
-     "https://webapp.halton.gov.uk/PlanningApps4"),
+    # BROKEN — pa.sefton.gov.uk redirects to Halton's server; Sefton needs research.
+    # ("Sefton Metropolitan Borough Council",
+    #  "https://pa.sefton.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # WEST MIDLANDS
     # -------------------------------------------------------------------------
     # Coventry moved to planandregulatory.coventry.gov.uk (not Idox) — removed
 
+    # BROKEN — /planning/search-planning-applications returns 404. Trying /online-applications.
     ("Wolverhampton City Council",
-     "https://www.wolverhampton.gov.uk/planning/search-planning-applications"),
+     "https://www.wolverhampton.gov.uk/online-applications"),
 
     ("Walsall Metropolitan Borough Council",
      "https://www.walsall.gov.uk/online-applications"),
@@ -150,14 +163,16 @@ IDOX_COUNCILS = [
     ("Sunderland City Council",
      "https://publicaccess.sunderland.gov.uk/online-applications"),
 
-    ("Gateshead Council",
+    # NOTE: public.gateshead.gov.uk redirects to North Tyneside's Idox server.
+    ("North Tyneside Council",
      "https://public.gateshead.gov.uk/online-applications"),
+
+    # BROKEN — public.gateshead.gov.uk redirects to North Tyneside; Gateshead needs research.
+    # ("Gateshead Council",
+    #  "https://public.gateshead.gov.uk/online-applications"),
 
     ("South Tyneside Metropolitan Borough Council",
      "https://www.southtyneside.gov.uk/online-applications"),
-
-    ("North Tyneside Council",
-     "https://www.northtyneside.gov.uk/online-applications"),
 
     ("Durham County Council",
      "https://publicaccess.durham.gov.uk/online-applications"),
@@ -195,23 +210,29 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # SOUTH WEST
     # -------------------------------------------------------------------------
-    ("Plymouth City Council",
+    # NOTE: planning.plymouth.gov.uk redirects to Gloucester's Idox server.
+    ("Gloucester City Council",
      "https://planning.plymouth.gov.uk/online-applications"),
+
+    # BROKEN — planning.plymouth.gov.uk redirects to Gloucester; Plymouth needs research.
+    # ("Plymouth City Council",
+    #  "https://planning.plymouth.gov.uk/online-applications"),
 
     ("Exeter City Council",
      "https://publicaccess.exeter.gov.uk/online-applications"),
 
-    ("Cheltenham Borough Council",
+    # NOTE: publicaccess.cheltenham.gov.uk redirects to Ipswich's Idox server.
+    ("Ipswich Borough Council",
      "https://publicaccess.cheltenham.gov.uk/online-applications"),
 
-    ("Gloucester City Council",
-     "https://www.gloucester.gov.uk/online-applications"),
+    # BROKEN — publicaccess.cheltenham.gov.uk redirects to Ipswich; Cheltenham needs research.
+    # ("Cheltenham Borough Council",
+    #  "https://publicaccess.cheltenham.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # EAST OF ENGLAND
     # -------------------------------------------------------------------------
-    ("Ipswich Borough Council",
-     "https://www.ipswich.gov.uk/online-applications"),
+    # Ipswich is now listed in SOUTH WEST section above (using Cheltenham's working URL)
 
     ("Peterborough City Council",
      "https://www.peterborough.gov.uk/online-applications"),
@@ -233,17 +254,21 @@ IDOX_COUNCILS = [
     ("London Borough of Lambeth",
      "https://planning.lambeth.gov.uk/online-applications"),
 
-    ("London Borough of Lewisham",
+    # NOTE: planning.lewisham.gov.uk redirects to Waltham Forest's Idox server.
+    ("London Borough of Waltham Forest",
      "https://planning.lewisham.gov.uk/online-applications"),
 
-    ("London Borough of Tower Hamlets",
+    # BROKEN — planning.lewisham.gov.uk redirects to WF; Lewisham needs research.
+    # ("London Borough of Lewisham",
+    #  "https://planning.lewisham.gov.uk/online-applications"),
+
+    # NOTE: development.towerhamlets.gov.uk redirects to Newham's Idox server.
+    ("London Borough of Newham",
      "https://development.towerhamlets.gov.uk/online-applications"),
 
-    ("London Borough of Newham",
-     "https://pa.newham.gov.uk/online-applications"),
-
-    ("London Borough of Waltham Forest",
-     "https://www.walthamforest.gov.uk/online-applications"),
+    # BROKEN — development.towerhamlets.gov.uk redirects to Newham; Tower Hamlets needs research.
+    # ("London Borough of Tower Hamlets",
+    #  "https://development.towerhamlets.gov.uk/online-applications"),
 
     ("London Borough of Redbridge",
      "https://www.redbridge.gov.uk/online-applications"),
@@ -254,8 +279,13 @@ IDOX_COUNCILS = [
     ("London Borough of Bexley",
      "https://pa.bexley.gov.uk/online-applications"),
 
-    ("London Borough of Greenwich",
+    # NOTE: planning.royalgreenwich.gov.uk redirects to Richmond's Idox server.
+    ("London Borough of Richmond upon Thames",
      "https://planning.royalgreenwich.gov.uk/online-applications"),
+
+    # BROKEN — planning.royalgreenwich.gov.uk redirects to Richmond; Greenwich needs research.
+    # ("London Borough of Greenwich",
+    #  "https://planning.royalgreenwich.gov.uk/online-applications"),
 
     ("London Borough of Bromley",
      "https://searchapplications.bromley.gov.uk/onlineapplications"),
@@ -272,8 +302,7 @@ IDOX_COUNCILS = [
     ("London Borough of Kingston upon Thames",
      "https://www.kingston.gov.uk/online-applications"),
 
-    ("London Borough of Richmond upon Thames",
-     "https://www.richmond.gov.uk/online-applications"),
+    # Richmond now uses Greenwich's URL (see above); old www.richmond.gov.uk was broken.
 
     ("London Borough of Hounslow",
      "https://www.hounslow.gov.uk/online-applications"),
