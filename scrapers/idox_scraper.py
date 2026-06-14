@@ -622,7 +622,7 @@ async def main():
         sys.exit(1)
 
     bulk = "--bulk" in sys.argv
-    days = int(os.environ.get("DAYS_BACK", "365" if bulk else "7"))
+    days = int(os.environ.get("DAYS_BACK", "180" if bulk else "7"))
 
     # Bulk runs scrape 13 months per council — use lower concurrency and longer budget
     # to avoid hammering portals and hitting timeouts on slow servers.
