@@ -616,6 +616,7 @@ async def main():
     days = int(os.environ.get("DAYS_BACK", "365" if bulk else "7"))
 
     print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Idox scraper (Playwright)")
+    print(f"Version:     portal-cid-fix-v2")   # ← remove once confirmed working
     print(f"Mode:        {'BULK' if bulk else 'FAST'} ({days} days back)")
     print(f"Councils:    {len(IDOX_COUNCILS)}")
     print(f"Concurrency: {CONCURRENCY}")
