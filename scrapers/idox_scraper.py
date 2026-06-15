@@ -429,9 +429,14 @@ class IdoxPortal:
 
     async def _scrape_month(self, page: Page, for_month: date) -> list[dict]:
         """Load the monthly list, submit it for date received, collect all pages."""
+        # Include search params in URL directly — many portals accept GET params
+        # and this bypasses form interaction issues on stricter installations.
         monthly_url = (
             f"{self.base_url}/search.do"
-            f"?action=monthlyList&searchType=Application"
+            f"?action=monthlyList"
+            f"&searchCriteria.monthYearIndex=0"
+            f"&searchCriteria.dateType=DC"
+            f"&searchType=Application"
         )
 
         # — Step 1: Navigate to monthly list page —
@@ -457,6 +462,22 @@ class IdoxPortal:
 
         # — Step 2: Click "date received" radio & submit form —
         form_submitted = False
+
+        # Explicitly select the first/current month in the dropdown
+        # (some portals have no default, causing 0 results if not set)
+        for month_sel in [
+            "select[id='searchCriteria.monthYearIndex']",
+            "select[name='searchCriteria.monthYearIndex']",
+            "select[name*='monthYear']",
+            "select[id*='monthYear']",
+        ]:
+            try:
+                loc = page.locator(month_sel)
+                if await loc.count() > 0:
+                    await loc.select_option(index=0)
+                    break
+            except Exception:
+                continue
 
         # Try clicking the date-received radio button
         for radio_sel in [
@@ -631,6 +652,7 @@ async def process_council(
             await _supa_patch_council(cid, {
                 "coverage_source": "idox_scraper",
                 "last_scraped_at": datetime.now(timezone.utc).isoformat(),
+                "active": True,
             })
             print(f"    ✓ Saved {saved}")
         else:
