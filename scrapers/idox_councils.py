@@ -37,11 +37,15 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # GREATER MANCHESTER — all 9 boroughs (excl. Wigan, already on open data)
     # -------------------------------------------------------------------------
-    ("Manchester City Council",
-     "https://pa.manchester.gov.uk/online-applications"),
+    # BROKEN — Manchester moved off Idox to Arcus BE (Salesforce):
+    # arcusbe.manchester.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register
+    # ("Manchester City Council",
+    #  "https://pa.manchester.gov.uk/online-applications"),
 
-    ("Salford City Council",
-     "https://publicaccess.salford.gov.uk/online-applications"),
+    # BROKEN — Salford moved off Idox to Arcus BE (Salesforce):
+    # salfordcitycouncil.my.site.com/pr/s/register-view?c__r=Arcus_BE_Public_Register
+    # ("Salford City Council",
+    #  "https://publicaccess.salford.gov.uk/online-applications"),
 
     ("Stockport Metropolitan Borough Council",
      "https://planning.stockport.gov.uk/online-applications"),
