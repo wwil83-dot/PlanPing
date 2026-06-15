@@ -89,8 +89,9 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # NORTH WEST (excl. Greater Manchester)
     # -------------------------------------------------------------------------
-    ("Liverpool City Council",
-     "https://planning.liverpool.gov.uk/online-applications"),
+    # BROKEN — Liverpool moved off Idox to a non-Idox system (similar to Warrington's online.warrington.gov.uk).
+    # ("Liverpool City Council",
+    #  "https://planning.liverpool.gov.uk/online-applications"),
 
     ("Wirral Metropolitan Borough Council",
      "https://www.wirral.gov.uk/online-applications"),
@@ -101,8 +102,9 @@ IDOX_COUNCILS = [
     ("St. Helens Metropolitan Borough Council",
      "https://www.sthelens.gov.uk/online-applications"),
 
-    ("Warrington Borough Council",
-     "https://pa.warrington.gov.uk/online-applications"),
+    # BROKEN — Warrington moved off Idox to online.warrington.gov.uk/planning (non-Idox system).
+    # ("Warrington Borough Council",
+    #  "https://pa.warrington.gov.uk/online-applications"),
 
     ("Cheshire West and Chester Council",
      "https://pa.cheshirewestandchester.gov.uk/online-applications"),
@@ -137,7 +139,7 @@ IDOX_COUNCILS = [
      "https://www.dudley.gov.uk/online-applications"),
 
     ("Solihull Metropolitan Borough Council",
-     "https://eservices.solihull.gov.uk/online-applications"),
+     "https://publicaccess.solihull.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # EAST MIDLANDS
@@ -149,8 +151,9 @@ IDOX_COUNCILS = [
     ("Derby City Council",
      "https://eplanning.derby.gov.uk/online-applications"),
 
-    ("Nottinghamshire County Council",
-     "https://publicaccess.nottinghamshire.gov.uk/online-applications"),
+    # BROKEN — Nottinghamshire uses a custom non-Idox system (nottinghamshire.gov.uk/planningsearch/).
+    # ("Nottinghamshire County Council",
+    #  "https://publicaccess.nottinghamshire.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # NORTH EAST
