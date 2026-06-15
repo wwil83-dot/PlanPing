@@ -614,7 +614,7 @@ async def process_council(
                 unique_records.append(r)
         records = unique_records
 
-        print(f"    Upserting {len(records)} records [{portal.council_name}] → council_id={cid} (portal.db_council_id={portal.db_council_id})")
+        print(f"    Upserting {len(records)} records with council_id={cid}")
 
         # Upsert in small batches — one bad record kills a whole batch
         # so keep batches small to isolate failures
@@ -661,7 +661,6 @@ async def main():
         budget = MAX_MINUTES
 
     print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Idox scraper (Playwright)")
-    print(f"Version:     no-council-id-param-v1")
     print(f"Mode:        {'BULK' if bulk else 'FAST'} ({days} days back)")
     print(f"Councils:    {len(IDOX_COUNCILS)}")
     print(f"Concurrency: {concurrency}")
