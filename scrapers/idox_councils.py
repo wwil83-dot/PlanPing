@@ -142,8 +142,9 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # EAST MIDLANDS
     # -------------------------------------------------------------------------
-    ("Leicester City Council",
-     "https://publicaccess.leicester.gov.uk/online-applications"),
+    # BROKEN — Leicester left Idox, now uses DEF Software (planning.leicester.gov.uk).
+    # ("Leicester City Council",
+    #  "https://publicaccess.leicester.gov.uk/online-applications"),
 
     ("Derby City Council",
      "https://eplanning.derby.gov.uk/online-applications"),
@@ -171,8 +172,11 @@ IDOX_COUNCILS = [
     ("South Tyneside Metropolitan Borough Council",
      "https://www.southtyneside.gov.uk/online-applications"),
 
-    ("Durham County Council",
-     "https://publicaccess.durham.gov.uk/online-applications"),
+    # BROKEN — publicaccess.durham.gov.uk is the official URL but shares Idox
+    # infrastructure with Stockton-on-Tees; the monthly list returns Stockton's
+    # applications rather than Durham's own. Commented out until a scoped URL is found.
+    # ("Durham County Council",
+    #  "https://publicaccess.durham.gov.uk/online-applications"),
 
     ("Middlesbrough Council",
      "https://www.middlesbrough.gov.uk/online-applications"),
