@@ -552,14 +552,12 @@ class IdoxPortal:
 # ---------------------------------------------------------------------------
 async def process_council(
     portal: IdoxPortal,
-    council_id: int,           # kept for signature compat but NOT used for DB ops
     browser: Browser,
     sem: asyncio.Semaphore,
     days_back: int,
 ) -> int:
-    # Use portal.db_council_id for ALL database operations.
-    # This value is set at portal creation and is immune to async variable
-    # capture bugs — it travels with the portal object, not as a loose int.
+    # council_id comes ONLY from the portal object — never a loose parameter
+    # that could get corrupted in async concurrent execution.
     cid = portal.db_council_id
 
     async with sem:
@@ -734,7 +732,7 @@ async def main():
                 skipped += 1
                 continue
             tasks.append(
-                process_council(portal, council_id, browser, sem, days)
+                process_council(portal, browser, sem, days)
             )
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
