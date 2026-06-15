@@ -400,12 +400,12 @@ class IdoxPortal:
 
             for target_month in months:
                 apps = await self._scrape_month(page, target_month)
-                # If the portal doesn't include dates in search results,
-                # fall back to the first day of the searched month (accurate to month)
+                # Tag with the searched month for fallback date — but don't
+                # set submitted_date yet so the 7-day filter still passes them through
                 month_str = target_month.replace(day=1).isoformat()
                 for app in apps:
                     if not app.get("submitted_date"):
-                        app["submitted_date"] = month_str
+                        app["_month_fallback"] = month_str
                 all_apps.extend(apps)
         except Exception as e:
             print(f"    ✗ Context error: {e}")
@@ -416,6 +416,14 @@ class IdoxPortal:
             a for a in all_apps
             if not a.get("submitted_date") or a["submitted_date"] >= cutoff.isoformat()
         ]
+
+        # Apply month-based fallback dates AFTER the filter (so "2026-06-01" doesn't
+        # get rejected by the 7-day cutoff check)
+        for app in recent:
+            if not app.get("submitted_date") and app.get("_month_fallback"):
+                app["submitted_date"] = app["_month_fallback"]
+            app.pop("_month_fallback", None)  # never send temp field to DB
+
         print(f"    {len(all_apps)} this month → {len(recent)} in last {days_back} days")
         return recent
 
