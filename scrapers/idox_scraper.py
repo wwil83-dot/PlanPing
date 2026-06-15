@@ -666,6 +666,7 @@ async def main():
         budget = MAX_MINUTES
 
     print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Idox scraper (Playwright)")
+    print(f"Version:     no-council-id-param-v1")
     print(f"Mode:        {'BULK' if bulk else 'FAST'} ({days} days back)")
     print(f"Councils:    {len(IDOX_COUNCILS)}")
     print(f"Concurrency: {concurrency}")
