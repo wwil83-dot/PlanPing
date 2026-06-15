@@ -155,10 +155,10 @@ IDOX_COUNCILS = [
     # NORTH EAST
     # -------------------------------------------------------------------------
     ("Newcastle City Council",
-     "https://publicaccess.newcastle.gov.uk/pa/pa.nsf/SearchSimple?OpenForm"),
+     "https://publicaccessapplications.newcastle.gov.uk/online-applications"),
 
     ("Sunderland City Council",
-     "https://publicaccess.sunderland.gov.uk/online-applications"),
+     "https://online-applications.sunderland.gov.uk/online-applications"),
 
     # NOTE: public.gateshead.gov.uk redirects to North Tyneside's Idox server.
     ("North Tyneside Council",
@@ -242,11 +242,12 @@ IDOX_COUNCILS = [
     # Note: some use non-standard subdomains (pa., pam., publicaccess2. etc)
     # Camden already covered by open data feed
     # -------------------------------------------------------------------------
-    ("London Borough of Hackney",
-     "https://planning.hackney.gov.uk/online-applications"),
+    # BROKEN — Hackney moved off Idox; now uses planningapps.hackney.gov.uk (non-Idox system).
+    # ("London Borough of Hackney",
+    #  "https://planning.hackney.gov.uk/online-applications"),
 
     ("London Borough of Southwark",
-     "https://planbuild.southwark.gov.uk:8190/online-applications"),
+     "https://planning.southwark.gov.uk/online-applications"),
 
     ("London Borough of Lambeth",
      "https://planning.lambeth.gov.uk/online-applications"),
