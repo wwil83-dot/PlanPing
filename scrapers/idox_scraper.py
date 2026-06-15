@@ -559,6 +559,11 @@ async def process_council(
     # council_id comes ONLY from the portal object — never a loose parameter
     # that could get corrupted in async concurrent execution.
     cid = portal.db_council_id
+    # Safety net: if this council is hardcoded, enforce that ID regardless
+    expected_cid = COUNCIL_DB_IDS.get(portal.council_name)
+    if expected_cid and expected_cid != cid:
+        print(f"    ⚠ ID MISMATCH DETECTED: portal.db_council_id={cid} but HARDCODED={expected_cid} — using hardcoded")
+        cid = expected_cid
 
     async with sem:
         print(f"\n[{portal.council_name}] (council_id={cid})")
@@ -614,7 +619,7 @@ async def process_council(
                 unique_records.append(r)
         records = unique_records
 
-        print(f"    Upserting {len(records)} records with council_id={cid}")
+        print(f"    Upserting {len(records)} records [{portal.council_name}] → council_id={cid} (portal.db_council_id={portal.db_council_id})")
 
         # Upsert in small batches — one bad record kills a whole batch
         # so keep batches small to isolate failures
