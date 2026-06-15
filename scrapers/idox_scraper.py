@@ -262,10 +262,6 @@ def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> O
         ""
     )
 
-    # DEBUG — remove once dates are confirmed working
-    if not date_raw and fields:
-        print(f"    [date-debug] keys={list(fields.keys())}")
-
     return {
         "reference":        ref.strip(),
         "address":          address.strip(),
@@ -302,10 +298,6 @@ def parse_results_page(
         container.find_all("li", class_="searchresult")
         or container.find_all("tr")
     )
-
-    # DEBUG — print first item's HTML to diagnose field parsing
-    if items:
-        print(f"    [html-debug] {str(items[0])[:600]}")
 
     for item in items:
         app = _parse_result(item, base_url, domain_root, council_name)
@@ -408,6 +400,12 @@ class IdoxPortal:
 
             for target_month in months:
                 apps = await self._scrape_month(page, target_month)
+                # If the portal doesn't include dates in search results,
+                # fall back to the first day of the searched month (accurate to month)
+                month_str = target_month.replace(day=1).isoformat()
+                for app in apps:
+                    if not app.get("submitted_date"):
+                        app["submitted_date"] = month_str
                 all_apps.extend(apps)
         except Exception as e:
             print(f"    ✗ Context error: {e}")
