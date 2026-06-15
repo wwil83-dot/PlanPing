@@ -302,6 +302,11 @@ def parse_results_page(
         container.find_all("li", class_="searchresult")
         or container.find_all("tr")
     )
+
+    # DEBUG — print first item's HTML to diagnose field parsing
+    if items:
+        print(f"    [html-debug] {str(items[0])[:600]}")
+
     for item in items:
         app = _parse_result(item, base_url, domain_root, council_name)
         if app:
