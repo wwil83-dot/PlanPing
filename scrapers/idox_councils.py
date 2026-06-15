@@ -169,8 +169,9 @@ IDOX_COUNCILS = [
     # ("Gateshead Council",
     #  "https://public.gateshead.gov.uk/online-applications"),
 
-    ("South Tyneside Metropolitan Borough Council",
-     "https://www.southtyneside.gov.uk/online-applications"),
+    # BROKEN — South Tyneside uses Northgate (planning.southtyneside.info), not Idox.
+    # ("South Tyneside Metropolitan Borough Council",
+    #  "https://www.southtyneside.gov.uk/online-applications"),
 
     # BROKEN — publicaccess.durham.gov.uk is the official URL but shares Idox
     # infrastructure with Stockton-on-Tees; the monthly list returns Stockton's
@@ -236,7 +237,7 @@ IDOX_COUNCILS = [
     # Ipswich is now listed in SOUTH WEST section above (using Cheltenham's working URL)
 
     ("Peterborough City Council",
-     "https://www.peterborough.gov.uk/online-applications"),
+     "https://planpa.peterborough.gov.uk/online-applications"),
 
     ("Norwich City Council",
      "https://planning.norwich.gov.uk/online-applications"),
@@ -298,11 +299,12 @@ IDOX_COUNCILS = [
     ("London Borough of Sutton",
      "https://www.sutton.gov.uk/online-applications"),
 
-    ("London Borough of Merton",
-     "https://www.merton.gov.uk/online-applications"),
+    # BROKEN — Merton uses Northgate (planning.merton.gov.uk/Northgate), not Idox.
+    # ("London Borough of Merton",
+    #  "https://www.merton.gov.uk/online-applications"),
 
     ("London Borough of Kingston upon Thames",
-     "https://www.kingston.gov.uk/online-applications"),
+     "https://publicaccess.kingston.gov.uk/online-applications"),
 
     # Richmond now uses Greenwich's URL (see above); old www.richmond.gov.uk was broken.
 
