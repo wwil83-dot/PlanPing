@@ -78,7 +78,11 @@ def _parse_date(s: str) -> Optional[str]:
     for sep in ("+", "T", " "):
         if sep in s: s = s.split(sep)[0].strip()
     s = s[:10]
-    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y", "%Y/%m/%d"):
+    for fmt in (
+        "%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y",
+        "%d/%m/%y", "%Y/%m/%d",
+        "%d %B %Y", "%d %b %Y",
+    ):
         try:
             return datetime.strptime(s, fmt).date().isoformat()
         except ValueError:
@@ -244,9 +248,23 @@ def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> O
     app_type  = fields.get("application type") or fields.get("type") or ""
     status_raw = fields.get("status") or fields.get("decision") or ""
     date_raw   = (
-        fields.get("date received") or fields.get("received") or
-        fields.get("validated") or fields.get("date validated") or ""
+        fields.get("date received") or
+        fields.get("date valid") or
+        fields.get("date validated") or
+        fields.get("date registered") or
+        fields.get("date of receipt") or
+        fields.get("received") or
+        fields.get("validated") or
+        fields.get("valid") or
+        fields.get("registered") or
+        fields.get("reg. date") or
+        fields.get("reg date") or
+        ""
     )
+
+    # DEBUG — remove once dates are confirmed working
+    if not date_raw and fields:
+        print(f"    [date-debug] keys={list(fields.keys())}")
 
     return {
         "reference":        ref.strip(),
@@ -622,7 +640,7 @@ async def main():
         sys.exit(1)
 
     bulk = "--bulk" in sys.argv
-    days = int(os.environ.get("DAYS_BACK", "180" if bulk else "7"))
+    days = int(os.environ.get("DAYS_BACK", "365" if bulk else "7"))
 
     # Bulk runs scrape 13 months per council — use lower concurrency and longer budget
     # to avoid hammering portals and hitting timeouts on slow servers.
