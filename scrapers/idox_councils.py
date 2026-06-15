@@ -52,9 +52,6 @@ IDOX_COUNCILS = [
     ("Bolton Metropolitan Borough Council",
      "https://www.bolton.gov.uk/idox/online-applications"),
 
-    ("Bury Metropolitan Borough Council",
-     "https://planning.bury.gov.uk/online-applications"),
-
     # BROKEN — planning.bury.gov.uk redirects to Tameside's server; Bury needs research.
     # ("Bury Metropolitan Borough Council",
     #  "https://planning.bury.gov.uk/online-applications"),
