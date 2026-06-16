@@ -399,19 +399,6 @@ class IdoxPortal:
             )
 
             for target_month in months:
-                # Pre-visit the portal home page to establish session cookies.
-                # Some portals (Trafford, Wolverhampton, Southampton etc.) block
-                # direct requests to the monthly list without a prior session.
-                if target_month == months[0]:  # Only needed once per scrape
-                    try:
-                        await page.goto(
-                            f"{self.base_url}/",
-                            wait_until="domcontentloaded",
-                            timeout=15_000,
-                        )
-                        await page.wait_for_timeout(800)
-                    except Exception:
-                        pass  # Continue even if home page fails
                 apps = await self._scrape_month(page, target_month)
                 # Tag with the searched month for fallback date — but don't
                 # set submitted_date yet so the 7-day filter still passes them through
@@ -442,13 +429,13 @@ class IdoxPortal:
 
     async def _scrape_month(self, page: Page, for_month: date) -> list[dict]:
         """Load the monthly list, submit it for date received, collect all pages."""
-        # Include search params in URL directly — many portals accept GET params
-        # and this bypasses form interaction issues on stricter installations.
+        # Don't pre-specify dateType in the URL — some portals only support DV
+        # (Date Validated) not DC (Date Confirmed/Received), so forcing DC gives 0.
+        # Instead let the form default apply, then try to click the best radio.
         monthly_url = (
             f"{self.base_url}/search.do"
             f"?action=monthlyList"
             f"&searchCriteria.monthYearIndex=0"
-            f"&searchCriteria.dateType=DC"
             f"&searchType=Application"
         )
 
@@ -492,13 +479,21 @@ class IdoxPortal:
             except Exception:
                 continue
 
-        # Try clicking the date-received radio button
+        # Try clicking the date-received radio button.
+        # Different Idox versions use different values: dateReceived, dc, dv, dr.
+        # Try DC/Received first, fall back to DV (Validated) then DR (Registered).
         for radio_sel in [
             "input#dateReceived",
             "input[value='dateReceived']",
             "input[id*='Received'][type='radio']",
             "input[name*='date'][value*='eceiv']",
             "label:has-text('Received') input",
+            "input[value='dc']",
+            "input[value='DC']",
+            "input[value='dv']",
+            "input[value='DV']",
+            "input[id*='Validated'][type='radio']",
+            "label:has-text('Validated') input",
         ]:
             try:
                 loc = page.locator(radio_sel)
