@@ -399,6 +399,19 @@ class IdoxPortal:
             )
 
             for target_month in months:
+                # Pre-visit the portal home page to establish session cookies.
+                # Some portals (Trafford, Wolverhampton, Southampton etc.) block
+                # direct requests to the monthly list without a prior session.
+                if target_month == months[0]:  # Only needed once per scrape
+                    try:
+                        await page.goto(
+                            f"{self.base_url}/",
+                            wait_until="domcontentloaded",
+                            timeout=15_000,
+                        )
+                        await page.wait_for_timeout(800)
+                    except Exception:
+                        pass  # Continue even if home page fails
                 apps = await self._scrape_month(page, target_month)
                 # Tag with the searched month for fallback date — but don't
                 # set submitted_date yet so the 7-day filter still passes them through
