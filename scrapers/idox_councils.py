@@ -21,6 +21,7 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Tameside Metropolitan Borough Council":     173,
     "Bradford Metropolitan District Council":    175,
     "Bolton Metropolitan Borough Council":       169,
+    "Stockport Metropolitan Borough Council":    167,
     "Sefton Metropolitan Borough Council":       185,
     "Halton Borough Council":                    186,
     "North Tyneside Council":                    200,
@@ -292,11 +293,13 @@ IDOX_COUNCILS = [
     # ("London Borough of Tower Hamlets",
     #  "https://development.towerhamlets.gov.uk/online-applications"),
 
-    ("London Borough of Redbridge",
-     "https://www.redbridge.gov.uk/online-applications"),
+    # BROKEN — Redbridge uses Swift LG (planning.redbridge.gov.uk/swiftlg/apas), not Idox.
+    # ("London Borough of Redbridge",
+    #  "https://www.redbridge.gov.uk/online-applications"),
 
-    ("London Borough of Havering",
-     "https://development.havering.gov.uk/online-applications"),
+    # BROKEN — Havering uses OcellaWeb/Northgate (development.havering.gov.uk/OcellaWeb), not Idox.
+    # ("London Borough of Havering",
+    #  "https://development.havering.gov.uk/online-applications"),
 
     ("London Borough of Bexley",
      "https://pa.bexley.gov.uk/online-applications"),
@@ -310,13 +313,13 @@ IDOX_COUNCILS = [
     #  "https://planning.royalgreenwich.gov.uk/online-applications"),
 
     ("London Borough of Bromley",
-     "https://searchapplications.bromley.gov.uk/onlineapplications"),
+     "https://searchapplications.bromley.gov.uk/online-applications"),
 
     ("London Borough of Croydon",
      "https://publicaccess3.croydon.gov.uk/online-applications"),
 
     ("London Borough of Sutton",
-     "https://www.sutton.gov.uk/online-applications"),
+     "https://planningregister.sutton.gov.uk/online-applications"),
 
     # BROKEN — Merton uses Northgate (planning.merton.gov.uk/Northgate), not Idox.
     # ("London Borough of Merton",
@@ -327,17 +330,21 @@ IDOX_COUNCILS = [
 
     # Richmond now uses Greenwich's URL (see above); old www.richmond.gov.uk was broken.
 
-    ("London Borough of Hounslow",
-     "https://www.hounslow.gov.uk/online-applications"),
+    # BROKEN — Hounslow uses a non-Idox system (planning.hounslow.gov.uk/Planning_Index.aspx).
+    # www.hounslow.gov.uk/online-applications redirects to Richmond's Idox server.
+    # ("London Borough of Hounslow",
+    #  "https://www.hounslow.gov.uk/online-applications"),
 
     ("London Borough of Ealing",
      "https://pam.ealing.gov.uk/online-applications"),
 
-    ("London Borough of Hillingdon",
-     "https://www.hillingdon.gov.uk/online-applications"),
+    # BROKEN — Hillingdon uses OcellaWeb/Northgate (planning.hillingdon.gov.uk/OcellaWeb), not Idox.
+    # ("London Borough of Hillingdon",
+    #  "https://www.hillingdon.gov.uk/online-applications"),
 
-    ("London Borough of Harrow",
-     "https://www.harrow.gov.uk/online-applications"),
+    # BROKEN — Harrow uses a custom system (planningsearch.harrow.gov.uk/planning/search-applications), not Idox.
+    # ("London Borough of Harrow",
+    #  "https://www.harrow.gov.uk/online-applications"),
 
     ("London Borough of Brent",
      "https://pa.brent.gov.uk/online-applications"),
@@ -348,11 +355,13 @@ IDOX_COUNCILS = [
     ("London Borough of Enfield",
      "https://planningandbuildingcontrol.enfield.gov.uk/online-applications"),
 
-    ("London Borough of Haringey",
-     "https://www.haringey.gov.uk/online-applications"),
+    # BROKEN — Haringey uses a custom system (planningservices.haringey.gov.uk/portal/servlets), not Idox.
+    # ("London Borough of Haringey",
+    #  "https://www.haringey.gov.uk/online-applications"),
 
-    ("London Borough of Islington",
-     "https://www.islington.gov.uk/online-applications"),
+    # BROKEN — Islington uses Northgate (planning.islington.gov.uk/northgate/planningexplorer), not Idox.
+    # ("London Borough of Islington",
+    #  "https://www.islington.gov.uk/online-applications"),
 
     ("London Borough of Hammersmith and Fulham",
      "https://public-access.lbhf.gov.uk/online-applications"),
