@@ -15,8 +15,10 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Cheshire West and Chester Council":         27,
     "City of London":                            28,   # note: NOT "Corporation" in DB
     "Gloucester City Council":                   37,
+    "Leeds City Council":                        48,
     "Plymouth City Council":                     59,
     "Wolverhampton City Council":                79,
+    "Canterbury City Council":                   82,
     "Rochdale Borough Council":                  172,
     "Tameside Metropolitan Borough Council":     173,
     "Bradford Metropolitan District Council":    175,
@@ -25,10 +27,15 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Sefton Metropolitan Borough Council":       185,
     "Halton Borough Council":                    186,
     "North Tyneside Council":                    200,
+    "Gateshead Council":                         198,
     "Durham County Council":                     201,
     "Cheltenham Borough Council":                213,
     "Ipswich Borough Council":                   215,
     "Knowsley Metropolitan Borough Council":     180,
+    "Nottingham City Council":                   57,
+    "Blackpool Council":                         15,
+    "Babergh District Council":                  9,
+    "Bedford Borough Council":                   12,
     "Solihull Metropolitan Borough Council":     192,
     "Portsmouth City Council":                   206,
     "London Borough of Tower Hamlets":           222,
@@ -111,9 +118,10 @@ IDOX_COUNCILS = [
     ("Knowsley Metropolitan Borough Council",
      "https://planapp.knowsley.gov.uk/online-applications"),
 
-    # Using publicaccess.sthelens.gov.uk (different from www.sthelens.gov.uk which redirected to Knowsley)
-    ("St. Helens Metropolitan Borough Council",
-     "https://publicaccess.sthelens.gov.uk/online-applications"),
+    # BROKEN — St Helens selected Idox Cloud (announced May 2026) but portal not yet live.
+    # publicaccess.sthelens.gov.uk times out. Re-enable once migration completes.
+    # ("St. Helens Metropolitan Borough Council",
+    #  "https://publicaccess.sthelens.gov.uk/online-applications"),
 
     # BROKEN — Warrington moved off Idox to online.warrington.gov.uk/planning (non-Idox system).
     # ("Warrington Borough Council",
@@ -283,8 +291,11 @@ IDOX_COUNCILS = [
     ("South Downs National Park Authority",
      "https://planningpublicaccess.southdowns.gov.uk/online-applications"),
 
-    ("Bracknell Forest Council",
-     "https://planapp.bracknell-forest.gov.uk/online-applications"),
+    # BROKEN — Bracknell Forest moved to Arcus BE (Salesforce):
+    # publicaccess.bracknell-forest.gov.uk/s/register-view?c__r=Arcus_BE_Public_Register
+    # planapp.bracknell-forest.gov.uk DNS is dead (decommissioned).
+    # ("Bracknell Forest Council",
+    #  "https://planapp.bracknell-forest.gov.uk/online-applications"),
 
     ("West Berkshire Council",
      "https://publicaccess.westberks.gov.uk/online-applications"),
