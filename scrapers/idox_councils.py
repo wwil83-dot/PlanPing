@@ -111,9 +111,9 @@ IDOX_COUNCILS = [
     ("Knowsley Metropolitan Borough Council",
      "https://planapp.knowsley.gov.uk/online-applications"),
 
-    # BROKEN — St Helens URL redirects to Knowsley's server; data would be misattributed.
-    # ("St. Helens Metropolitan Borough Council",
-    #  "https://www.sthelens.gov.uk/online-applications"),
+    # Using publicaccess.sthelens.gov.uk (different from www.sthelens.gov.uk which redirected to Knowsley)
+    ("St. Helens Metropolitan Borough Council",
+     "https://publicaccess.sthelens.gov.uk/online-applications"),
 
     # BROKEN — Warrington moved off Idox to online.warrington.gov.uk/planning (non-Idox system).
     # ("Warrington Borough Council",
@@ -166,7 +166,19 @@ IDOX_COUNCILS = [
     ("Derby City Council",
      "https://eplanning.derby.gov.uk/online-applications"),
 
-    # BROKEN — Nottinghamshire uses a custom non-Idox system (nottinghamshire.gov.uk/planningsearch/).
+    ("Nottingham City Council",
+     "https://publicaccess.nottinghamcity.gov.uk/online-applications"),
+
+    ("Rutland County Council",
+     "https://publicaccess.rutland.gov.uk/online-applications"),
+
+    ("Stoke-on-Trent City Council",
+     "https://planning.stoke.gov.uk/online-applications"),
+
+    ("Blackpool Council",
+     "https://idoxpa.blackpool.gov.uk/online-applications"),
+
+    # BROKEN — Nottinghamshire uses a custom non-Idox system.
     # ("Nottinghamshire County Council",
     #  "https://publicaccess.nottinghamshire.gov.uk/online-applications"),
 
@@ -179,13 +191,12 @@ IDOX_COUNCILS = [
     ("Sunderland City Council",
      "https://online-applications.sunderland.gov.uk/online-applications"),
 
-    # NOTE: public.gateshead.gov.uk redirects to North Tyneside's Idox server.
+    # North Tyneside has its own Idox server. public.gateshead.gov.uk is Gateshead's server.
     ("North Tyneside Council",
-     "https://public.gateshead.gov.uk/online-applications"),
+     "https://idoxpublicaccess.northtyneside.gov.uk/online-applications"),
 
-    # BROKEN — public.gateshead.gov.uk redirects to North Tyneside; Gateshead needs research.
-    # ("Gateshead Council",
-    #  "https://public.gateshead.gov.uk/online-applications"),
+    ("Gateshead Council",
+     "https://public.gateshead.gov.uk/online-applications"),
 
     # BROKEN — South Tyneside uses Northgate (planning.southtyneside.info), not Idox.
     # ("South Tyneside Metropolitan Borough Council",
@@ -202,6 +213,24 @@ IDOX_COUNCILS = [
 
     ("Stockton-on-Tees Borough Council",
      "https://www.stockton.gov.uk/online-applications"),
+
+    ("Darlington Borough Council",
+     "https://publicaccess.darlington.gov.uk/online-applications"),
+
+    ("Northumberland County Council",
+     "https://publicaccess.northumberland.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # YORKSHIRE AND THE HUMBER
+    # -------------------------------------------------------------------------
+    ("Leeds City Council",
+     "https://publicaccess.leeds.gov.uk/online-applications"),
+
+    ("Wakefield Metropolitan District Council",
+     "https://planning.wakefield.gov.uk/online-applications"),
+
+    ("Doncaster Metropolitan Borough Council",
+     "https://planning.doncaster.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # SOUTH EAST
@@ -229,6 +258,43 @@ IDOX_COUNCILS = [
     # ("Medway Council",
     #  "https://publicaccess.medway.gov.uk/online-applications"),
 
+    ("Isle of Wight Council",
+     "https://publicaccess.iow.gov.uk/online-applications"),
+
+    ("Canterbury City Council",
+     "https://pa.canterbury.gov.uk/online-applications"),
+
+    ("Gravesham Borough Council",
+     "https://plan.gravesham.gov.uk/online-applications"),
+
+    # NOTE: pa.midkent.gov.uk is a shared server for Maidstone, Swale and Tunbridge Wells.
+    ("Maidstone Borough Council",
+     "https://pa.midkent.gov.uk/online-applications"),
+
+    ("Thanet District Council",
+     "https://planning.thanet.gov.uk/online-applications"),
+
+    ("Mid Sussex District Council",
+     "https://pa.midsussex.gov.uk/online-applications"),
+
+    ("Adur District Council",
+     "https://planning.adur-worthing.gov.uk/online-applications"),
+
+    ("South Downs National Park Authority",
+     "https://planningpublicaccess.southdowns.gov.uk/online-applications"),
+
+    ("Bracknell Forest Council",
+     "https://planapp.bracknell-forest.gov.uk/online-applications"),
+
+    ("West Berkshire Council",
+     "https://publicaccess.westberks.gov.uk/online-applications"),
+
+    ("Windsor and Maidenhead Borough Council",
+     "https://publicaccess.rbwm.gov.uk/online-applications"),
+
+    ("Epsom and Ewell Borough Council",
+     "https://eplanning.epsom-ewell.gov.uk/online-applications"),
+
     # -------------------------------------------------------------------------
     # SOUTH WEST
     # -------------------------------------------------------------------------
@@ -242,6 +308,15 @@ IDOX_COUNCILS = [
 
     ("Exeter City Council",
      "https://publicaccess.exeter.gov.uk/online-applications"),
+
+    ("Cornwall Council",
+     "https://planning.cornwall.gov.uk/online-applications"),
+
+    ("South Gloucestershire Council",
+     "https://developments.southglos.gov.uk/online-applications"),
+
+    ("North Somerset Council",
+     "https://planning.n-somerset.gov.uk/online-applications"),
 
     # NOTE: publicaccess.cheltenham.gov.uk redirects to Ipswich's Idox server.
     ("Ipswich Borough Council",
@@ -261,6 +336,18 @@ IDOX_COUNCILS = [
 
     ("Norwich City Council",
      "https://planning.norwich.gov.uk/online-applications"),
+
+    ("Thurrock Council",
+     "https://regs.thurrock.gov.uk/online-applications"),
+
+    ("Bedford Borough Council",
+     "https://publicaccess.bedford.gov.uk/online-applications"),
+
+    ("Babergh District Council",
+     "https://planning.baberghmidsuffolk.gov.uk/online-applications"),
+
+    ("Tendring District Council",
+     "https://idox.tendringdc.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # LONDON BOROUGHS — URLs verified from known working Idox installations
