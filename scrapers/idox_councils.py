@@ -52,10 +52,10 @@ IDOX_COUNCILS = [
      "https://planning.stockport.gov.uk/online-applications"),
 
     ("Trafford Council",
-     "https://www.trafford.gov.uk/online-applications"),
+     "https://pa.trafford.gov.uk/online-applications"),
 
     ("Bolton Metropolitan Borough Council",
-     "https://www.bolton.gov.uk/idox/online-applications"),
+     "https://paplanning.bolton.gov.uk/online-applications"),
 
     # BROKEN — planning.bury.gov.uk redirects to Tameside's server; Bury needs research.
     # ("Bury Metropolitan Borough Council",
@@ -98,14 +98,16 @@ IDOX_COUNCILS = [
     # ("Liverpool City Council",
     #  "https://planning.liverpool.gov.uk/online-applications"),
 
-    ("Wirral Metropolitan Borough Council",
-     "https://www.wirral.gov.uk/online-applications"),
+    # BROKEN — Wirral uses LAR/Built ID system (online.wirral.gov.uk/planning), not Idox.
+    # ("Wirral Metropolitan Borough Council",
+    #  "https://www.wirral.gov.uk/online-applications"),
 
     ("Knowsley Metropolitan Borough Council",
-     "https://www.knowsley.gov.uk/online-applications"),
+     "https://planapp.knowsley.gov.uk/online-applications"),
 
-    ("St. Helens Metropolitan Borough Council",
-     "https://www.sthelens.gov.uk/online-applications"),
+    # BROKEN — St Helens URL redirects to Knowsley's server; data would be misattributed.
+    # ("St. Helens Metropolitan Borough Council",
+    #  "https://www.sthelens.gov.uk/online-applications"),
 
     # BROKEN — Warrington moved off Idox to online.warrington.gov.uk/planning (non-Idox system).
     # ("Warrington Borough Council",
@@ -132,16 +134,18 @@ IDOX_COUNCILS = [
 
     # BROKEN — /planning/search-planning-applications returns 404. Trying /online-applications.
     ("Wolverhampton City Council",
-     "https://www.wolverhampton.gov.uk/online-applications"),
+     "https://planningonline.wolverhampton.gov.uk/online-applications"),
 
-    ("Walsall Metropolitan Borough Council",
-     "https://www.walsall.gov.uk/online-applications"),
+    # BROKEN — Walsall uses Swift LG (planning.walsall.gov.uk/swift/...), not Idox.
+    # ("Walsall Metropolitan Borough Council",
+    #  "https://www.walsall.gov.uk/online-applications"),
 
     ("Sandwell Metropolitan Borough Council",
-     "https://sandwell.gov.uk/online-applications"),
+     "https://webcaps.sandwell.gov.uk/publicaccess"),
 
-    ("Dudley Metropolitan Borough Council",
-     "https://www.dudley.gov.uk/online-applications"),
+    # BROKEN — Dudley uses Agile Applications (planning.agileapplications.co.uk/dudley), not Idox.
+    # ("Dudley Metropolitan Borough Council",
+    #  "https://www.dudley.gov.uk/online-applications"),
 
     ("Solihull Metropolitan Borough Council",
      "https://publicaccess.solihull.gov.uk/online-applications"),
@@ -200,22 +204,24 @@ IDOX_COUNCILS = [
      "https://planningapps.brighton-hove.gov.uk/online-applications"),
 
     ("Southampton City Council",
-     "https://www.southampton.gov.uk/online-applications"),
+     "https://planningpublicaccess.southampton.gov.uk/online-applications"),
 
     ("Portsmouth City Council",
-     "https://www.portsmouth.gov.uk/online-applications"),
+     "https://publicaccess.portsmouth.gov.uk/online-applications"),
 
     ("Reading Borough Council",
      "https://planning.reading.gov.uk/online-applications"),
 
-    ("Milton Keynes City Council",
-     "https://www.milton-keynes.gov.uk/online-applications"),
+    # BROKEN — Milton Keynes moved to Arcus BE (be.milton-keynes.gov.uk), same as Manchester/Salford.
+    # ("Milton Keynes City Council",
+    #  "https://www.milton-keynes.gov.uk/online-applications"),
 
     ("Oxford City Council",
-     "https://www.oxford.gov.uk/online-applications"),
+     "https://public.oxford.gov.uk/online-applications"),
 
-    ("Medway Council",
-     "https://publicaccess.medway.gov.uk/online-applications"),
+    # BROKEN — Medway moved to Open Digital Planning (planningregister.org/medway), not Idox.
+    # ("Medway Council",
+    #  "https://publicaccess.medway.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # SOUTH WEST
