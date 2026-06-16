@@ -20,12 +20,16 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Rochdale Borough Council":                  172,
     "Tameside Metropolitan Borough Council":     173,
     "Bradford Metropolitan District Council":    175,
+    "Bolton Metropolitan Borough Council":       169,
     "Sefton Metropolitan Borough Council":       185,
     "Halton Borough Council":                    186,
     "North Tyneside Council":                    200,
     "Durham County Council":                     201,
     "Cheltenham Borough Council":                213,
     "Ipswich Borough Council":                   215,
+    "Knowsley Metropolitan Borough Council":     180,
+    "Solihull Metropolitan Borough Council":     192,
+    "Portsmouth City Council":                   206,
     "London Borough of Tower Hamlets":           222,
     "London Borough of Newham":                  223,
     "London Borough of Waltham Forest":          224,
@@ -49,7 +53,7 @@ IDOX_COUNCILS = [
     #  "https://publicaccess.salford.gov.uk/online-applications"),
 
     ("Stockport Metropolitan Borough Council",
-     "https://planning.stockport.gov.uk/online-applications"),
+     "https://planning.stockport.gov.uk/PlanningData-live"),
 
     ("Trafford Council",
      "https://pa.trafford.gov.uk/online-applications"),
@@ -86,10 +90,11 @@ IDOX_COUNCILS = [
      "https://planning.bradford.gov.uk/online-applications"),
 
     ("Calderdale Metropolitan Borough Council",
-     "https://www.calderdale.gov.uk/online-applications"),
+     "https://portal.calderdale.gov.uk/online-applications"),
 
-    ("Kirklees Council",
-     "https://www.kirklees.gov.uk/online-applications"),
+    # BROKEN — Kirklees uses a custom ASPX system (kirklees.gov.uk/beta/planning-applications), not Idox.
+    # ("Kirklees Council",
+    #  "https://www.kirklees.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # NORTH WEST (excl. Greater Manchester)
