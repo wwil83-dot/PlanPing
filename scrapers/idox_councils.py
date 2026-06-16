@@ -20,6 +20,7 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Rochdale Borough Council":                  172,
     "Tameside Metropolitan Borough Council":     173,
     "Bradford Metropolitan District Council":    175,
+    "Sefton Metropolitan Borough Council":       185,
     "Halton Borough Council":                    186,
     "North Tyneside Council":                    200,
     "Durham County Council":                     201,
@@ -116,13 +117,13 @@ IDOX_COUNCILS = [
     ("Cheshire East Council",
      "https://planning.cheshireeast.gov.uk/online-applications"),
 
-    # NOTE: pa.sefton.gov.uk redirects to Halton's Idox server.
-    ("Halton Borough Council",
+    # Sefton's own Idox portal (confirmed — shows "Sefton Council" branding).
+    ("Sefton Metropolitan Borough Council",
      "https://pa.sefton.gov.uk/online-applications"),
 
-    # BROKEN — pa.sefton.gov.uk redirects to Halton's server; Sefton needs research.
-    # ("Sefton Metropolitan Borough Council",
-    #  "https://pa.sefton.gov.uk/online-applications"),
+    # Halton's own Idox portal (pa.halton.gov.uk — different from Sefton's).
+    ("Halton Borough Council",
+     "https://pa.halton.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # WEST MIDLANDS
