@@ -68,6 +68,33 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Tendring District Council":                 265,
     "London Borough of Hammersmith and Fulham":  266,
     "City of Westminster":                       267,
+    # --- Surrey/Kent/Sussex/Essex/Herts/Cambs districts seeded Jun 2026 ---
+    "Guildford Borough Council":                 268,
+    "Surrey Heath Borough Council":              269,
+    "Spelthorne Borough Council":                270,
+    "Sevenoaks District Council":                271,
+    "Dover District Council":                    272,
+    "Tonbridge and Malling Borough Council":     273,
+    "Tunbridge Wells Borough Council":           274,
+    "Lewes District Council":                    275,
+    "Rother District Council":                   276,
+    "Wealden District Council":                  277,
+    "Chichester District Council":               278,
+    "Crawley Borough Council":                   279,
+    "Horsham District Council":                  280,
+    "Basildon Borough Council":                  281,
+    "Braintree District Council":                282,
+    "Castle Point Borough Council":              283,
+    "Chelmsford City Council":                   284,
+    "Harlow District Council":                   285,
+    "Maldon District Council":                   286,
+    "Southend-on-Sea City Council":              287,
+    "Uttlesford District Council":               288,
+    "East Hertfordshire District Council":       289,
+    "Stevenage Borough Council":                 290,
+    "Three Rivers District Council":             291,
+    "Welwyn Hatfield Borough Council":           292,
+    "Huntingdonshire District Council":          293,
 }
 
 IDOX_COUNCILS = [
@@ -374,12 +401,22 @@ IDOX_COUNCILS = [
     ("Chichester District Council",
      "https://publicaccess.chichester.gov.uk/online-applications"),
 
-    ("Crawley Borough Council",
-     "https://planningregister.crawley.gov.uk/online-applications"),
+    # BROKEN — Crawley uses bespoke ASP.NET system at planningregister.crawley.gov.uk
+    # (URL pattern: /Disclaimer?returnUrl=/Planning/Display/CR/...) — not Idox.
+    # ("Crawley Borough Council",
+    #  "https://planningregister.crawley.gov.uk/online-applications"),
 
-    # NOTE: Horsham uses /public-access/ path (not /online-applications/)
     ("Horsham District Council",
      "https://public-access.horsham.gov.uk/public-access"),
+
+    # -------------------------------------------------------------------------
+    # HAMPSHIRE — additional Idox portals found during South East expansion
+    # -------------------------------------------------------------------------
+    ("Havant Borough Council",
+     "https://planningpublicaccess.havant.gov.uk/online-applications"),
+
+    ("East Hampshire District Council",
+     "https://planningpublicaccess.easthants.gov.uk/online-applications"),
 
     # --- ESSEX districts ---
     ("Basildon Borough Council",
