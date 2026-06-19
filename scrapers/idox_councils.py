@@ -95,6 +95,8 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Three Rivers District Council":             291,
     "Welwyn Hatfield Borough Council":           292,
     "Huntingdonshire District Council":          293,
+    "Havant Borough Council":                    294,
+    "East Hampshire District Council":           295,
 }
 
 IDOX_COUNCILS = [
@@ -444,8 +446,9 @@ IDOX_COUNCILS = [
      "https://publicaccess.uttlesford.gov.uk/online-applications"),
 
     # --- HERTFORDSHIRE districts ---
+    # NOTE: Dacorum uses /publicaccess/ path (not /online-applications/)
     ("Dacorum Borough Council",
-     "https://planning.dacorum.gov.uk/online-applications"),
+     "https://planning.dacorum.gov.uk/publicaccess"),
 
     ("East Hertfordshire District Council",
      "https://publicaccess.eastherts.gov.uk/online-applications"),
