@@ -261,8 +261,9 @@ IDOX_COUNCILS = [
     ("Wakefield Metropolitan District Council",
      "https://planning.wakefield.gov.uk/online-applications"),
 
-    ("Doncaster Metropolitan Borough Council",
-     "https://planning.doncaster.gov.uk/online-applications"),
+    # BROKEN — Doncaster is blocked by Cloudflare ("Just a moment..." challenge).
+    # ("Doncaster Metropolitan Borough Council",
+    #  "https://planning.doncaster.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # SOUTH EAST
@@ -329,6 +330,103 @@ IDOX_COUNCILS = [
 
     ("Epsom and Ewell Borough Council",
      "https://eplanning.epsom-ewell.gov.uk/online-applications"),
+
+    # --- SURREY districts ---
+    ("Guildford Borough Council",
+     "https://publicaccess.guildford.gov.uk/online-applications"),
+
+    ("Surrey Heath Borough Council",
+     "https://publicaccess.surreyheath.gov.uk/online-applications"),
+
+    ("Spelthorne Borough Council",
+     "https://publicaccess.spelthorne.gov.uk/online-applications"),
+
+    # NOT Idox — skip: Waverley (planning360 system), Runnymede (Northgate),
+    # Elmbridge (emaps system), Woking/Tandridge/Mole Valley/Reigate (DNS not resolved)
+
+    # --- KENT districts ---
+    ("Sevenoaks District Council",
+     "https://pa.sevenoaks.gov.uk/online-applications"),
+
+    ("Dover District Council",
+     "https://publicaccess.dover.gov.uk/online-applications"),
+
+    ("Tonbridge and Malling Borough Council",
+     "https://publicaccess.tmbc.gov.uk/online-applications"),
+
+    # NOTE: twbcpa.midkent.gov.uk is Tunbridge Wells' partition of the shared midkent server.
+    ("Tunbridge Wells Borough Council",
+     "https://twbcpa.midkent.gov.uk/online-applications"),
+
+    # --- EAST SUSSEX districts ---
+    # NOTE: planningpa.lewes-eastbourne.gov.uk is a shared server for Lewes and Eastbourne.
+    ("Lewes District Council",
+     "https://planningpa.lewes-eastbourne.gov.uk/online-applications"),
+
+    ("Rother District Council",
+     "https://planweb01.rother.gov.uk/online-applications"),
+
+    ("Wealden District Council",
+     "https://planning.wealden.gov.uk/online-applications"),
+
+    # --- WEST SUSSEX districts ---
+    ("Chichester District Council",
+     "https://publicaccess.chichester.gov.uk/online-applications"),
+
+    ("Crawley Borough Council",
+     "https://planningregister.crawley.gov.uk/online-applications"),
+
+    # NOTE: Horsham uses /public-access/ path (not /online-applications/)
+    ("Horsham District Council",
+     "https://public-access.horsham.gov.uk/public-access"),
+
+    # --- ESSEX districts ---
+    ("Basildon Borough Council",
+     "https://planning.basildon.gov.uk/online-applications"),
+
+    ("Braintree District Council",
+     "https://publicaccess.braintree.gov.uk/online-applications"),
+
+    ("Castle Point Borough Council",
+     "https://publicaccess.castlepoint.gov.uk/online-applications"),
+
+    ("Chelmsford City Council",
+     "https://publicaccess.chelmsford.gov.uk/online-applications"),
+
+    ("Harlow District Council",
+     "https://planningonline.harlow.gov.uk/online-applications"),
+
+    ("Maldon District Council",
+     "https://publicaccess.maldon.gov.uk/online-applications"),
+
+    ("Southend-on-Sea City Council",
+     "https://publicaccess.southend.gov.uk/online-applications"),
+
+    ("Uttlesford District Council",
+     "https://publicaccess.uttlesford.gov.uk/online-applications"),
+
+    # --- HERTFORDSHIRE districts ---
+    ("Dacorum Borough Council",
+     "https://planning.dacorum.gov.uk/online-applications"),
+
+    ("East Hertfordshire District Council",
+     "https://publicaccess.eastherts.gov.uk/online-applications"),
+
+    ("Hertsmere Borough Council",
+     "https://www6.hertsmere.gov.uk/online-applications"),
+
+    ("Stevenage Borough Council",
+     "https://publicaccess.stevenage.gov.uk/online-applications"),
+
+    ("Three Rivers District Council",
+     "https://www3.threerivers.gov.uk/online-applications"),
+
+    ("Welwyn Hatfield Borough Council",
+     "https://planning.welhat.gov.uk/online-applications"),
+
+    # --- CAMBRIDGESHIRE ---
+    ("Huntingdonshire District Council",
+     "https://publicaccess.huntingdonshire.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # SOUTH WEST
