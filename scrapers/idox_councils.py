@@ -43,7 +43,8 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "London Borough of Waltham Forest":          224,
     "London Borough of Richmond upon Thames":    235,
     "London Borough of Brent":                   240,
-    # --- newly seeded councils (Jun 2026) ---
+    "Dacorum Borough Council":                   30,
+    "Hertsmere Borough Council":                 43,
     "Wakefield Metropolitan District Council":   245,
     "Doncaster Metropolitan Borough Council":    246,
     "Darlington Borough Council":                247,
