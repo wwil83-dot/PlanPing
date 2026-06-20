@@ -107,6 +107,20 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "West Oxfordshire District Council":         302,
     "Breckland District Council":                303,
     "Fenland District Council":                  304,
+    # --- Lancashire/Cambs/Norfolk/Derbys seeded Jun 2026 ---
+    "Great Yarmouth Borough Council":            305,   # Northgate - commented out
+    "East Cambridgeshire District Council":      306,
+    "South Cambridgeshire District Council":     307,
+    "Lancaster City Council":                    308,
+    "Preston City Council":                      309,
+    "Burnley Borough Council":                   310,
+    "South Ribble Borough Council":              311,
+    "Pendle Borough Council":                    312,
+    "Chorley Borough Council":                   313,
+    "Wyre Borough Council":                      314,
+    "Rossendale Borough Council":                315,
+    "West Lancashire Borough Council":           316,
+    "Chesterfield Borough Council":              317,
 }
 
 IDOX_COUNCILS = [
@@ -521,8 +535,10 @@ IDOX_COUNCILS = [
     ("Breckland District Council",
      "https://planning.breckland.gov.uk/online-applications"),
 
-    ("Great Yarmouth Borough Council",
-     "https://planning.great-yarmouth.gov.uk/online-applications"),
+    # BROKEN — Great Yarmouth uses Northgate OcellaWeb system:
+    # planning.great-yarmouth.gov.uk/OcellaWeb/planningSearch — NOT Idox.
+    # ("Great Yarmouth Borough Council",
+    #  "https://planning.great-yarmouth.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # CAMBRIDGESHIRE
