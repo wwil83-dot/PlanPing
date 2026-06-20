@@ -446,9 +446,11 @@ IDOX_COUNCILS = [
      "https://publicaccess.uttlesford.gov.uk/online-applications"),
 
     # --- HERTFORDSHIRE districts ---
-    # NOTE: Dacorum uses /publicaccess/ path (not /online-applications/)
-    ("Dacorum Borough Council",
-     "https://planning.dacorum.gov.uk/publicaccess"),
+    # BROKEN — Dacorum's server (planning.dacorum.gov.uk/publicaccess) gives
+    # ERR_EMPTY_RESPONSE consistently — accepts TCP but sends nothing back.
+    # URL is correct but server appears to block cloud provider IP ranges.
+    # ("Dacorum Borough Council",
+    #  "https://planning.dacorum.gov.uk/publicaccess"),
 
     ("East Hertfordshire District Council",
      "https://publicaccess.eastherts.gov.uk/online-applications"),
