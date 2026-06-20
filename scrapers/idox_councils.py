@@ -521,6 +521,54 @@ IDOX_COUNCILS = [
     ("Breckland District Council",
      "https://planning.breckland.gov.uk/online-applications"),
 
+    ("Great Yarmouth Borough Council",
+     "https://planning.great-yarmouth.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # CAMBRIDGESHIRE
+    # -------------------------------------------------------------------------
+    ("East Cambridgeshire District Council",
+     "https://pa.eastcambs.gov.uk/online-applications"),
+
+    ("South Cambridgeshire District Council",
+     "https://planning.scambs.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # LANCASHIRE
+    # -------------------------------------------------------------------------
+    ("Lancaster City Council",
+     "https://planning.lancaster.gov.uk/online-applications"),
+
+    ("Preston City Council",
+     "https://publicaccess.preston.gov.uk/online-applications"),
+
+    ("Burnley Borough Council",
+     "https://publicaccess.burnley.gov.uk/online-applications"),
+
+    ("South Ribble Borough Council",
+     "https://publicaccess.southribble.gov.uk/online-applications"),
+
+    ("Pendle Borough Council",
+     "https://publicaccess.pendle.gov.uk/online-applications"),
+
+    ("Chorley Borough Council",
+     "https://planning.chorley.gov.uk/online-applications"),
+
+    ("Wyre Borough Council",
+     "https://publicaccess.wyre.gov.uk/online-applications"),
+
+    ("Rossendale Borough Council",
+     "https://publicaccess.rossendale.gov.uk/online-applications"),
+
+    ("West Lancashire Borough Council",
+     "https://publicaccess.westlancs.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # DERBYSHIRE
+    # -------------------------------------------------------------------------
+    ("Chesterfield Borough Council",
+     "https://publicaccess.chesterfield.gov.uk/online-applications"),
+
     # -------------------------------------------------------------------------
     # SOUTH WEST
     # -------------------------------------------------------------------------
