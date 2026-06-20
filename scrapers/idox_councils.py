@@ -471,6 +471,44 @@ IDOX_COUNCILS = [
     ("Huntingdonshire District Council",
      "https://publicaccess.huntingdonshire.gov.uk/online-applications"),
 
+    ("Fenland District Council",
+     "https://publicaccess.fenland.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # HAMPSHIRE districts (all confirmed Idox via 403 bot-block test)
+    # Note: Winchester (ASPX), Fareham (bespoke ASPX), Test Valley (unknown) skip
+    # Hampshire reorganises into 4 unitaries ~2027 but districts still process apps now
+    # -------------------------------------------------------------------------
+    ("Gosport Borough Council",
+     "https://publicaccess.gosport.gov.uk/online-applications"),
+
+    ("Hart District Council",
+     "https://publicaccess.hart.gov.uk/online-applications"),
+
+    ("Basingstoke and Deane Borough Council",
+     "https://publicaccess.basingstoke.gov.uk/online-applications"),
+
+    ("Rushmoor Borough Council",
+     "https://publicaccess.rushmoor.gov.uk/online-applications"),
+
+    ("New Forest District Council",
+     "https://planning.newforest.gov.uk/online-applications"),
+
+    ("Eastleigh Borough Council",
+     "https://planning.eastleigh.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # OXFORDSHIRE
+    # -------------------------------------------------------------------------
+    ("West Oxfordshire District Council",
+     "https://publicaccess.westoxon.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # NORFOLK
+    # -------------------------------------------------------------------------
+    ("Breckland District Council",
+     "https://planning.breckland.gov.uk/online-applications"),
+
     # -------------------------------------------------------------------------
     # SOUTH WEST
     # -------------------------------------------------------------------------
