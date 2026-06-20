@@ -97,6 +97,16 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Huntingdonshire District Council":          293,
     "Havant Borough Council":                    294,
     "East Hampshire District Council":           295,
+    # --- Hampshire/Oxon/Norfolk/Cambs seeded Jun 2026 ---
+    "Gosport Borough Council":                   296,
+    "Hart District Council":                     297,
+    "Basingstoke and Deane Borough Council":     298,
+    "Rushmoor Borough Council":                  299,
+    "New Forest District Council":               300,
+    "Eastleigh Borough Council":                 301,
+    "West Oxfordshire District Council":         302,
+    "Breckland District Council":                303,
+    "Fenland District Council":                  304,
 }
 
 IDOX_COUNCILS = [
@@ -471,8 +481,9 @@ IDOX_COUNCILS = [
     ("Huntingdonshire District Council",
      "https://publicaccess.huntingdonshire.gov.uk/online-applications"),
 
-    ("Fenland District Council",
-     "https://publicaccess.fenland.gov.uk/online-applications"),
+    # BROKEN — Fenland gives ERR_HTTP2_PROTOCOL_ERROR (server-side HTTP/2 config issue).
+    # ("Fenland District Council",
+    #  "https://publicaccess.fenland.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # HAMPSHIRE districts (all confirmed Idox via 403 bot-block test)
@@ -494,8 +505,9 @@ IDOX_COUNCILS = [
     ("New Forest District Council",
      "https://planning.newforest.gov.uk/online-applications"),
 
-    ("Eastleigh Borough Council",
-     "https://planning.eastleigh.gov.uk/online-applications"),
+    # BROKEN — Eastleigh's Idox portal requires login (not public access).
+    # ("Eastleigh Borough Council",
+    #  "https://planning.eastleigh.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # OXFORDSHIRE
