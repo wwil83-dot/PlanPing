@@ -441,7 +441,7 @@ class IdoxPortal:
 
         # — Step 1: Navigate to monthly list page —
         try:
-            await page.goto(monthly_url, wait_until="domcontentloaded", timeout=45_000)
+            await page.goto(monthly_url, wait_until="domcontentloaded", timeout=60_000)
         except PlaywrightTimeout:
             print(f"    ⚠ Page load timeout")
             return []
