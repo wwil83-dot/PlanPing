@@ -615,8 +615,9 @@ IDOX_COUNCILS = [
     ("Powys County Council",
      "https://pa.powys.gov.uk/online-applications"),
 
+    # NOTE: Eryri uses /publicaccess/ path (not /online-applications/ which returns 404 in browser)
     ("Eryri National Park Authority",
-     "https://pa.eryri.llyw.cymru/online-applications"),
+     "https://pa.eryri.llyw.cymru/publicaccess"),
 
     # NOTE: Caerphilly uses planningonline subdomain not publicaccess
     ("Caerphilly County Borough Council",
