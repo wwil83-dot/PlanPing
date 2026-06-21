@@ -581,10 +581,40 @@ IDOX_COUNCILS = [
      "https://publicaccess.westlancs.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
-    # DERBYSHIRE
+    # WALES
+    # Note: Welsh councils not yet tried: Swansea, Bridgend, RCT, Wrexham,
+    # Conwy, Flintshire, Gwynedd, Anglesey, Pembrokeshire, Ceredigion,
+    # Blaenau Gwent, Merthyr Tydfil, Vale of Glamorgan — DNS not found yet
     # -------------------------------------------------------------------------
-    ("Chesterfield Borough Council",
-     "https://publicaccess.chesterfield.gov.uk/online-applications"),
+    ("Cardiff Council",
+     "https://planning.cardiff.gov.uk/online-applications"),
+
+    ("Newport City Council",
+     "https://planning.newport.gov.uk/online-applications"),
+
+    ("Neath Port Talbot County Borough Council",
+     "https://planning.npt.gov.uk/online-applications"),
+
+    ("Denbighshire County Council",
+     "https://planning.denbighshire.gov.uk/online-applications"),
+
+    ("Carmarthenshire County Council",
+     "https://planning.carmarthenshire.gov.uk/online-applications"),
+
+    ("Powys County Council",
+     "https://pa.powys.gov.uk/online-applications"),
+
+    ("Eryri National Park Authority",
+     "https://pa.eryri.llyw.cymru/online-applications"),
+
+    ("Caerphilly County Borough Council",
+     "https://publicaccess.caerphilly.gov.uk/online-applications"),
+
+    ("Torfaen County Borough Council",
+     "https://publicaccess.torfaen.gov.uk/online-applications"),
+
+    ("Monmouthshire County Council",
+     "https://publicaccess.monmouthshire.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # SOUTH WEST
