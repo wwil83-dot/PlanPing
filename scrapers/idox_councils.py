@@ -488,8 +488,9 @@ IDOX_COUNCILS = [
     ("Three Rivers District Council",
      "https://www3.threerivers.gov.uk/online-applications"),
 
+    # NOTE: planning.welhat.gov.uk uses /publicaccess/ path not /online-applications/
     ("Welwyn Hatfield Borough Council",
-     "https://planning.welhat.gov.uk/online-applications"),
+     "https://planning.welhat.gov.uk/publicaccess"),
 
     # --- CAMBRIDGESHIRE ---
     ("Huntingdonshire District Council",
@@ -552,14 +553,14 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # LANCASHIRE
     # -------------------------------------------------------------------------
-    ("Lancaster City Council",
-     "https://planning.lancaster.gov.uk/online-applications"),
-
-    ("Preston City Council",
-     "https://publicaccess.preston.gov.uk/online-applications"),
-
-    ("Burnley Borough Council",
-     "https://publicaccess.burnley.gov.uk/online-applications"),
+    # BROKEN — Lancaster, Preston, Burnley all timeout at 60s (WAF/cloud-IP blocking)
+    # Consistent across 30s/45s/60s runs. Not worth the 3-minute drain per run.
+    # ("Lancaster City Council",
+    #  "https://planning.lancaster.gov.uk/online-applications"),
+    # ("Preston City Council",
+    #  "https://publicaccess.preston.gov.uk/online-applications"),
+    # ("Burnley Borough Council",
+    #  "https://publicaccess.burnley.gov.uk/online-applications"),
 
     ("South Ribble Borough Council",
      "https://publicaccess.southribble.gov.uk/online-applications"),
