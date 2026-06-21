@@ -121,6 +121,17 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Rossendale Borough Council":                315,
     "West Lancashire Borough Council":           316,
     "Chesterfield Borough Council":              317,
+    # --- Wales seeded Jun 2026 ---
+    "Cardiff Council":                           26,
+    "Newport City Council":                      319,
+    "Neath Port Talbot County Borough Council":  320,
+    "Denbighshire County Council":               321,
+    "Carmarthenshire County Council":            322,
+    "Powys County Council":                      323,
+    "Eryri National Park Authority":             324,
+    "Caerphilly County Borough Council":         325,
+    "Torfaen County Borough Council":            326,
+    "Monmouthshire County Council":              327,
 }
 
 IDOX_COUNCILS = [
@@ -607,8 +618,9 @@ IDOX_COUNCILS = [
     ("Eryri National Park Authority",
      "https://pa.eryri.llyw.cymru/online-applications"),
 
+    # NOTE: Caerphilly uses planningonline subdomain not publicaccess
     ("Caerphilly County Borough Council",
-     "https://publicaccess.caerphilly.gov.uk/online-applications"),
+     "https://planningonline.caerphilly.gov.uk/online-applications"),
 
     ("Torfaen County Borough Council",
      "https://publicaccess.torfaen.gov.uk/online-applications"),
