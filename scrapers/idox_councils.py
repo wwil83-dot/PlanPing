@@ -1,782 +1,848 @@
-#!/usr/bin/env python3
 """
-PlanFind Idox scraper — Playwright edition.
+PlanFind — Idox portal council list.
 
-Uses headless Chromium via Playwright to handle JavaScript-heavy
-PublicAccess 5 (Idox Cloud) portals as well as classic PA 4.x sites.
-
-Architecture:
-  - One shared browser instance, one isolated BrowserContext per council
-  - Semaphore limits to CONCURRENCY contexts at once
-  - Navigates to monthlyList page, submits form, paginates, parses HTML
-  - Filters results to DAYS_BACK window in Python
-  - Upserts to Supabase REST API (same as data_gov_harvester)
+Format: (council_name_as_in_supabase_db, idox_base_url)
 """
-import asyncio
-import os
-import re
-import sys
-import time
-from datetime import date, datetime, timedelta, timezone
-from typing import Optional
-from urllib.parse import urlparse
-
-import httpx
-from bs4 import BeautifulSoup
-from playwright.async_api import (
-    async_playwright,
-    Browser,
-    BrowserContext,
-    Page,
-    TimeoutError as PlaywrightTimeout,
-)
 
 # ---------------------------------------------------------------------------
-# Config
+# Hardcoded correct council IDs from the database.
+# These BYPASS the unreliable name-matching lookup in the scraper.
+# To add a new council: query Supabase for its id with:
+#   SELECT id, name FROM councils WHERE name = 'Council Name';
 # ---------------------------------------------------------------------------
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
-MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "40"))
-DAYS_BACK    = int(os.environ.get("DAYS_BACK", "7"))
-CONCURRENCY  = int(os.environ.get("CONCURRENCY", "3"))
-
-START_TIME = time.monotonic()
-
-
-def elapsed_minutes() -> float:
-    return (time.monotonic() - START_TIME) / 60
-
-
-def should_stop() -> bool:
-    return elapsed_minutes() >= MAX_MINUTES - 3  # 3-min buffer
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-def _normalise_status(s: str) -> str:
-    if not s: return "pending"
-    s = s.lower()
-    if any(x in s for x in ("approv", "grant", "permit", "allow", "no objection")):
-        return "approved"
-    if any(x in s for x in ("refus", "reject", "dismiss", "not permit")):
-        return "refused"
-    if "withdraw" in s:
-        return "withdrawn"
-    return "pending"
-
-
-def _extract_postcode(text: str) -> Optional[str]:
-    if not text: return None
-    m = re.search(r"\b([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2})\b", text.upper())
-    return m.group(1) if m else None
-
-
-def _parse_date(s: str) -> Optional[str]:
-    if not s: return None
-    s = str(s).strip()
-    for sep in ("+", "T", " "):
-        if sep in s: s = s.split(sep)[0].strip()
-    s = s[:10]
-    for fmt in (
-        "%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y",
-        "%d/%m/%y", "%Y/%m/%d",
-        "%d %B %Y", "%d %b %Y",
-    ):
-        try:
-            return datetime.strptime(s, fmt).date().isoformat()
-        except ValueError:
-            continue
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Supabase REST API
-# ---------------------------------------------------------------------------
-def _h():
-    return {
-        "apikey":        SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type":  "application/json",
-    }
-
-
-async def _supa_get(table: str, **params) -> list:
-    async with httpx.AsyncClient(timeout=20) as c:
-        r = await c.get(
-            f"{SUPABASE_URL}/rest/v1/{table}", params=params, headers=_h()
-        )
-        r.raise_for_status()
-        return r.json()
-
-
-async def _supa_upsert(records: list) -> bool:
-    headers = {**_h(), "Prefer": "resolution=merge-duplicates,return=minimal"}
-    try:
-        async with httpx.AsyncClient(timeout=60) as c:
-            r = await c.post(
-                # on_conflict tells PostgREST which constraint to use for upsert
-                f"{SUPABASE_URL}/rest/v1/planning_applications"
-                f"?on_conflict=council_id,reference",
-                json=records, headers=headers,
-            )
-            if r.status_code not in (200, 201, 204):
-                print(f"    ✗ Upsert HTTP {r.status_code}: {r.text[:300]}")
-                return False
-            return True
-    except Exception as e:
-        print(f"    ✗ Upsert exception: {e}")
-        return False
-
-
-async def _supa_patch_council(council_id: int, data: dict):
-    async with httpx.AsyncClient(timeout=10) as c:
-        await c.patch(
-            f"{SUPABASE_URL}/rest/v1/councils",
-            params={"id": f"eq.{council_id}"},
-            json=data,
-            headers={**_h(), "Prefer": "return=minimal"},
-        )
-
-
-# ---------------------------------------------------------------------------
-# Geocoding
-# ---------------------------------------------------------------------------
-async def geocode(postcodes: list[str]) -> dict:
-    results = {}
-    unique = list({p.strip().upper().replace(" ", "") for p in postcodes if p})
-    if not unique: return results
-    async with httpx.AsyncClient(timeout=15) as c:
-        for i in range(0, len(unique), 100):
-            try:
-                r = await c.post(
-                    "https://api.postcodes.io/postcodes",
-                    json={"postcodes": unique[i:i + 100]},
-                )
-                for item in r.json().get("result", []):
-                    if item and item.get("result"):
-                        results[item["query"]] = (
-                            item["result"]["latitude"],
-                            item["result"]["longitude"],
-                        )
-            except Exception:
-                pass
-            await asyncio.sleep(0.3)
-    return results
-
-
-# ---------------------------------------------------------------------------
-# HTML parsing (same logic as before, now fed by Playwright page.content())
-# ---------------------------------------------------------------------------
-def _abs_url(base_url: str, domain_root: str, href: str) -> str:
-    if not href: return ""
-    if href.startswith("http"): return href
-    if href.startswith("/"): return f"{domain_root}{href}"
-    return f"{base_url}/{href.lstrip('/')}"
-
-
-def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> Optional[dict]:
-    link = item.find("a", href=True)
-    if not link: return None
-
-    portal_url = _abs_url(base_url, domain_root, link.get("href", ""))
-
-    # In Idox MONTHLY LIST the <h2> heading is the DESCRIPTION, not the reference.
-    # The planning reference (e.g. "25/01234/FUL") is in p.metaInfo as "Ref. No: ..."
-    heading = item.find(re.compile(r"h[2-4]"))
-    heading_text = heading.get_text(strip=True) if heading else link.get_text(strip=True)
-
-    # Parse metadata fields first (metaInfo contains the real reference)
-    fields: dict[str, str] = {}
-    meta = item.find(class_=re.compile(r"metaInfo|meta-info|metadata", re.I))
-    if meta:
-        for part in meta.get_text(strip=True).split("|"):
-            part = part.strip()
-            if ":" in part:
-                k, _, v = part.partition(":")
-                fields[k.strip().lower()] = v.strip()
-
-    for dl in item.find_all("dl"):
-        for dt, dd in zip(dl.find_all("dt"), dl.find_all("dd")):
-            k = dt.get_text(strip=True).lower().rstrip(":")
-            v = dd.get_text(" ", strip=True)
-            fields[k] = v
-
-    # ── REFERENCE: metaInfo first (e.g. "Ref. No: 25/01234/FUL") ──────────
-    ref = (
-        fields.get("ref. no") or
-        fields.get("ref no") or
-        fields.get("reference") or
-        fields.get("ref") or
-        fields.get("app. no") or
-        fields.get("application no") or
-        ""
-    ).strip()
-
-    # Fallback: heading text if it looks like a real reference (has digits + slash)
-    if not ref:
-        if re.search(r'\d', heading_text) and ('/' in heading_text or '-' in heading_text):
-            ref = heading_text
-        else:
-            ref = link.get_text(strip=True)
-
-    if not ref or len(ref) < 3:
-        return None
-
-    # ── ADDRESS ─────────────────────────────────────────────────────────────
-    address = ""
-    addr_el = item.find(class_=re.compile(r"\baddress\b", re.I))
-    if addr_el:
-        address = addr_el.get_text(" ", strip=True)
-    if not address:
-        address = (
-            fields.get("address") or
-            fields.get("site address") or
-            fields.get("location") or ""
-        )
-
-    # ── DESCRIPTION: heading IS the description in monthly list mode ────────
-    description = (
-        fields.get("proposal") or
-        fields.get("description") or
-        fields.get("development description") or
-        heading_text
-    )
-    if description == ref:
-        description = ""
-
-    app_type  = fields.get("application type") or fields.get("type") or ""
-    status_raw = fields.get("status") or fields.get("decision") or ""
-    date_raw   = (
-        fields.get("date received") or
-        fields.get("date valid") or
-        fields.get("date validated") or
-        fields.get("date registered") or
-        fields.get("date of receipt") or
-        fields.get("received") or
-        fields.get("validated") or
-        fields.get("valid") or
-        fields.get("registered") or
-        fields.get("reg. date") or
-        fields.get("reg date") or
-        ""
-    )
-
-    return {
-        "reference":        ref.strip(),
-        "address":          address.strip(),
-        "postcode":         _extract_postcode(address),
-        "lat":              None,
-        "lng":              None,
-        "description":      description.strip(),
-        "application_type": app_type.strip(),
-        "status":           _normalise_status(status_raw),
-        "submitted_date":   _parse_date(date_raw),
-        "decision_date":    None,
-        "council_name":     council_name,
-        "council_url":      portal_url,
-        "source":           "idox_scraper",
-    }
-
-
-def parse_results_page(
-    html: str, base_url: str, domain_root: str, council_name: str
-) -> tuple[list[dict], bool]:
-    soup = BeautifulSoup(html, "html.parser")
-    apps = []
-
-    container = (
-        soup.find("ul", class_="searchresults")
-        or soup.find("ul", id="searchresults")
-        or soup.find("div", class_="searchresults")
-        or soup.find("div", id="searchResultsContainer")
-    )
-    if not container:
-        return apps, False
-
-    items = (
-        container.find_all("li", class_="searchresult")
-        or container.find_all("tr")
-    )
-
-    for item in items:
-        app = _parse_result(item, base_url, domain_root, council_name)
-        if app:
-            apps.append(app)
-
-    # Idox pagination — try multiple patterns
-    has_next = bool(
-        # Text-based "Next" link
-        soup.find("a", string=re.compile(r"^Next$", re.I))
-        or soup.find("a", string=re.compile(r"Next page", re.I))
-        # Class-based
-        or soup.find("a", {"class": "next"})
-        or soup.find("li", {"class": "next"})
-        or soup.find("span", {"class": "next"})
-        # Common Idox pager with ">" or ">>" symbols
-        or soup.find("a", string=re.compile(r"^[>»]$"))
-        # Page count indicator: "1 - 10 of 45" → more pages exist
-        or _has_more_pages(soup)
-    )
-    return apps, has_next
-
-
-def _has_more_pages(soup) -> bool:
-    """Detect pagination from 'Displaying X to Y of Z' style counters."""
-    # Pattern: "Displaying 1 to 10 of 45 results"
-    text = soup.get_text()
-    m = re.search(
-        r"(?:displaying|showing|results?)\s+(\d+)\s+(?:to|-)\s+(\d+)\s+of\s+(\d+)",
-        text, re.I
-    )
-    if m:
-        end, total = int(m.group(2)), int(m.group(3))
-        return end < total
-    # Pattern: "Page 1 of 5"
-    m = re.search(r"page\s+(\d+)\s+of\s+(\d+)", text, re.I)
-    if m:
-        current, total_pages = int(m.group(1)), int(m.group(2))
-        return current < total_pages
-    return False
-
-
-# ---------------------------------------------------------------------------
-# Playwright scraper
-# ---------------------------------------------------------------------------
-# Realistic browser headers / viewport to avoid bot detection
-BROWSER_ARGS = [
-    "--no-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-blink-features=AutomationControlled",
-]
-CONTEXT_OPTIONS = {
-    "user_agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "viewport":       {"width": 1280, "height": 800},
-    "locale":         "en-GB",
-    "timezone_id":    "Europe/London",
-    "java_script_enabled": True,
-    "ignore_https_errors": True,
+COUNCIL_DB_IDS: dict[str, int] = {
+    "Babergh District Council":                  9,
+    "Bedford Borough Council":                   12,
+    "Blackpool Council":                         15,
+    "Brighton and Hove City Council":            20,
+    "Cheshire West and Chester Council":         27,
+    "City of London":                            28,   # note: NOT "Corporation" in DB
+    "Gloucester City Council":                   37,
+    "Leeds City Council":                        48,
+    "Nottingham City Council":                   57,
+    "Plymouth City Council":                     59,
+    "Wolverhampton City Council":                79,
+    "Canterbury City Council":                   82,
+    "Stockport Metropolitan Borough Council":    167,
+    "Bolton Metropolitan Borough Council":       169,
+    "Rochdale Borough Council":                  172,
+    "Tameside Metropolitan Borough Council":     173,
+    "Bradford Metropolitan District Council":    175,
+    "Knowsley Metropolitan Borough Council":     180,
+    "Sefton Metropolitan Borough Council":       185,
+    "Halton Borough Council":                    186,
+    "North Tyneside Council":                    200,
+    "Durham County Council":                     201,
+    "Gateshead Council":                         198,
+    "Portsmouth City Council":                   206,
+    "Cheltenham Borough Council":                213,
+    "Ipswich Borough Council":                   215,
+    "Solihull Metropolitan Borough Council":     192,
+    "London Borough of Tower Hamlets":           222,
+    "London Borough of Newham":                  223,
+    "London Borough of Waltham Forest":          224,
+    "London Borough of Richmond upon Thames":    235,
+    "London Borough of Brent":                   240,
+    "Dacorum Borough Council":                   30,
+    "Hertsmere Borough Council":                 43,
+    "Wakefield Metropolitan District Council":   245,
+    "Doncaster Metropolitan Borough Council":    246,
+    "Darlington Borough Council":                247,
+    "Northumberland County Council":             248,
+    "Rutland County Council":                    249,
+    "Stoke-on-Trent City Council":               250,
+    "Isle of Wight Council":                     251,
+    "Gravesham Borough Council":                 252,
+    "Maidstone Borough Council":                 253,
+    "Thanet District Council":                   254,
+    "Mid Sussex District Council":               255,
+    "Adur District Council":                     256,
+    "South Downs National Park Authority":       257,
+    "West Berkshire Council":                    258,
+    "Windsor and Maidenhead Borough Council":    259,
+    "Epsom and Ewell Borough Council":           260,
+    "Cornwall Council":                          261,
+    "South Gloucestershire Council":             262,
+    "North Somerset Council":                    263,
+    "Thurrock Council":                          264,
+    "Tendring District Council":                 265,
+    "London Borough of Hammersmith and Fulham":  266,
+    "City of Westminster":                       267,
+    # --- Surrey/Kent/Sussex/Essex/Herts/Cambs districts seeded Jun 2026 ---
+    "Guildford Borough Council":                 268,
+    "Surrey Heath Borough Council":              269,
+    "Spelthorne Borough Council":                270,
+    "Sevenoaks District Council":                271,
+    "Dover District Council":                    272,
+    "Tonbridge and Malling Borough Council":     273,
+    "Tunbridge Wells Borough Council":           274,
+    "Lewes District Council":                    275,
+    "Rother District Council":                   276,
+    "Wealden District Council":                  277,
+    "Chichester District Council":               278,
+    "Crawley Borough Council":                   279,
+    "Horsham District Council":                  280,
+    "Basildon Borough Council":                  281,
+    "Braintree District Council":                282,
+    "Castle Point Borough Council":              283,
+    "Chelmsford City Council":                   284,
+    "Harlow District Council":                   285,
+    "Maldon District Council":                   286,
+    "Southend-on-Sea City Council":              287,
+    "Uttlesford District Council":               288,
+    "East Hertfordshire District Council":       289,
+    "Stevenage Borough Council":                 290,
+    "Three Rivers District Council":             291,
+    "Welwyn Hatfield Borough Council":           292,
+    "Huntingdonshire District Council":          293,
+    "Havant Borough Council":                    294,
+    "East Hampshire District Council":           295,
+    # --- Hampshire/Oxon/Norfolk/Cambs seeded Jun 2026 ---
+    "Gosport Borough Council":                   296,
+    "Hart District Council":                     297,
+    "Basingstoke and Deane Borough Council":     298,
+    "Rushmoor Borough Council":                  299,
+    "New Forest District Council":               300,
+    "Eastleigh Borough Council":                 301,
+    "West Oxfordshire District Council":         302,
+    "Breckland District Council":                303,
+    "Fenland District Council":                  304,
+    # --- Lancashire/Cambs/Norfolk/Derbys seeded Jun 2026 ---
+    "Great Yarmouth Borough Council":            305,   # Northgate - commented out
+    "East Cambridgeshire District Council":      306,
+    "South Cambridgeshire District Council":     307,
+    "Lancaster City Council":                    308,
+    "Preston City Council":                      309,
+    "Burnley Borough Council":                   310,
+    "South Ribble Borough Council":              311,
+    "Pendle Borough Council":                    312,
+    "Chorley Borough Council":                   313,
+    "Wyre Borough Council":                      314,
+    "Rossendale Borough Council":                315,
+    "West Lancashire Borough Council":           316,
+    "Chesterfield Borough Council":              317,
 }
 
+IDOX_COUNCILS = [
 
-class IdoxPortal:
-    """Scrapes one Idox planning portal via Playwright."""
+    # -------------------------------------------------------------------------
+    # GREATER MANCHESTER — all 9 boroughs (excl. Wigan, already on open data)
+    # -------------------------------------------------------------------------
+    # BROKEN — Manchester moved off Idox to Arcus BE (Salesforce):
+    # arcusbe.manchester.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register
+    # ("Manchester City Council",
+    #  "https://pa.manchester.gov.uk/online-applications"),
 
-    def __init__(self, council_name: str, base_url: str, db_council_id: int):
-        self.council_name = council_name
-        self.base_url = base_url.rstrip("/")
-        self.db_council_id = db_council_id   # ← locked to this portal, immune to concurrency
-        parsed = urlparse(self.base_url)
-        self.domain_root = f"{parsed.scheme}://{parsed.netloc}"
+    # BROKEN — Salford moved off Idox to Arcus BE (Salesforce):
+    # salfordcitycouncil.my.site.com/pr/s/register-view?c__r=Arcus_BE_Public_Register
+    # ("Salford City Council",
+    #  "https://publicaccess.salford.gov.uk/online-applications"),
 
-    async def scrape(self, browser: Browser, days_back: int = 7) -> list[dict]:
-        cutoff = date.today() - timedelta(days=days_back)
+    ("Stockport Metropolitan Borough Council",
+     "https://planning.stockport.gov.uk/PlanningData-live"),
 
-        # Build the full list of calendar months to scrape.
-        # Fast mode (7 days): 1-2 months. Bulk mode (365 days): up to 13 months.
-        months: list[date] = []
-        m = date.today().replace(day=1)
-        cutoff_month = cutoff.replace(day=1)
-        while m >= cutoff_month:
-            months.append(m)
-            if m.month == 1:
-                m = m.replace(year=m.year - 1, month=12)
-            else:
-                m = m.replace(month=m.month - 1)
+    ("Trafford Council",
+     "https://pa.trafford.gov.uk/online-applications"),
 
-        all_apps: list[dict] = []
+    ("Bolton Metropolitan Borough Council",
+     "https://paplanning.bolton.gov.uk/online-applications"),
 
-        context: BrowserContext = await browser.new_context(**CONTEXT_OPTIONS)
-        try:
-            page: Page = await context.new_page()
-            # Mask automation flags
-            await page.add_init_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-            )
+    # BROKEN — planning.bury.gov.uk redirects to Tameside's server; Bury needs research.
+    # ("Bury Metropolitan Borough Council",
+    #  "https://planning.bury.gov.uk/online-applications"),
 
-            for target_month in months:
-                apps = await self._scrape_month(page, target_month)
-                # Tag with the searched month for fallback date — but don't
-                # set submitted_date yet so the 7-day filter still passes them through
-                month_str = target_month.replace(day=1).isoformat()
-                for app in apps:
-                    if not app.get("submitted_date"):
-                        app["_month_fallback"] = month_str
-                all_apps.extend(apps)
-        except Exception as e:
-            print(f"    ✗ Context error: {e}")
-        finally:
-            await context.close()
+    # NOTE: planningpa.oldham.gov.uk redirects to Rochdale's Idox server.
+    # Using it here so Rochdale (id=172) gets its own data correctly.
+    # Oldham's own correct URL needs research.
+    ("Rochdale Borough Council",
+     "https://planningpa.oldham.gov.uk/online-applications"),
 
-        recent = [
-            a for a in all_apps
-            if not a.get("submitted_date") or a["submitted_date"] >= cutoff.isoformat()
-        ]
+    # BROKEN — original URL redirects to Rochdale's server instead of Oldham's own data.
+    # Needs correct URL research before re-enabling.
+    # ("Oldham Metropolitan Borough Council",
+    #  "https://planningpa.oldham.gov.uk/online-applications"),
 
-        # Apply month-based fallback dates AFTER the filter (so "2026-06-01" doesn't
-        # get rejected by the 7-day cutoff check)
-        for app in recent:
-            if not app.get("submitted_date") and app.get("_month_fallback"):
-                app["submitted_date"] = app["_month_fallback"]
-            app.pop("_month_fallback", None)  # never send temp field to DB
+    # NOTE: planning.bury.gov.uk redirects to Tameside's Idox server.
+    ("Tameside Metropolitan Borough Council",
+     "https://planning.bury.gov.uk/online-applications"),
 
-        print(f"    {len(all_apps)} this month → {len(recent)} in last {days_back} days")
-        return recent
+    # -------------------------------------------------------------------------
+    # YORKSHIRE
+    # -------------------------------------------------------------------------
+    ("Sheffield City Council",
+     "https://planningapps.sheffield.gov.uk/online-applications"),
 
-    async def _scrape_month(self, page: Page, for_month: date) -> list[dict]:
-        """Load the monthly list, submit it for date received, collect all pages."""
-        # Don't pre-specify dateType in the URL — some portals only support DV
-        # (Date Validated) not DC (Date Confirmed/Received), so forcing DC gives 0.
-        # Instead let the form default apply, then try to click the best radio.
-        monthly_url = (
-            f"{self.base_url}/search.do"
-            f"?action=monthlyList"
-            f"&searchCriteria.monthYearIndex=0"
-            f"&searchType=Application"
-        )
+    ("Bradford Metropolitan District Council",
+     "https://planning.bradford.gov.uk/online-applications"),
 
-        # — Step 1: Navigate to monthly list page —
-        try:
-            await page.goto(monthly_url, wait_until="domcontentloaded", timeout=45_000)
-        except PlaywrightTimeout:
-            print(f"    ⚠ Page load timeout")
-            return []
-        except Exception as e:
-            print(f"    ⚠ Navigation error: {e}")
-            return []
+    ("Calderdale Metropolitan Borough Council",
+     "https://portal.calderdale.gov.uk/online-applications"),
 
-        # Wait for form or results to appear
-        try:
-            await page.wait_for_selector(
-                "#monthlyListForm, form, ul.searchresults",
-                timeout=12_000,
-            )
-        except PlaywrightTimeout:
-            title = await page.title()
-            print(f"    ⚠ Nothing loaded — title: '{title[:60]}'")
-            return []
+    # BROKEN — Kirklees uses a custom ASPX system (kirklees.gov.uk/beta/planning-applications), not Idox.
+    # ("Kirklees Council",
+    #  "https://www.kirklees.gov.uk/online-applications"),
 
-        # — Step 2: Click "date received" radio & submit form —
-        form_submitted = False
+    # -------------------------------------------------------------------------
+    # NORTH WEST (excl. Greater Manchester)
+    # -------------------------------------------------------------------------
+    # BROKEN — Liverpool moved off Idox to a non-Idox system (similar to Warrington's online.warrington.gov.uk).
+    # ("Liverpool City Council",
+    #  "https://planning.liverpool.gov.uk/online-applications"),
 
-        # Explicitly select the first/current month in the dropdown
-        # (some portals have no default, causing 0 results if not set)
-        for month_sel in [
-            "select[id='searchCriteria.monthYearIndex']",
-            "select[name='searchCriteria.monthYearIndex']",
-            "select[name*='monthYear']",
-            "select[id*='monthYear']",
-        ]:
-            try:
-                loc = page.locator(month_sel)
-                if await loc.count() > 0:
-                    await loc.select_option(index=0)
-                    break
-            except Exception:
-                continue
+    # BROKEN — Wirral uses LAR/Built ID system (online.wirral.gov.uk/planning), not Idox.
+    # ("Wirral Metropolitan Borough Council",
+    #  "https://www.wirral.gov.uk/online-applications"),
 
-        # Try clicking the date-received radio button.
-        # Different Idox versions use different values: dateReceived, dc, dv, dr.
-        # Try DC/Received first, fall back to DV (Validated) then DR (Registered).
-        for radio_sel in [
-            "input#dateReceived",
-            "input[value='dateReceived']",
-            "input[id*='Received'][type='radio']",
-            "input[name*='date'][value*='eceiv']",
-            "label:has-text('Received') input",
-            "input[value='dc']",
-            "input[value='DC']",
-            "input[value='dv']",
-            "input[value='DV']",
-            "input[id*='Validated'][type='radio']",
-            "label:has-text('Validated') input",
-        ]:
-            try:
-                loc = page.locator(radio_sel)
-                if await loc.count() > 0:
-                    await loc.first.click()
-                    break
-            except Exception:
-                continue
+    ("Knowsley Metropolitan Borough Council",
+     "https://planapp.knowsley.gov.uk/online-applications"),
 
-        # Submit the form
-        for submit_sel in [
-            "#monthlyListForm input[type='submit']",
-            "#monthlyListForm input.button",
-            "form input[type='submit']",
-            "form button[type='submit']",
-            "input.button",
-        ]:
-            try:
-                loc = page.locator(submit_sel)
-                if await loc.count() > 0:
-                    await loc.first.click()
-                    form_submitted = True
-                    break
-            except Exception:
-                continue
+    # BROKEN — St Helens selected Idox Cloud (announced May 2026) but portal not yet live.
+    # publicaccess.sthelens.gov.uk times out. Re-enable once migration completes.
+    # ("St. Helens Metropolitan Borough Council",
+    #  "https://publicaccess.sthelens.gov.uk/online-applications"),
 
-        if not form_submitted:
-            # Some portals go straight to results without form interaction
-            pass
+    # BROKEN — Warrington moved off Idox to online.warrington.gov.uk/planning (non-Idox system).
+    # ("Warrington Borough Council",
+    #  "https://pa.warrington.gov.uk/online-applications"),
 
-        # Wait for results
-        try:
-            await page.wait_for_selector(
-                "ul.searchresults, #searchResultsContainer, .searchresults, "
-                ".no-results, #searchResultsForm",
-                timeout=25_000,
-            )
-        except PlaywrightTimeout:
-            title = await page.title()
-            print(f"    ⚠ Results timeout — title: '{title[:60]}'")
-            return []
+    ("Cheshire West and Chester Council",
+     "https://pa.cheshirewestandchester.gov.uk/online-applications"),
 
-        # — Step 3: Collect all pages —
-        all_apps: list[dict] = []
-        page_num = 1
+    ("Cheshire East Council",
+     "https://planning.cheshireeast.gov.uk/online-applications"),
 
-        while True:
-            html = await page.content()
-            apps, has_next = parse_results_page(
-                html, self.base_url, self.domain_root, self.council_name
-            )
-            all_apps.extend(apps)
+    # Sefton's own Idox portal (confirmed — shows "Sefton Council" branding).
+    ("Sefton Metropolitan Borough Council",
+     "https://pa.sefton.gov.uk/online-applications"),
 
-            if page_num == 1 and len(apps) > 0:
-                print(f"    Page 1: {len(apps)} results")
+    # Halton's own Idox portal (pa.halton.gov.uk — different from Sefton's).
+    ("Halton Borough Council",
+     "https://pa.halton.gov.uk/online-applications"),
 
-            # Continue if explicit Next link OR got a full page (try page 2)
-            should_continue = has_next or (len(apps) >= 10)
-            if not should_continue or not apps or page_num >= 50:
-                break
+    # -------------------------------------------------------------------------
+    # WEST MIDLANDS
+    # -------------------------------------------------------------------------
+    # Coventry moved to planandregulatory.coventry.gov.uk (not Idox) — removed
 
-            page_num += 1
-            next_url = (
-                f"{self.base_url}/pagedSearchResults.do"
-                f"?action=page&searchCriteria.page={page_num}"
-            )
-            try:
-                await page.goto(
-                    next_url, wait_until="domcontentloaded", timeout=15_000
-                )
-                # Give JS time to render — don't use wait_for_selector here
-                # as it can time out on pages that use non-standard selectors
-                await asyncio.sleep(2)
-            except Exception as e:
-                print(f"    Page {page_num} nav error: {e}")
-                break
+    # BROKEN — /planning/search-planning-applications returns 404. Trying /online-applications.
+    ("Wolverhampton City Council",
+     "https://planningonline.wolverhampton.gov.uk/online-applications"),
 
-        if page_num > 1:
-            print(f"    Total across {page_num} pages: {len(all_apps)}")
-        return all_apps
+    # BROKEN — Walsall uses Swift LG (planning.walsall.gov.uk/swift/...), not Idox.
+    # ("Walsall Metropolitan Borough Council",
+    #  "https://www.walsall.gov.uk/online-applications"),
 
+    ("Sandwell Metropolitan Borough Council",
+     "https://webcaps.sandwell.gov.uk/publicaccess"),
+
+    # BROKEN — Dudley uses Agile Applications (planning.agileapplications.co.uk/dudley), not Idox.
+    # ("Dudley Metropolitan Borough Council",
+    #  "https://www.dudley.gov.uk/online-applications"),
+
+    ("Solihull Metropolitan Borough Council",
+     "https://publicaccess.solihull.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # EAST MIDLANDS
+    # -------------------------------------------------------------------------
+    # BROKEN — Leicester left Idox, now uses DEF Software (planning.leicester.gov.uk).
+    # ("Leicester City Council",
+    #  "https://publicaccess.leicester.gov.uk/online-applications"),
+
+    ("Derby City Council",
+     "https://eplanning.derby.gov.uk/online-applications"),
+
+    ("Nottingham City Council",
+     "https://publicaccess.nottinghamcity.gov.uk/online-applications"),
+
+    ("Rutland County Council",
+     "https://publicaccess.rutland.gov.uk/online-applications"),
+
+    ("Stoke-on-Trent City Council",
+     "https://planning.stoke.gov.uk/online-applications"),
+
+    ("Blackpool Council",
+     "https://idoxpa.blackpool.gov.uk/online-applications"),
+
+    # BROKEN — Nottinghamshire uses a custom non-Idox system.
+    # ("Nottinghamshire County Council",
+    #  "https://publicaccess.nottinghamshire.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # NORTH EAST
+    # -------------------------------------------------------------------------
+    ("Newcastle City Council",
+     "https://publicaccessapplications.newcastle.gov.uk/online-applications"),
+
+    ("Sunderland City Council",
+     "https://online-applications.sunderland.gov.uk/online-applications"),
+
+    # North Tyneside has its own Idox server. public.gateshead.gov.uk is Gateshead's server.
+    ("North Tyneside Council",
+     "https://idoxpublicaccess.northtyneside.gov.uk/online-applications"),
+
+    ("Gateshead Council",
+     "https://public.gateshead.gov.uk/online-applications"),
+
+    # BROKEN — South Tyneside uses Northgate (planning.southtyneside.info), not Idox.
+    # ("South Tyneside Metropolitan Borough Council",
+    #  "https://www.southtyneside.gov.uk/online-applications"),
+
+    # BROKEN — publicaccess.durham.gov.uk is the official URL but shares Idox
+    # infrastructure with Stockton-on-Tees; the monthly list returns Stockton's
+    # applications rather than Durham's own. Commented out until a scoped URL is found.
+    # ("Durham County Council",
+    #  "https://publicaccess.durham.gov.uk/online-applications"),
+
+    ("Middlesbrough Council",
+     "https://www.middlesbrough.gov.uk/online-applications"),
+
+    ("Stockton-on-Tees Borough Council",
+     "https://www.stockton.gov.uk/online-applications"),
+
+    ("Darlington Borough Council",
+     "https://publicaccess.darlington.gov.uk/online-applications"),
+
+    ("Northumberland County Council",
+     "https://publicaccess.northumberland.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # YORKSHIRE AND THE HUMBER
+    # -------------------------------------------------------------------------
+    ("Leeds City Council",
+     "https://publicaccess.leeds.gov.uk/online-applications"),
+
+    ("Wakefield Metropolitan District Council",
+     "https://planning.wakefield.gov.uk/online-applications"),
+
+    # BROKEN — Doncaster is blocked by Cloudflare ("Just a moment..." challenge).
+    # ("Doncaster Metropolitan Borough Council",
+    #  "https://planning.doncaster.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # SOUTH EAST
+    # -------------------------------------------------------------------------
+    ("Brighton and Hove City Council",
+     "https://planningapps.brighton-hove.gov.uk/online-applications"),
+
+    ("Southampton City Council",
+     "https://planningpublicaccess.southampton.gov.uk/online-applications"),
+
+    ("Portsmouth City Council",
+     "https://publicaccess.portsmouth.gov.uk/online-applications"),
+
+    ("Reading Borough Council",
+     "https://planning.reading.gov.uk/online-applications"),
+
+    # BROKEN — Milton Keynes moved to Arcus BE (be.milton-keynes.gov.uk), same as Manchester/Salford.
+    # ("Milton Keynes City Council",
+    #  "https://www.milton-keynes.gov.uk/online-applications"),
+
+    ("Oxford City Council",
+     "https://public.oxford.gov.uk/online-applications"),
+
+    # BROKEN — Medway moved to Open Digital Planning (planningregister.org/medway), not Idox.
+    # ("Medway Council",
+    #  "https://publicaccess.medway.gov.uk/online-applications"),
+
+    ("Isle of Wight Council",
+     "https://publicaccess.iow.gov.uk/online-applications"),
+
+    ("Canterbury City Council",
+     "https://pa.canterbury.gov.uk/online-applications"),
+
+    ("Gravesham Borough Council",
+     "https://plan.gravesham.gov.uk/online-applications"),
+
+    # NOTE: pa.midkent.gov.uk is a shared server for Maidstone, Swale and Tunbridge Wells.
+    ("Maidstone Borough Council",
+     "https://pa.midkent.gov.uk/online-applications"),
+
+    ("Thanet District Council",
+     "https://planning.thanet.gov.uk/online-applications"),
+
+    ("Mid Sussex District Council",
+     "https://pa.midsussex.gov.uk/online-applications"),
+
+    ("Adur District Council",
+     "https://planning.adur-worthing.gov.uk/online-applications"),
+
+    ("South Downs National Park Authority",
+     "https://planningpublicaccess.southdowns.gov.uk/online-applications"),
+
+    # BROKEN — Bracknell Forest moved to Arcus BE (Salesforce):
+    # publicaccess.bracknell-forest.gov.uk/s/register-view?c__r=Arcus_BE_Public_Register
+    # planapp.bracknell-forest.gov.uk DNS is dead (decommissioned).
+    # ("Bracknell Forest Council",
+    #  "https://planapp.bracknell-forest.gov.uk/online-applications"),
+
+    ("West Berkshire Council",
+     "https://publicaccess.westberks.gov.uk/online-applications"),
+
+    ("Windsor and Maidenhead Borough Council",
+     "https://publicaccess.rbwm.gov.uk/online-applications"),
+
+    ("Epsom and Ewell Borough Council",
+     "https://eplanning.epsom-ewell.gov.uk/online-applications"),
+
+    # --- SURREY districts ---
+    ("Guildford Borough Council",
+     "https://publicaccess.guildford.gov.uk/online-applications"),
+
+    ("Surrey Heath Borough Council",
+     "https://publicaccess.surreyheath.gov.uk/online-applications"),
+
+    ("Spelthorne Borough Council",
+     "https://publicaccess.spelthorne.gov.uk/online-applications"),
+
+    # NOT Idox — skip: Waverley (planning360 system), Runnymede (Northgate),
+    # Elmbridge (emaps system), Woking/Tandridge/Mole Valley/Reigate (DNS not resolved)
+
+    # --- KENT districts ---
+    ("Sevenoaks District Council",
+     "https://pa.sevenoaks.gov.uk/online-applications"),
+
+    ("Dover District Council",
+     "https://publicaccess.dover.gov.uk/online-applications"),
+
+    ("Tonbridge and Malling Borough Council",
+     "https://publicaccess.tmbc.gov.uk/online-applications"),
+
+    # NOTE: twbcpa.midkent.gov.uk is Tunbridge Wells' partition of the shared midkent server.
+    ("Tunbridge Wells Borough Council",
+     "https://twbcpa.midkent.gov.uk/online-applications"),
+
+    # --- EAST SUSSEX districts ---
+    # NOTE: planningpa.lewes-eastbourne.gov.uk is a shared server for Lewes and Eastbourne.
+    ("Lewes District Council",
+     "https://planningpa.lewes-eastbourne.gov.uk/online-applications"),
+
+    ("Rother District Council",
+     "https://planweb01.rother.gov.uk/online-applications"),
+
+    ("Wealden District Council",
+     "https://planning.wealden.gov.uk/online-applications"),
+
+    # --- WEST SUSSEX districts ---
+    ("Chichester District Council",
+     "https://publicaccess.chichester.gov.uk/online-applications"),
+
+    # BROKEN — Crawley uses bespoke ASP.NET system at planningregister.crawley.gov.uk
+    # (URL pattern: /Disclaimer?returnUrl=/Planning/Display/CR/...) — not Idox.
+    # ("Crawley Borough Council",
+    #  "https://planningregister.crawley.gov.uk/online-applications"),
+
+    ("Horsham District Council",
+     "https://public-access.horsham.gov.uk/public-access"),
+
+    # -------------------------------------------------------------------------
+    # HAMPSHIRE — additional Idox portals found during South East expansion
+    # -------------------------------------------------------------------------
+    ("Havant Borough Council",
+     "https://planningpublicaccess.havant.gov.uk/online-applications"),
+
+    ("East Hampshire District Council",
+     "https://planningpublicaccess.easthants.gov.uk/online-applications"),
+
+    # --- ESSEX districts ---
+    ("Basildon Borough Council",
+     "https://planning.basildon.gov.uk/online-applications"),
+
+    ("Braintree District Council",
+     "https://publicaccess.braintree.gov.uk/online-applications"),
+
+    ("Castle Point Borough Council",
+     "https://publicaccess.castlepoint.gov.uk/online-applications"),
+
+    ("Chelmsford City Council",
+     "https://publicaccess.chelmsford.gov.uk/online-applications"),
+
+    ("Harlow District Council",
+     "https://planningonline.harlow.gov.uk/online-applications"),
+
+    ("Maldon District Council",
+     "https://publicaccess.maldon.gov.uk/online-applications"),
+
+    ("Southend-on-Sea City Council",
+     "https://publicaccess.southend.gov.uk/online-applications"),
+
+    ("Uttlesford District Council",
+     "https://publicaccess.uttlesford.gov.uk/online-applications"),
+
+    # --- HERTFORDSHIRE districts ---
+    # BROKEN — Dacorum's server (planning.dacorum.gov.uk/publicaccess) gives
+    # ERR_EMPTY_RESPONSE consistently — accepts TCP but sends nothing back.
+    # URL is correct but server appears to block cloud provider IP ranges.
+    # ("Dacorum Borough Council",
+    #  "https://planning.dacorum.gov.uk/publicaccess"),
+
+    ("East Hertfordshire District Council",
+     "https://publicaccess.eastherts.gov.uk/online-applications"),
+
+    ("Hertsmere Borough Council",
+     "https://www6.hertsmere.gov.uk/online-applications"),
+
+    ("Stevenage Borough Council",
+     "https://publicaccess.stevenage.gov.uk/online-applications"),
+
+    ("Three Rivers District Council",
+     "https://www3.threerivers.gov.uk/online-applications"),
+
+    ("Welwyn Hatfield Borough Council",
+     "https://planning.welhat.gov.uk/online-applications"),
+
+    # --- CAMBRIDGESHIRE ---
+    ("Huntingdonshire District Council",
+     "https://publicaccess.huntingdonshire.gov.uk/online-applications"),
+
+    # BROKEN — Fenland gives ERR_HTTP2_PROTOCOL_ERROR (server-side HTTP/2 config issue).
+    # ("Fenland District Council",
+    #  "https://publicaccess.fenland.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # HAMPSHIRE districts (all confirmed Idox via 403 bot-block test)
+    # Note: Winchester (ASPX), Fareham (bespoke ASPX), Test Valley (unknown) skip
+    # Hampshire reorganises into 4 unitaries ~2027 but districts still process apps now
+    # -------------------------------------------------------------------------
+    ("Gosport Borough Council",
+     "https://publicaccess.gosport.gov.uk/online-applications"),
+
+    ("Hart District Council",
+     "https://publicaccess.hart.gov.uk/online-applications"),
+
+    ("Basingstoke and Deane Borough Council",
+     "https://publicaccess.basingstoke.gov.uk/online-applications"),
+
+    ("Rushmoor Borough Council",
+     "https://publicaccess.rushmoor.gov.uk/online-applications"),
+
+    ("New Forest District Council",
+     "https://planning.newforest.gov.uk/online-applications"),
+
+    # BROKEN — Eastleigh's Idox portal requires login (not public access).
+    # ("Eastleigh Borough Council",
+    #  "https://planning.eastleigh.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # OXFORDSHIRE
+    # -------------------------------------------------------------------------
+    ("West Oxfordshire District Council",
+     "https://publicaccess.westoxon.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # NORFOLK
+    # -------------------------------------------------------------------------
+    ("Breckland District Council",
+     "https://planning.breckland.gov.uk/online-applications"),
+
+    # BROKEN — Great Yarmouth uses Northgate OcellaWeb system:
+    # planning.great-yarmouth.gov.uk/OcellaWeb/planningSearch — NOT Idox.
+    # ("Great Yarmouth Borough Council",
+    #  "https://planning.great-yarmouth.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # CAMBRIDGESHIRE
+    # -------------------------------------------------------------------------
+    ("East Cambridgeshire District Council",
+     "https://pa.eastcambs.gov.uk/online-applications"),
+
+    ("South Cambridgeshire District Council",
+     "https://planning.scambs.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # LANCASHIRE
+    # -------------------------------------------------------------------------
+    ("Lancaster City Council",
+     "https://planning.lancaster.gov.uk/online-applications"),
+
+    ("Preston City Council",
+     "https://publicaccess.preston.gov.uk/online-applications"),
+
+    ("Burnley Borough Council",
+     "https://publicaccess.burnley.gov.uk/online-applications"),
+
+    ("South Ribble Borough Council",
+     "https://publicaccess.southribble.gov.uk/online-applications"),
+
+    ("Pendle Borough Council",
+     "https://publicaccess.pendle.gov.uk/online-applications"),
+
+    ("Chorley Borough Council",
+     "https://planning.chorley.gov.uk/online-applications"),
+
+    ("Wyre Borough Council",
+     "https://publicaccess.wyre.gov.uk/online-applications"),
+
+    ("Rossendale Borough Council",
+     "https://publicaccess.rossendale.gov.uk/online-applications"),
+
+    ("West Lancashire Borough Council",
+     "https://publicaccess.westlancs.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # DERBYSHIRE
+    # -------------------------------------------------------------------------
+    ("Chesterfield Borough Council",
+     "https://publicaccess.chesterfield.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # SOUTH WEST
+    # -------------------------------------------------------------------------
+    # NOTE: planning.plymouth.gov.uk redirects to Gloucester's Idox server.
+    ("Gloucester City Council",
+     "https://planning.plymouth.gov.uk/online-applications"),
+
+    # BROKEN — planning.plymouth.gov.uk redirects to Gloucester; Plymouth needs research.
+    # ("Plymouth City Council",
+    #  "https://planning.plymouth.gov.uk/online-applications"),
+
+    ("Exeter City Council",
+     "https://publicaccess.exeter.gov.uk/online-applications"),
+
+    ("Cornwall Council",
+     "https://planning.cornwall.gov.uk/online-applications"),
+
+    ("South Gloucestershire Council",
+     "https://developments.southglos.gov.uk/online-applications"),
+
+    ("North Somerset Council",
+     "https://planning.n-somerset.gov.uk/online-applications"),
+
+    # NOTE: publicaccess.cheltenham.gov.uk redirects to Ipswich's Idox server.
+    ("Ipswich Borough Council",
+     "https://publicaccess.cheltenham.gov.uk/online-applications"),
+
+    # BROKEN — publicaccess.cheltenham.gov.uk redirects to Ipswich; Cheltenham needs research.
+    # ("Cheltenham Borough Council",
+    #  "https://publicaccess.cheltenham.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # EAST OF ENGLAND
+    # -------------------------------------------------------------------------
+    # Ipswich is now listed in SOUTH WEST section above (using Cheltenham's working URL)
+
+    ("Peterborough City Council",
+     "https://planpa.peterborough.gov.uk/online-applications"),
+
+    ("Norwich City Council",
+     "https://planning.norwich.gov.uk/online-applications"),
+
+    ("Thurrock Council",
+     "https://regs.thurrock.gov.uk/online-applications"),
+
+    ("Bedford Borough Council",
+     "https://publicaccess.bedford.gov.uk/online-applications"),
+
+    ("Babergh District Council",
+     "https://planning.baberghmidsuffolk.gov.uk/online-applications"),
+
+    ("Tendring District Council",
+     "https://idox.tendringdc.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # LONDON BOROUGHS — URLs verified from known working Idox installations
+    # Note: some use non-standard subdomains (pa., pam., publicaccess2. etc)
+    # Camden already covered by open data feed
+    # -------------------------------------------------------------------------
+    # BROKEN — Hackney moved off Idox; now uses planningapps.hackney.gov.uk (non-Idox system).
+    # ("London Borough of Hackney",
+    #  "https://planning.hackney.gov.uk/online-applications"),
+
+    ("London Borough of Southwark",
+     "https://planning.southwark.gov.uk/online-applications"),
+
+    ("London Borough of Lambeth",
+     "https://planning.lambeth.gov.uk/online-applications"),
+
+    # NOTE: planning.lewisham.gov.uk redirects to Waltham Forest's Idox server.
+    ("London Borough of Waltham Forest",
+     "https://planning.lewisham.gov.uk/online-applications"),
+
+    # BROKEN — planning.lewisham.gov.uk redirects to WF; Lewisham needs research.
+    # ("London Borough of Lewisham",
+    #  "https://planning.lewisham.gov.uk/online-applications"),
+
+    # NOTE: development.towerhamlets.gov.uk redirects to Newham's Idox server.
+    ("London Borough of Newham",
+     "https://development.towerhamlets.gov.uk/online-applications"),
+
+    # BROKEN — development.towerhamlets.gov.uk redirects to Newham; Tower Hamlets needs research.
+    # ("London Borough of Tower Hamlets",
+    #  "https://development.towerhamlets.gov.uk/online-applications"),
+
+    # BROKEN — Redbridge uses Swift LG (planning.redbridge.gov.uk/swiftlg/apas), not Idox.
+    # ("London Borough of Redbridge",
+    #  "https://www.redbridge.gov.uk/online-applications"),
+
+    # BROKEN — Havering uses OcellaWeb/Northgate (development.havering.gov.uk/OcellaWeb), not Idox.
+    # ("London Borough of Havering",
+    #  "https://development.havering.gov.uk/online-applications"),
+
+    ("London Borough of Bexley",
+     "https://pa.bexley.gov.uk/online-applications"),
+
+    # NOTE: planning.royalgreenwich.gov.uk redirects to Richmond's Idox server.
+    ("London Borough of Richmond upon Thames",
+     "https://planning.royalgreenwich.gov.uk/online-applications"),
+
+    # BROKEN — planning.royalgreenwich.gov.uk redirects to Richmond; Greenwich needs research.
+    # ("London Borough of Greenwich",
+    #  "https://planning.royalgreenwich.gov.uk/online-applications"),
+
+    ("London Borough of Bromley",
+     "https://searchapplications.bromley.gov.uk/online-applications"),
+
+    ("London Borough of Croydon",
+     "https://publicaccess3.croydon.gov.uk/online-applications"),
+
+    ("London Borough of Sutton",
+     "https://planningregister.sutton.gov.uk/online-applications"),
+
+    # BROKEN — Merton uses Northgate (planning.merton.gov.uk/Northgate), not Idox.
+    # ("London Borough of Merton",
+    #  "https://www.merton.gov.uk/online-applications"),
+
+    ("London Borough of Kingston upon Thames",
+     "https://publicaccess.kingston.gov.uk/online-applications"),
+
+    # Richmond now uses Greenwich's URL (see above); old www.richmond.gov.uk was broken.
+
+    # BROKEN — Hounslow uses a non-Idox system (planning.hounslow.gov.uk/Planning_Index.aspx).
+    # www.hounslow.gov.uk/online-applications redirects to Richmond's Idox server.
+    # ("London Borough of Hounslow",
+    #  "https://www.hounslow.gov.uk/online-applications"),
+
+    ("London Borough of Ealing",
+     "https://pam.ealing.gov.uk/online-applications"),
+
+    # BROKEN — Hillingdon uses OcellaWeb/Northgate (planning.hillingdon.gov.uk/OcellaWeb), not Idox.
+    # ("London Borough of Hillingdon",
+    #  "https://www.hillingdon.gov.uk/online-applications"),
+
+    # BROKEN — Harrow uses a custom system (planningsearch.harrow.gov.uk/planning/search-applications), not Idox.
+    # ("London Borough of Harrow",
+    #  "https://www.harrow.gov.uk/online-applications"),
+
+    ("London Borough of Brent",
+     "https://pa.brent.gov.uk/online-applications"),
+
+    ("London Borough of Barnet",
+     "https://publicaccess.barnet.gov.uk/online-applications"),
+
+    ("London Borough of Enfield",
+     "https://planningandbuildingcontrol.enfield.gov.uk/online-applications"),
+
+    # BROKEN — Haringey uses a custom system (planningservices.haringey.gov.uk/portal/servlets), not Idox.
+    # ("London Borough of Haringey",
+    #  "https://www.haringey.gov.uk/online-applications"),
+
+    # BROKEN — Islington uses Northgate (planning.islington.gov.uk/northgate/planningexplorer), not Idox.
+    # ("London Borough of Islington",
+    #  "https://www.islington.gov.uk/online-applications"),
+
+    ("London Borough of Hammersmith and Fulham",
+     "https://public-access.lbhf.gov.uk/online-applications"),
+
+    ("City of Westminster",
+     "https://idoxpa.westminster.gov.uk/online-applications"),
+
+    ("City of London",
+     "https://www.planning2.cityoflondon.gov.uk/online-applications"),
+
+]
 
 # ---------------------------------------------------------------------------
-# Per-council orchestration
+# SQL to insert all Idox councils into Supabase
+# Run once in Supabase SQL editor before the first scrape
 # ---------------------------------------------------------------------------
-async def process_council(
-    portal: IdoxPortal,
-    browser: Browser,
-    sem: asyncio.Semaphore,
-    days_back: int,
-) -> int:
-    # council_id comes ONLY from the portal object — never a loose parameter
-    # that could get corrupted in async concurrent execution.
-    cid = portal.db_council_id
-
-    async with sem:
-        print(f"\n[{portal.council_name}] (council_id={cid})")
-        await asyncio.sleep(1)  # stagger requests — avoids triggering WAF rate limits
-
-        try:
-            apps = await portal.scrape(browser, days_back)
-        except Exception as e:
-            print(f"    ✗ Error: {e}")
-            return 0
-
-        if not apps:
-            await _supa_patch_council(cid, {
-                "last_scraped_at": datetime.now(timezone.utc).isoformat()
-            })
-            return 0
-
-        # Geocode missing coordinates
-        need = [a["postcode"] for a in apps if not a.get("lat") and a.get("postcode")]
-        if need:
-            print(f"    Geocoding {len(set(need))} postcodes…")
-            coords = await geocode(need)
-            for app in apps:
-                if not app.get("lat") and app.get("postcode"):
-                    pc = app["postcode"].strip().upper().replace(" ", "")
-                    if pc in coords:
-                        app["lat"], app["lng"] = coords[pc]
-
-        # Build upsert records — cid is captured from portal object, not the parameter
-        records = [{
-            "council_id":       cid,
-            "reference":        a["reference"],
-            "address":          a.get("address"),
-            "postcode":         a.get("postcode"),
-            "lat":              a.get("lat"),
-            "lng":              a.get("lng"),
-            "description":      a.get("description"),
-            "application_type": a.get("application_type"),
-            "status":           a.get("status", "pending"),
-            "submitted_date":   a.get("submitted_date"),
-            "decision_date":    a.get("decision_date"),
-            "council_url":      a.get("council_url"),
-            "source":           "idox_scraper",
-        } for a in apps]
-
-        # Deduplicate by reference — Idox monthly list sometimes returns the
-        # same application on multiple pages, causing upsert to fail
-        seen: set[str] = set()
-        unique_records = []
-        for r in records:
-            if r["reference"] not in seen:
-                seen.add(r["reference"])
-                unique_records.append(r)
-        records = unique_records
-
-        print(f"    Upserting {len(records)} records with council_id={cid}")
-
-        # Upsert in small batches — one bad record kills a whole batch
-        # so keep batches small to isolate failures
-        BATCH = 20
-        saved = 0
-        ok = True
-        for i in range(0, len(records), BATCH):
-            if await _supa_upsert(records[i:i + BATCH]):
-                saved += len(records[i:i + BATCH])
-            else:
-                ok = False
-
-        if ok:
-            await _supa_patch_council(cid, {
-                "coverage_source": "idox_scraper",
-                "last_scraped_at": datetime.now(timezone.utc).isoformat(),
-                "active": True,
-            })
-            print(f"    ✓ Saved {saved}")
-        else:
-            print(f"    ⚠ Partial save: {saved} of {len(apps)} (see upsert errors above)")
-        return saved
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-async def main():
-    try:
-        from idox_councils import IDOX_COUNCILS, COUNCIL_DB_IDS
-    except ImportError:
-        print("ERROR: idox_councils.py not found")
-        sys.exit(1)
-
-    bulk = "--bulk" in sys.argv
-    days = int(os.environ.get("DAYS_BACK", "365" if bulk else "7"))
-
-    # Bulk runs scrape 13 months per council — use lower concurrency and longer budget
-    # to avoid hammering portals and hitting timeouts on slow servers.
-    if bulk:
-        concurrency = int(os.environ.get("CONCURRENCY", "1"))
-        budget = int(os.environ.get("MAX_MINUTES", "180"))
-    else:
-        concurrency = CONCURRENCY
-        budget = MAX_MINUTES
-
-    print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Idox scraper (Playwright)")
-    print(f"Mode:        {'BULK' if bulk else 'FAST'} ({days} days back)")
-    print(f"Councils:    {len(IDOX_COUNCILS)}")
-    print(f"Concurrency: {concurrency}")
-    print(f"Budget:      {budget} minutes")
-    print(f"SUPABASE:    {'set' if SUPABASE_URL else 'NOT SET'}\n")
-
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        print("ERROR: Set SUPABASE_URL and SUPABASE_KEY")
-        sys.exit(1)
-
-    # Fetch councils ordered by least recently scraped (priority queue)
-    try:
-        db_rows = await _supa_get(
-            "councils",
-            select="id,name,last_scraped_at",
-            order="last_scraped_at.asc.nullsfirst",
-            limit="600",
-        )
-    except Exception as e:
-        print(f"Failed to fetch councils: {e}")
-        sys.exit(1)
-
-    db_by_name = {r["name"].lower(): r["id"] for r in db_rows}
-
-    to_scrape: list[tuple[IdoxPortal, int]] = []
-    missing: list[str] = []
-
-    for name, url in IDOX_COUNCILS:
-        # Use hardcoded ID if available — bypasses unreliable name matching
-        council_id = COUNCIL_DB_IDS.get(name)
-
-        if not council_id:
-            # Fall back to exact name match
-            council_id = db_by_name.get(name.lower())
-
-        if not council_id:
-            # Last resort: partial name match
-            for db_name, db_id in db_by_name.items():
-                if name.lower() in db_name or db_name in name.lower():
-                    council_id = db_id
-                    break
-
-        if council_id:
-            id_source = "HARDCODED" if name in COUNCIL_DB_IDS else "db-lookup"
-            if id_source == "HARDCODED":
-                print(f"  [HARDCODED] {name} → id={council_id}")
-            to_scrape.append((IdoxPortal(name, url, council_id), council_id))
-        else:
-            missing.append(name)
-
-    if missing:
-        print(f"Not in DB (skipping): {', '.join(missing[:5])}{'...' if len(missing)>5 else ''}\n")
-
-    print(f"Scraping {len(to_scrape)} councils with Playwright…\n")
-
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch(
-            headless=True,
-            args=BROWSER_ARGS,
-        )
-        print(f"Chromium launched: {browser.version}\n")
-
-        sem = asyncio.Semaphore(concurrency)
-        skipped = 0
-        tasks = []
-
-        for portal, council_id in to_scrape:
-            if elapsed_minutes() >= budget - 3:
-                skipped += 1
-                continue
-            tasks.append(
-                process_council(portal, browser, sem, days)
-            )
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        await browser.close()
-
-    total  = sum(r for r in results if isinstance(r, int))
-    errors = sum(1 for r in results if isinstance(r, Exception))
-
-    print(f"\n{'=' * 50}")
-    print(f"Finished in {elapsed_minutes():.1f} minutes")
-    print(f"Applications saved: {total}")
-    if errors:  print(f"Errors:             {errors}")
-    if skipped: print(f"Skipped (time):     {skipped} councils")
-
+INSERT_SQL = """
+INSERT INTO councils (name, slug, system, region, portal_url, coverage_source, active)
+VALUES
+  ('Manchester City Council','manchester-city-council','idox','england','https://pa.manchester.gov.uk/online-applications','pending',true),
+  ('Salford City Council','salford-city-council','idox','england','https://publicaccess.salford.gov.uk/online-applications','pending',true),
+  ('Stockport Metropolitan Borough Council','stockport-metropolitan-borough-council','idox','england','https://planning.stockport.gov.uk/online-applications','pending',true),
+  ('Trafford Council','trafford-council','idox','england','https://www.trafford.gov.uk/online-applications','pending',true),
+  ('Bolton Metropolitan Borough Council','bolton-metropolitan-borough-council','idox','england','https://www.bolton.gov.uk/idox/online-applications','pending',true),
+  ('Bury Metropolitan Borough Council','bury-metropolitan-borough-council','idox','england','https://planning.bury.gov.uk/online-applications','pending',true),
+  ('Oldham Metropolitan Borough Council','oldham-metropolitan-borough-council','idox','england','https://online.oldham.gov.uk/online-applications','pending',true),
+  ('Rochdale Borough Council','rochdale-borough-council','idox','england','https://planning.rochdale.gov.uk/online-applications','pending',true),
+  ('Tameside Metropolitan Borough Council','tameside-metropolitan-borough-council','idox','england','https://www.tameside.gov.uk/online-applications','pending',true),
+  ('Sheffield City Council','sheffield-city-council','idox','england','https://planningapps.sheffield.gov.uk/online-applications','pending',true),
+  ('Bradford Metropolitan District Council','bradford-metropolitan-district-council','idox','england','https://publicaccess.bradford.gov.uk/online-applications','pending',true),
+  ('Calderdale Metropolitan Borough Council','calderdale-metropolitan-borough-council','idox','england','https://www.calderdale.gov.uk/online-applications','pending',true),
+  ('Kirklees Council','kirklees-council','idox','england','https://www.kirklees.gov.uk/online-applications','pending',true),
+  ('Liverpool City Council','liverpool-city-council','idox','england','https://planning.liverpool.gov.uk/online-applications','pending',true),
+  ('Wirral Metropolitan Borough Council','wirral-metropolitan-borough-council','idox','england','https://www.wirral.gov.uk/online-applications','pending',true),
+  ('Knowsley Metropolitan Borough Council','knowsley-metropolitan-borough-council','idox','england','https://www.knowsley.gov.uk/online-applications','pending',true),
+  ('St. Helens Metropolitan Borough Council','st-helens-metropolitan-borough-council','idox','england','https://www.sthelens.gov.uk/online-applications','pending',true),
+  ('Warrington Borough Council','warrington-borough-council','idox','england','https://planning.warrington.gov.uk/online-applications','pending',true),
+  ('Cheshire West and Chester Council','cheshire-west-and-chester-council','idox','england','https://www.cheshirewestandchester.gov.uk/online-applications','pending',true),
+  ('Cheshire East Council','cheshire-east-council','idox','england','https://planning.cheshireeast.gov.uk/online-applications','pending',true),
+  ('Sefton Metropolitan Borough Council','sefton-metropolitan-borough-council','idox','england','https://pa.sefton.gov.uk/online-applications','pending',true),
+  ('Halton Borough Council','halton-borough-council','idox','england','https://webapp.halton.gov.uk/PlanningApps4','pending',true),
+  ('Coventry City Council','coventry-city-council','idox','england','https://planningapps.coventry.gov.uk/online-applications','pending',true),
+  ('Wolverhampton City Council','wolverhampton-city-council','idox','england','https://www.wolverhampton.gov.uk/online-applications','pending',true),
+  ('Walsall Metropolitan Borough Council','walsall-metropolitan-borough-council','idox','england','https://www.walsall.gov.uk/online-applications','pending',true),
+  ('Sandwell Metropolitan Borough Council','sandwell-metropolitan-borough-council','idox','england','https://sandwell.gov.uk/online-applications','pending',true),
+  ('Dudley Metropolitan Borough Council','dudley-metropolitan-borough-council','idox','england','https://www.dudley.gov.uk/online-applications','pending',true),
+  ('Solihull Metropolitan Borough Council','solihull-metropolitan-borough-council','idox','england','https://eservices.solihull.gov.uk/online-applications','pending',true),
+  ('Leicester City Council','leicester-city-council','idox','england','https://publicaccess.leicester.gov.uk/online-applications','pending',true),
+  ('Derby City Council','derby-city-council','idox','england','https://eplanning.derby.gov.uk/online-applications','pending',true),
+  ('Nottinghamshire County Council','nottinghamshire-county-council','idox','england','https://publicaccess.nottinghamshire.gov.uk/online-applications','pending',true),
+  ('Newcastle City Council','newcastle-city-council','idox','england','https://publicaccess.newcastle.gov.uk/pa/pa.nsf/SearchSimple?OpenForm','pending',true),
+  ('Sunderland City Council','sunderland-city-council','idox','england','https://www.sunderland.gov.uk/online-applications','pending',true),
+  ('Gateshead Council','gateshead-council','idox','england','https://planning.gateshead.gov.uk/online-applications','pending',true),
+  ('South Tyneside Metropolitan Borough Council','south-tyneside-metropolitan-borough-council','idox','england','https://www.southtyneside.gov.uk/online-applications','pending',true),
+  ('North Tyneside Council','north-tyneside-council','idox','england','https://www.northtyneside.gov.uk/online-applications','pending',true),
+  ('Durham County Council','durham-county-council','idox','england','https://publicaccess.durham.gov.uk/online-applications','pending',true),
+  ('Middlesbrough Council','middlesbrough-council','idox','england','https://planning.middlesbrough.gov.uk/online-applications','pending',true),
+  ('Stockton-on-Tees Borough Council','stockton-on-tees-borough-council','idox','england','https://www.stockton.gov.uk/online-applications','pending',true),
+  ('Brighton and Hove City Council','brighton-and-hove-city-council','idox','england','https://planningapps.brighton-hove.gov.uk/online-applications','pending',true),
+  ('Southampton City Council','southampton-city-council','idox','england','https://www.southampton.gov.uk/online-applications','pending',true),
+  ('Portsmouth City Council','portsmouth-city-council','idox','england','https://www.portsmouth.gov.uk/online-applications','pending',true),
+  ('Reading Borough Council','reading-borough-council','idox','england','https://planning.reading.gov.uk/online-applications','pending',true),
+  ('Milton Keynes City Council','milton-keynes-city-council','idox','england','https://www.milton-keynes.gov.uk/online-applications','pending',true),
+  ('Oxford City Council','oxford-city-council','idox','england','https://www.oxford.gov.uk/online-applications','pending',true),
+  ('Medway Council','medway-council','idox','england','https://publicaccess.medway.gov.uk/online-applications','pending',true),
+  ('Plymouth City Council','plymouth-city-council','idox','england','https://planning.plymouth.gov.uk/online-applications','pending',true),
+  ('Exeter City Council','exeter-city-council','idox','england','https://publicaccess.exeter.gov.uk/online-applications','pending',true),
+  ('Cheltenham Borough Council','cheltenham-borough-council','idox','england','https://publicaccess.cheltenham.gov.uk/online-applications','pending',true),
+  ('Gloucester City Council','gloucester-city-council','idox','england','https://www.gloucester.gov.uk/online-applications','pending',true),
+  ('Ipswich Borough Council','ipswich-borough-council','idox','england','https://www.ipswich.gov.uk/online-applications','pending',true),
+  ('Peterborough City Council','peterborough-city-council','idox','england','https://www.peterborough.gov.uk/online-applications','pending',true),
+  ('Norwich City Council','norwich-city-council','idox','england','https://planning.norwich.gov.uk/online-applications','pending',true),
+  ('London Borough of Hackney','london-borough-of-hackney','idox','england','https://planning.hackney.gov.uk/online-applications','pending',true),
+  ('London Borough of Southwark','london-borough-of-southwark','idox','england','https://planning.southwark.gov.uk/online-applications','pending',true),
+  ('London Borough of Lambeth','london-borough-of-lambeth','idox','england','https://planning.lambeth.gov.uk/online-applications','pending',true),
+  ('London Borough of Lewisham','london-borough-of-lewisham','idox','england','https://planning.lewisham.gov.uk/online-applications','pending',true),
+  ('London Borough of Tower Hamlets','london-borough-of-tower-hamlets','idox','england','https://development.towerhamlets.gov.uk/online-applications','pending',true),
+  ('London Borough of Newham','london-borough-of-newham','idox','england','https://www.newham.gov.uk/online-applications','pending',true),
+  ('London Borough of Waltham Forest','london-borough-of-waltham-forest','idox','england','https://www.walthamforest.gov.uk/online-applications','pending',true),
+  ('London Borough of Redbridge','london-borough-of-redbridge','idox','england','https://www.redbridge.gov.uk/online-applications','pending',true),
+  ('London Borough of Barking and Dagenham','london-borough-of-barking-and-dagenham','idox','england','https://www.lbbd.gov.uk/online-applications','pending',true),
+  ('London Borough of Havering','london-borough-of-havering','idox','england','https://development.havering.gov.uk/online-applications','pending',true),
+  ('London Borough of Bexley','london-borough-of-bexley','idox','england','https://pa.bexley.gov.uk/online-applications','pending',true),
+  ('London Borough of Greenwich','london-borough-of-greenwich','idox','england','https://planning.royalgreenwich.gov.uk/online-applications','pending',true),
+  ('London Borough of Bromley','london-borough-of-bromley','idox','england','https://www.bromley.gov.uk/online-applications','pending',true),
+  ('London Borough of Croydon','london-borough-of-croydon','idox','england','https://www.croydon.gov.uk/online-applications','pending',true),
+  ('London Borough of Sutton','london-borough-of-sutton','idox','england','https://www.sutton.gov.uk/online-applications','pending',true),
+  ('London Borough of Merton','london-borough-of-merton','idox','england','https://www.merton.gov.uk/online-applications','pending',true),
+  ('London Borough of Kingston upon Thames','london-borough-of-kingston-upon-thames','idox','england','https://www.kingston.gov.uk/online-applications','pending',true),
+  ('London Borough of Richmond upon Thames','london-borough-of-richmond-upon-thames','idox','england','https://www.richmond.gov.uk/online-applications','pending',true),
+  ('London Borough of Hounslow','london-borough-of-hounslow','idox','england','https://www.hounslow.gov.uk/online-applications','pending',true),
+  ('London Borough of Ealing','london-borough-of-ealing','idox','england','https://www.ealing.gov.uk/online-applications','pending',true),
+  ('London Borough of Hillingdon','london-borough-of-hillingdon','idox','england','https://www.hillingdon.gov.uk/online-applications','pending',true),
+  ('London Borough of Harrow','london-borough-of-harrow','idox','england','https://www.harrow.gov.uk/online-applications','pending',true),
+  ('London Borough of Brent','london-borough-of-brent','idox','england','https://www.brent.gov.uk/online-applications','pending',true),
+  ('London Borough of Barnet','london-borough-of-barnet','idox','england','https://publicaccess.barnet.gov.uk/online-applications','pending',true),
+  ('London Borough of Enfield','london-borough-of-enfield','idox','england','https://planningandbuildingcontrol.enfield.gov.uk/online-applications','pending',true),
+  ('London Borough of Haringey','london-borough-of-haringey','idox','england','https://www.haringey.gov.uk/online-applications','pending',true),
+  ('London Borough of Islington','london-borough-of-islington','idox','england','https://www.islington.gov.uk/online-applications','pending',true)
+ON CONFLICT (name) DO UPDATE SET
+  system = 'idox',
+  active = true,
+  portal_url = EXCLUDED.portal_url;
+"""
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    print(INSERT_SQL)
