@@ -452,8 +452,10 @@ IDOX_COUNCILS = [
     ("Havant Borough Council",
      "https://planningpublicaccess.havant.gov.uk/online-applications"),
 
-    ("East Hampshire District Council",
-     "https://planningpublicaccess.easthants.gov.uk/online-applications"),
+    # BROKEN — planningpublicaccess.easthants.gov.uk DNS DEAD.
+    # New portal at easthants.gov.uk requires account login as of March 2026.
+    # ("East Hampshire District Council",
+    #  "https://planningpublicaccess.easthants.gov.uk/online-applications"),
 
     # --- ESSEX districts ---
     ("Basildon Borough Council",
@@ -792,6 +794,66 @@ IDOX_COUNCILS = [
 
     ("City of London",
      "https://www.planning2.cityoflondon.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # SCOTLAND (18 confirmed Idox portals)
+    # Note: Edinburgh uses /idoxpa-web path (not /online-applications)
+    # Note: Falkirk, Midlothian, Renfrewshire, Perth & Kinross, North Lanarkshire,
+    #       East/North Ayrshire, Scottish Borders not yet found - DNS fails
+    # -------------------------------------------------------------------------
+    ("City of Edinburgh Council",
+     "https://citydev-portal.edinburgh.gov.uk/idoxpa-web"),
+
+    ("Dundee City Council",
+     "https://portal.dundeecity.gov.uk/online-applications"),
+
+    ("Glasgow City Council",
+     "https://publicaccess.glasgow.gov.uk/online-applications"),
+
+    ("Aberdeen City Council",
+     "https://publicaccess.aberdeencity.gov.uk/online-applications"),
+
+    ("Highland Council",
+     "https://wam.highland.gov.uk/online-applications"),
+
+    ("Fife Council",
+     "https://planning.fife.gov.uk/online-applications"),
+
+    ("East Lothian Council",
+     "https://pa.eastlothian.gov.uk/online-applications"),
+
+    ("Stirling Council",
+     "https://planning.stirling.gov.uk/online-applications"),
+
+    ("South Lanarkshire Council",
+     "https://publicaccess.southlanarkshire.gov.uk/online-applications"),
+
+    ("West Lothian Council",
+     "https://planning.westlothian.gov.uk/online-applications"),
+
+    ("East Dunbartonshire Council",
+     "https://planning.eastdunbarton.gov.uk/online-applications"),
+
+    ("South Ayrshire Council",
+     "https://publicaccess.south-ayrshire.gov.uk/online-applications"),
+
+    ("Angus Council",
+     "https://planning.angus.gov.uk/online-applications"),
+
+    ("Moray Council",
+     "https://publicaccess.moray.gov.uk/online-applications"),
+
+    ("Clackmannanshire Council",
+     "https://publicaccess.clacks.gov.uk/online-applications"),
+
+    ("Inverclyde Council",
+     "https://planning.inverclyde.gov.uk/online-applications"),
+
+    ("Argyll and Bute Council",
+     "https://publicaccess.argyll-bute.gov.uk/online-applications"),
+
+    ("Comhairle nan Eilean Siar",
+     "https://planning.cne-siar.gov.uk/online-applications"),
 
 ]
 
