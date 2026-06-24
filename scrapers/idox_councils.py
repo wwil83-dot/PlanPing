@@ -836,7 +836,7 @@ IDOX_COUNCILS = [
      "https://wam.highland.gov.uk/online-applications"),
 
     ("Fife Council",
-     "https://planning.fife.gov.uk/publicaccess"),
+     "https://planning.fife.gov.uk/idoxpa-web"),
 
     ("East Lothian Council",
      "https://pa.eastlothian.gov.uk/online-applications"),
@@ -863,10 +863,10 @@ IDOX_COUNCILS = [
      "https://publicaccess.moray.gov.uk/publicaccess"),
 
     ("Clackmannanshire Council",
-     "https://publicaccess.clacks.gov.uk/online-applications"),
+     "https://publicaccess.clacks.gov.uk/publicaccess"),
 
     ("Inverclyde Council",
-     "https://planning.inverclyde.gov.uk/online-applications"),
+     "https://planning.inverclyde.gov.uk/publicaccess"),
 
     ("Argyll and Bute Council",
      "https://publicaccess.argyll-bute.gov.uk/online-applications"),
