@@ -132,6 +132,25 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Caerphilly County Borough Council":         325,
     "Torfaen County Borough Council":            326,
     "Monmouthshire County Council":              327,
+    # --- Scotland seeded Jun 2026 ---
+    "City of Edinburgh Council":                 328,
+    "Dundee City Council":                       329,
+    "Glasgow City Council":                      330,
+    "Aberdeen City Council":                     1,    # pre-existing in DB
+    "Highland Council":                          332,
+    "Fife Council":                              333,
+    "East Lothian Council":                      334,
+    "Stirling Council":                          335,
+    "South Lanarkshire Council":                 336,
+    "West Lothian Council":                      337,
+    "East Dunbartonshire Council":               338,
+    "South Ayrshire Council":                    339,
+    "Angus Council":                             340,
+    "Moray Council":                             341,
+    "Clackmannanshire Council":                  342,
+    "Inverclyde Council":                        343,
+    "Argyll and Bute Council":                   344,
+    "Comhairle nan Eilean Siar":                 345,
 }
 
 IDOX_COUNCILS = [
@@ -817,7 +836,7 @@ IDOX_COUNCILS = [
      "https://wam.highland.gov.uk/online-applications"),
 
     ("Fife Council",
-     "https://planning.fife.gov.uk/online-applications"),
+     "https://planning.fife.gov.uk/publicaccess"),
 
     ("East Lothian Council",
      "https://pa.eastlothian.gov.uk/online-applications"),
@@ -841,7 +860,7 @@ IDOX_COUNCILS = [
      "https://planning.angus.gov.uk/online-applications"),
 
     ("Moray Council",
-     "https://publicaccess.moray.gov.uk/online-applications"),
+     "https://publicaccess.moray.gov.uk/publicaccess"),
 
     ("Clackmannanshire Council",
      "https://publicaccess.clacks.gov.uk/online-applications"),
@@ -853,7 +872,7 @@ IDOX_COUNCILS = [
      "https://publicaccess.argyll-bute.gov.uk/online-applications"),
 
     ("Comhairle nan Eilean Siar",
-     "https://planning.cne-siar.gov.uk/online-applications"),
+     "https://planning.cne-siar.gov.uk/publicaccess"),
 
 ]
 
