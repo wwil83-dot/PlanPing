@@ -152,6 +152,10 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Inverclyde Council":                        343,
     "Argyll and Bute Council":                   344,
     "Comhairle nan Eilean Siar":                 345,
+    # --- Additional Scotland seeded Jun 2026 ---
+    "Midlothian Council":                        346,
+    "Renfrewshire Council":                      347,
+    "Perth and Kinross Council":                 348,
 }
 
 IDOX_COUNCILS = [
@@ -827,8 +831,9 @@ IDOX_COUNCILS = [
     ("City of Edinburgh Council",
      "https://citydev-portal.edinburgh.gov.uk/idoxpa-web"),
 
+    # NOTE: Dundee uses idoxwam.dundeecity.gov.uk (not portal.dundeecity.gov.uk)
     ("Dundee City Council",
-     "https://portal.dundeecity.gov.uk/online-applications"),
+     "https://idoxwam.dundeecity.gov.uk/idoxpa-web"),
 
     ("Glasgow City Council",
      "https://publicaccess.glasgow.gov.uk/online-applications"),
@@ -867,8 +872,9 @@ IDOX_COUNCILS = [
     ("Moray Council",
      "https://publicaccess.moray.gov.uk/online"),
 
+    # NOTE: Clackmannanshire uses /publicaccess path (confirmed from weekly list URL)
     ("Clackmannanshire Council",
-     "https://publicaccess.clacks.gov.uk/Online"),
+     "https://publicaccess.clacks.gov.uk/publicaccess"),
 
     # NOTE: Inverclyde uses /Online (capital O) not /online or /idoxpa-web
     ("Inverclyde Council",
@@ -880,6 +886,18 @@ IDOX_COUNCILS = [
     # NOTE: trying /Online (capital O) - has failed on /online-applications, /publicaccess, /online, /idoxpa-web
     ("Comhairle nan Eilean Siar",
      "https://planning.cne-siar.gov.uk/Online"),
+
+    # --- Additional Scottish councils found Jun 2026 ---
+    # NOTE: Midlothian uses planning-applications.midlothian.gov.uk (not planning.midlothian.gov.uk)
+    # NOTE: path is /OnlinePlanning (capital O, capital P)
+    ("Midlothian Council",
+     "https://planning-applications.midlothian.gov.uk/OnlinePlanning"),
+
+    ("Renfrewshire Council",
+     "https://pl-bs.renfrewshire.gov.uk/online-applications"),
+
+    ("Perth and Kinross Council",
+     "https://planningapps.pkc.gov.uk/online-applications"),
 
 ]
 
