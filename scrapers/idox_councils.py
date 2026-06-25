@@ -864,16 +864,18 @@ IDOX_COUNCILS = [
      "https://publicaccess.moray.gov.uk/online"),
 
     ("Clackmannanshire Council",
-     "https://publicaccess.clacks.gov.uk/idoxpa-web"),
+     "https://publicaccess.clacks.gov.uk/Online"),
 
+    # NOTE: Inverclyde uses /Online (capital O) not /online or /idoxpa-web
     ("Inverclyde Council",
-     "https://planning.inverclyde.gov.uk/idoxpa-web"),
+     "https://planning.inverclyde.gov.uk/Online"),
 
     ("Argyll and Bute Council",
      "https://publicaccess.argyll-bute.gov.uk/online-applications"),
 
+    # NOTE: trying /Online (capital O) - has failed on /online-applications, /publicaccess, /online, /idoxpa-web
     ("Comhairle nan Eilean Siar",
-     "https://planning.cne-siar.gov.uk/idoxpa-web"),
+     "https://planning.cne-siar.gov.uk/Online"),
 
 ]
 
