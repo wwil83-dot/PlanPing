@@ -899,6 +899,25 @@ IDOX_COUNCILS = [
     ("Perth and Kinross Council",
      "https://planningapps.pkc.gov.uk/online-applications"),
 
+    # NOTE: North Ayrshire uses /OnlinePlanning path (capital O, capital P)
+    ("North Ayrshire Council",
+     "https://www.eplanning.north-ayrshire.gov.uk/OnlinePlanning"),
+
+    ("North Lanarkshire Council",
+     "https://eplanning.northlanarkshire.gov.uk/online-applications"),
+
+    ("Scottish Borders Council",
+     "https://eplanning.scotborders.gov.uk/online-applications"),
+
+    ("Orkney Islands Council",
+     "https://planningandwarrant.orkney.gov.uk/online-applications"),
+
+    ("Shetland Islands Council",
+     "https://pa.shetland.gov.uk/online-applications"),
+
+    # East Renfrewshire: ercbuildingstandards.eastrenfrewshire.gov.uk/buildingstandards
+    # is BUILDING WARRANTS not planning applications — skip until planning portal found
+
 ]
 
 # ---------------------------------------------------------------------------
