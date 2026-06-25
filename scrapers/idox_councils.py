@@ -867,13 +867,13 @@ IDOX_COUNCILS = [
      "https://publicaccess.clacks.gov.uk/online"),
 
     ("Inverclyde Council",
-     "https://planning.inverclyde.gov.uk/online"),
+     "https://planning.inverclyde.gov.uk/idoxpa-web"),
 
     ("Argyll and Bute Council",
      "https://publicaccess.argyll-bute.gov.uk/online-applications"),
 
     ("Comhairle nan Eilean Siar",
-     "https://planning.cne-siar.gov.uk/online"),
+     "https://planning.cne-siar.gov.uk/idoxpa-web"),
 
 ]
 
