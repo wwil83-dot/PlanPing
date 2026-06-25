@@ -864,7 +864,7 @@ IDOX_COUNCILS = [
      "https://publicaccess.moray.gov.uk/online"),
 
     ("Clackmannanshire Council",
-     "https://publicaccess.clacks.gov.uk/online"),
+     "https://publicaccess.clacks.gov.uk/idoxpa-web"),
 
     ("Inverclyde Council",
      "https://planning.inverclyde.gov.uk/idoxpa-web"),
