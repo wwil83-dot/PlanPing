@@ -400,12 +400,13 @@ class IdoxPortal:
 
             for target_month in months:
                 apps = await self._scrape_month(page, target_month)
-                # Tag with the searched month for fallback date — but don't
-                # set submitted_date yet so the 7-day filter still passes them through
-                month_str = target_month.replace(day=1).isoformat()
+                # Use TODAY as fallback date for apps without a parsed date.
+                # Using today (not start-of-month) means undated apps show as
+                # recently scraped rather than all clustering on '01/06/26'.
+                today_str = date.today().isoformat()
                 for app in apps:
                     if not app.get("submitted_date"):
-                        app["_month_fallback"] = month_str
+                        app["_month_fallback"] = today_str
                 all_apps.extend(apps)
         except Exception as e:
             print(f"    ✗ Context error: {e}")
