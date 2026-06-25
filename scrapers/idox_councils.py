@@ -120,6 +120,7 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Wyre Borough Council":                      314,
     "Rossendale Borough Council":                315,
     "West Lancashire Borough Council":           316,
+    "Wigan Metropolitan Borough Council":        163,
     "Chesterfield Borough Council":              317,
     # --- Wales seeded Jun 2026 ---
     "Cardiff Council":                           26,
@@ -195,6 +196,9 @@ IDOX_COUNCILS = [
     # NOTE: planning.bury.gov.uk redirects to Tameside's Idox server.
     ("Tameside Metropolitan Borough Council",
      "https://planning.bury.gov.uk/online-applications"),
+
+    ("Wigan Metropolitan Borough Council",
+     "https://planning.wigan.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # YORKSHIRE
@@ -610,7 +614,7 @@ IDOX_COUNCILS = [
      "https://publicaccess.rossendale.gov.uk/online-applications"),
 
     ("West Lancashire Borough Council",
-     "https://publicaccess.westlancs.gov.uk/online-applications"),
+     "https://pa.westlancs.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # WALES
