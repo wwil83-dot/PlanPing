@@ -54,7 +54,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox') ||
       (github.event_name == 'schedule' && github.event.schedule == '0 4 * * *')
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -67,12 +67,12 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-v1
       - run: pip install playwright beautifulsoup4 httpx
       - run: playwright install --with-deps chromium
-      - name: Run Idox scraper — nightly (last 7 days)
+      - name: Run Idox scraper — nightly (last 14 days)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          MAX_MINUTES: "40"
-          DAYS_BACK: "7"
+          MAX_MINUTES: "55"
+          DAYS_BACK: "14"
           CONCURRENCY: "3"
         run: cd scrapers && python idox_scraper.py
 
