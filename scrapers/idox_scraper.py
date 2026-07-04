@@ -430,13 +430,17 @@ class IdoxPortal:
 
     async def _scrape_month(self, page: Page, for_month: date) -> list[dict]:
         """Load the monthly list, submit it for date received, collect all pages."""
+        # Calculate monthYearIndex: 0 = current month, 1 = previous month, etc.
+        today_month = date.today().replace(day=1)
+        month_index = (today_month.year - for_month.year) * 12 + (today_month.month - for_month.month)
+
         # Don't pre-specify dateType in the URL — some portals only support DV
         # (Date Validated) not DC (Date Confirmed/Received), so forcing DC gives 0.
         # Instead let the form default apply, then try to click the best radio.
         monthly_url = (
             f"{self.base_url}/search.do"
             f"?action=monthlyList"
-            f"&searchCriteria.monthYearIndex=0"
+            f"&searchCriteria.monthYearIndex={month_index}"
             f"&searchType=Application"
         )
 
