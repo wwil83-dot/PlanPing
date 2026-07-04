@@ -156,6 +156,11 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Midlothian Council":                        346,
     "Renfrewshire Council":                      347,
     "Perth and Kinross Council":                 348,
+    "North Ayrshire Council":                    349,
+    "North Lanarkshire Council":                 350,
+    "Scottish Borders Council":                  351,
+    "Orkney Islands Council":                    352,
+    "Shetland Islands Council":                  353,
 }
 
 IDOX_COUNCILS = [
