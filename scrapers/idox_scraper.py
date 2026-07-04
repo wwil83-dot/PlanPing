@@ -36,8 +36,8 @@ from playwright.async_api import (
 # ---------------------------------------------------------------------------
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
-MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "55"))
-DAYS_BACK    = int(os.environ.get("DAYS_BACK", "14"))
+MAX_MINUTES  = 55  # hardcoded — was overridden by workflow env var
+DAYS_BACK    = 14  # hardcoded — was overridden by workflow env var
 CONCURRENCY  = int(os.environ.get("CONCURRENCY", "3"))
 
 START_TIME = time.monotonic()
@@ -684,7 +684,7 @@ async def main():
         sys.exit(1)
 
     bulk = "--bulk" in sys.argv
-    days = int(os.environ.get("DAYS_BACK", "365" if bulk else "14"))
+    days = 365 if bulk else 14  # hardcoded — env var was being overridden
 
     # Bulk runs scrape 13 months per council — use lower concurrency and longer budget
     # to avoid hammering portals and hitting timeouts on slow servers.
