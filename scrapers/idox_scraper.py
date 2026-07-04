@@ -37,7 +37,7 @@ from playwright.async_api import (
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "55"))
-DAYS_BACK    = int(os.environ.get("DAYS_BACK", "7"))
+DAYS_BACK    = int(os.environ.get("DAYS_BACK", "14"))
 CONCURRENCY  = int(os.environ.get("CONCURRENCY", "3"))
 
 START_TIME = time.monotonic()
