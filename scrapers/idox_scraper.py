@@ -36,7 +36,7 @@ from playwright.async_api import (
 # ---------------------------------------------------------------------------
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
-MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "40"))
+MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "55"))
 DAYS_BACK    = int(os.environ.get("DAYS_BACK", "7"))
 CONCURRENCY  = int(os.environ.get("CONCURRENCY", "3"))
 
@@ -377,7 +377,7 @@ class IdoxPortal:
         cutoff = date.today() - timedelta(days=days_back)
 
         # Build the full list of calendar months to scrape.
-        # Fast mode (7 days): 1-2 months. Bulk mode (365 days): up to 13 months.
+        # Fast mode (14 days): 1-2 months. Bulk mode (365 days): up to 13 months.
         months: list[date] = []
         m = date.today().replace(day=1)
         cutoff_month = cutoff.replace(day=1)
@@ -684,7 +684,7 @@ async def main():
         sys.exit(1)
 
     bulk = "--bulk" in sys.argv
-    days = int(os.environ.get("DAYS_BACK", "365" if bulk else "7"))
+    days = int(os.environ.get("DAYS_BACK", "365" if bulk else "14"))
 
     # Bulk runs scrape 13 months per council — use lower concurrency and longer budget
     # to avoid hammering portals and hitting timeouts on slow servers.
