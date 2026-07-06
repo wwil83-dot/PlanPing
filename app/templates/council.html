@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}{{ council.name }} Planning Applications — PlanFind{% endblock %}
-
 {% block content %}
 <header class="hero hero-compact">
   <div class="hero-inner">
@@ -31,15 +30,23 @@
   </div>
 
   {% if recent %}
-  <div class="app-list">
-    <h3 style="margin-bottom:1rem;color:var(--text-secondary);font-size:.9rem;font-weight:500;text-transform:uppercase;letter-spacing:.05em">
-      20 most recent applications
+
+  {# Highlight any major applications at the top #}
+  {% set major_apps = recent | selectattr("is_major") | list %}
+  {% if major_apps %}
+  <div class="major-applications">
+    <h3 style="margin-bottom:0.75rem;color:var(--text-secondary);font-size:.85rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em">
+      ⚠ Major &amp; Outline Applications
     </h3>
-    {% for app in recent %}
-    <article class="app-card status-{{ app.status | lower }}">
+    {% for app in major_apps %}
+    <article class="app-card app-card-major status-{{ app.status | lower }}">
       <div class="app-card-top">
         <div class="app-meta">
           <span class="app-ref">{{ app.reference }}</span>
+          <span class="badge badge-major">{{ app.application_type or 'Major' }}</span>
+          {% if not app.is_mapped %}
+          <span class="badge badge-unmapped" title="Approximate location — no postcode in this application">📍 Approx. location</span>
+          {% endif %}
         </div>
         <div class="app-badges">
           <span class="badge badge-status badge-{{ app.status | lower }}">{{ app.status | title }}</span>
@@ -48,14 +55,44 @@
       <h3 class="app-address">{{ app.address or 'Address not available' }}</h3>
       <p class="app-description">{{ app.description or 'No description provided' }}</p>
       <div class="app-footer">
-        <span class="app-date">
-          {% if app.submitted_date %}{{ app.submitted_date }}{% else %}Date unknown{% endif %}
-        </span>
+        <span class="app-date">{{ app.days_ago }}</span>
         <a href="/application/{{ app.id }}" class="btn btn-sm">Details</a>
       </div>
     </article>
     {% endfor %}
   </div>
+  {% endif %}
+
+  <div class="app-list">
+    <h3 style="margin-bottom:1rem;color:var(--text-secondary);font-size:.9rem;font-weight:500;text-transform:uppercase;letter-spacing:.05em">
+      {{ recent | length }} most recent applications
+    </h3>
+    {% for app in recent %}
+    {% if not app.is_major %}
+    <article class="app-card status-{{ app.status | lower }}">
+      <div class="app-card-top">
+        <div class="app-meta">
+          <span class="app-ref">{{ app.reference }}</span>
+          {% if not app.is_mapped %}
+          <span class="badge badge-unmapped" title="No postcode — shown at approximate council location">📍 Approx.</span>
+          {% endif %}
+        </div>
+        <div class="app-badges">
+          <span class="badge badge-type badge-{{ app.type_badge }}">{{ app.type_badge | title }}</span>
+          <span class="badge badge-status badge-{{ app.status | lower }}">{{ app.status | title }}</span>
+        </div>
+      </div>
+      <h3 class="app-address">{{ app.address or 'Address not available' }}</h3>
+      <p class="app-description">{{ app.description or 'No description provided' }}</p>
+      <div class="app-footer">
+        <span class="app-date">{{ app.days_ago }}</span>
+        <a href="/application/{{ app.id }}" class="btn btn-sm">Details</a>
+      </div>
+    </article>
+    {% endif %}
+    {% endfor %}
+  </div>
+
   {% else %}
   <div class="empty-state">
     <div class="empty-icon">📭</div>
@@ -64,4 +101,41 @@
   </div>
   {% endif %}
 </main>
+
+<style>
+/* Major application card */
+.major-applications {
+  margin-bottom: 2rem;
+}
+
+.app-card-major {
+  border-left: 4px solid #f59e0b;
+  background: #fffbeb;
+}
+
+/* Badges */
+.badge-major {
+  background: #f59e0b;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-unmapped {
+  background: #e5e7eb;
+  color: #6b7280;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.badge-outline {
+  background: #8b5cf6;
+  color: #fff;
+}
+</style>
 {% endblock %}
