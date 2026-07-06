@@ -874,8 +874,9 @@ IDOX_COUNCILS = [
     ("Angus Council",
      "https://planning.angus.gov.uk/online-applications"),
 
+    # NOTE: Moray uses /eplanning path (not /online, /publicaccess or /online-applications)
     ("Moray Council",
-     "https://publicaccess.moray.gov.uk/online"),
+     "https://publicaccess.moray.gov.uk/eplanning"),
 
     # NOTE: Clackmannanshire uses /publicaccess path (confirmed from weekly list URL)
     ("Clackmannanshire Council",
@@ -893,13 +894,12 @@ IDOX_COUNCILS = [
      "https://planning.cne-siar.gov.uk/Online"),
 
     # --- Additional Scottish councils found Jun 2026 ---
-    # NOTE: Midlothian uses planning-applications.midlothian.gov.uk (not planning.midlothian.gov.uk)
-    # NOTE: path is /OnlinePlanning (capital O, capital P)
+    # NOTE: Midlothian and Renfrewshire have monthly list disabled — weekly list only.
     ("Midlothian Council",
-     "https://planning-applications.midlothian.gov.uk/OnlinePlanning"),
+     "https://planning-applications.midlothian.gov.uk/OnlinePlanning", "weekly"),
 
     ("Renfrewshire Council",
-     "https://pl-bs.renfrewshire.gov.uk/online-applications"),
+     "https://pl-bs.renfrewshire.gov.uk/online-applications", "weekly"),
 
     ("Perth and Kinross Council",
      "https://planningapps.pkc.gov.uk/online-applications"),
