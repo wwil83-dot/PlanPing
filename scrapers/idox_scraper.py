@@ -407,10 +407,12 @@ CONTEXT_OPTIONS = {
 class IdoxPortal:
     """Scrapes one Idox planning portal via Playwright."""
 
-    def __init__(self, council_name: str, base_url: str, db_council_id: int):
+    def __init__(self, council_name: str, base_url: str, db_council_id: int,
+                 use_weekly_list: bool = False):
         self.council_name = council_name
         self.base_url = base_url.rstrip("/")
         self.db_council_id = db_council_id   # ← locked to this portal, immune to concurrency
+        self.use_weekly_list = use_weekly_list
         parsed = urlparse(self.base_url)
         self.domain_root = f"{parsed.scheme}://{parsed.netloc}"
 
@@ -439,16 +441,27 @@ class IdoxPortal:
                 "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
             )
 
-            for target_month in months:
-                apps = await self._scrape_month(page, target_month)
-                # Use TODAY as fallback date for apps without a parsed date.
-                # Using today (not start-of-month) means undated apps show as
-                # recently scraped rather than all clustering on '01/06/26'.
-                today_str = date.today().isoformat()
-                for app in apps:
-                    if not app.get("submitted_date"):
-                        app["_month_fallback"] = today_str
-                all_apps.extend(apps)
+            if self.use_weekly_list:
+                # Weekly list portals don't expose the monthly list action.
+                # Fetch this week and last week to cover the 14-day window.
+                for week_offset in range(2):  # 0 = this week, 1 = last week
+                    apps = await self._scrape_week(page, week_offset)
+                    today_str = date.today().isoformat()
+                    for app in apps:
+                        if not app.get("submitted_date"):
+                            app["_month_fallback"] = today_str
+                    all_apps.extend(apps)
+            else:
+                for target_month in months:
+                    apps = await self._scrape_month(page, target_month)
+                    # Use TODAY as fallback date for apps without a parsed date.
+                    # Using today (not start-of-month) means undated apps show as
+                    # recently scraped rather than all clustering on '01/06/26'.
+                    today_str = date.today().isoformat()
+                    for app in apps:
+                        if not app.get("submitted_date"):
+                            app["_month_fallback"] = today_str
+                    all_apps.extend(apps)
         except Exception as e:
             print(f"    ✗ Context error: {e}")
         finally:
@@ -619,6 +632,72 @@ class IdoxPortal:
 
         if page_num > 1:
             print(f"    Total across {page_num} pages: {len(all_apps)}")
+        return all_apps
+
+    async def _scrape_week(self, page: Page, week_offset: int = 0) -> list[dict]:
+        """Scrape a weekly list page for portals that don't support monthly lists.
+        week_offset=0 is the current week, 1 is last week.
+        Weekly lists go directly to results — no form submission needed.
+        """
+        weekly_url = f"{self.base_url}/weeklyListResults.do?action=firstPage"
+        if week_offset > 0:
+            # Idox weekly list uses a weekNum parameter for previous weeks
+            # weekNum counts back from the current week
+            weekly_url += f"&searchCriteria.weekNum={week_offset}"
+
+        try:
+            await page.goto(weekly_url, wait_until="domcontentloaded", timeout=45_000)
+        except PlaywrightTimeout:
+            print(f"    ⚠ Page load timeout (week -{week_offset})")
+            return []
+        except Exception as e:
+            print(f"    ⚠ Navigation error: {e}")
+            return []
+
+        # Wait for results
+        try:
+            await page.wait_for_selector(
+                "ul.searchresults, #searchResultsContainer, .searchresults, "
+                ".no-results, #searchResultsForm",
+                timeout=25_000,
+            )
+        except PlaywrightTimeout:
+            title = await page.title()
+            print(f"    ⚠ Results timeout — title: '{title[:60]}'")
+            return []
+
+        # Collect all pages (same logic as _scrape_month)
+        all_apps: list[dict] = []
+        page_num = 1
+
+        while True:
+            html = await page.content()
+            apps, has_next = parse_results_page(
+                html, self.base_url, self.domain_root, self.council_name
+            )
+            all_apps.extend(apps)
+
+            if page_num == 1 and len(apps) > 0:
+                print(f"    Week -{week_offset} page 1: {len(apps)} results")
+
+            should_continue = has_next or (len(apps) >= 10)
+            if not should_continue or not apps or page_num >= 50:
+                break
+
+            page_num += 1
+            next_url = (
+                f"{self.base_url}/pagedSearchResults.do"
+                f"?action=page&searchCriteria.page={page_num}"
+            )
+            try:
+                await page.goto(next_url, wait_until="domcontentloaded", timeout=15_000)
+                await asyncio.sleep(2)
+            except Exception as e:
+                print(f"    Page {page_num} nav error: {e}")
+                break
+
+        if page_num > 1:
+            print(f"    Week -{week_offset} total across {page_num} pages: {len(all_apps)}")
         return all_apps
 
 
@@ -792,7 +871,15 @@ async def main():
     to_scrape: list[tuple[IdoxPortal, int]] = []
     missing: list[str] = []
 
-    for name, url in IDOX_COUNCILS:
+    for entry in IDOX_COUNCILS:
+        # Support both (name, url) and (name, url, "weekly") tuple formats
+        if len(entry) == 3:
+            name, url, mode = entry
+            use_weekly = (mode == "weekly")
+        else:
+            name, url = entry
+            use_weekly = False
+
         # Use hardcoded ID if available — bypasses unreliable name matching
         council_id = COUNCIL_DB_IDS.get(name)
 
@@ -811,7 +898,7 @@ async def main():
             id_source = "HARDCODED" if name in COUNCIL_DB_IDS else "db-lookup"
             if id_source == "HARDCODED":
                 print(f"  [HARDCODED] {name} → id={council_id}")
-            to_scrape.append((IdoxPortal(name, url, council_id), council_id))
+            to_scrape.append((IdoxPortal(name, url, council_id, use_weekly_list=use_weekly), council_id))
         else:
             missing.append(name)
 
