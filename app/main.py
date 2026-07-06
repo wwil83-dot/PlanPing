@@ -77,6 +77,7 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
     for a in applications:
         a["distance_miles"] = round(a["distance_miles"], 1)
         a["type_badge"] = _type_badge(a.get("application_type", ""))
+        a["is_major"] = _is_major(a.get("application_type", ""))
         a["status_class"] = _status_class(a.get("status", ""))
         a["days_ago"] = _days_ago(a.get("submitted_date"))
 
@@ -126,17 +127,25 @@ async def council_page(request: Request, slug: str):
 
         recent = await db.fetch("""
             SELECT id, reference, address, description,
-                   application_type, status, submitted_date
+                   application_type, status, submitted_date,
+                   lat, lng
             FROM planning_applications
             WHERE council_id = $1
             ORDER BY submitted_date DESC NULLS LAST
-            LIMIT 20
+            LIMIT 50
         """, council["id"])
+
+    apps = [dict(r) for r in recent]
+    for a in apps:
+        a["type_badge"] = _type_badge(a.get("application_type", ""))
+        a["is_major"] = _is_major(a.get("application_type", ""))
+        a["is_mapped"] = a.get("lat") is not None
+        a["days_ago"] = _days_ago(a.get("submitted_date"))
 
     return render("council.html", {
         "request": request,
         "council": dict(council),
-        "recent": [dict(r) for r in recent],
+        "recent": apps,
     })
 
 
@@ -151,7 +160,9 @@ async def councils_list(request: Request):
         councils = await db.fetch("""
             SELECT name, slug, region, system, coverage_source,
                    (SELECT COUNT(*) FROM planning_applications
-                    WHERE council_id = c.id) AS app_count
+                    WHERE council_id = c.id) AS app_count,
+                   (SELECT MAX(submitted_date) FROM planning_applications
+                    WHERE council_id = c.id) AS latest_date
             FROM councils c
             WHERE active = TRUE
             ORDER BY name
@@ -252,8 +263,18 @@ async def unsubscribe(request: Request, token: str):
 # Helpers
 # ─────────────────────────────────────────────
 
+def _is_major(app_type: str) -> bool:
+    """Flag application types that are significant developments."""
+    t = (app_type or "").upper()
+    major_keywords = ["OUTLINE", "OUT", "MAJOR", "EIA", "HYBRID",
+                      "PERMISSION IN PRINCIPLE", "PIP", "TECHNICAL DETAILS"]
+    return any(k in t for k in major_keywords)
+
+
 def _type_badge(app_type: str) -> str:
     t = (app_type or "").lower()
+    if "outline" in t or "/out" in t or t.endswith("out"):
+        return "outline"
     if "householder" in t or "extension" in t:
         return "householder"
     if "full" in t:
@@ -266,6 +287,8 @@ def _type_badge(app_type: str) -> str:
         return "advert"
     if "prior" in t:
         return "prior"
+    if "major" in t or "eia" in t:
+        return "major"
     return "other"
 
 
