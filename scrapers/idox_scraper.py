@@ -639,6 +639,19 @@ class IdoxPortal:
         week_offset=0 is the current week, 1 is last week.
         Weekly lists go directly to results — no form submission needed.
         """
+        # Visit portal home page first to establish session cookies —
+        # some Idox installations (e.g. Midlothian) reject direct weekly list
+        # access without a valid session.
+        try:
+            await page.goto(
+                f"{self.base_url}/search.do?action=simple&searchType=Application",
+                wait_until="domcontentloaded",
+                timeout=30_000,
+            )
+            await asyncio.sleep(1)
+        except Exception:
+            pass  # Best effort — proceed even if home page fails
+
         weekly_url = f"{self.base_url}/weeklyListResults.do?action=firstPage"
         if week_offset > 0:
             # Idox weekly list uses a weekNum parameter for previous weeks
