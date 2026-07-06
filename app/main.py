@@ -30,7 +30,21 @@ def render(template: str, ctx: dict) -> HTMLResponse:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return render("index.html", {"request": request})
+    async with get_db() as db:
+        council_count = await db.fetchval("""
+            SELECT COUNT(*) FROM councils
+            WHERE active = true
+            AND coverage_source IN
+            ('idox_scraper','data_gov_uk','gov_api','northgate_scraper')
+        """)
+        app_count = await db.fetchval(
+            "SELECT COUNT(*) FROM planning_applications"
+        )
+    return render("index.html", {
+        "request": request,
+        "council_count": council_count,
+        "app_count": app_count,
+    })
 
 
 @app.get("/search", response_class=HTMLResponse)
