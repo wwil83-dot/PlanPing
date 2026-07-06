@@ -165,6 +165,47 @@ async def geocode(postcodes: list[str]) -> dict:
     return results
 
 
+
+
+async def geocode_addresses(apps_without_coords: list[dict]) -> dict:
+    """Fallback geocoder using Nominatim (OSM) for apps without postcodes.
+    Only called in bulk mode — rate limited to 1 req/sec.
+    Returns dict mapping reference -> (lat, lng).
+    """
+    results = {}
+    if not apps_without_coords:
+        return results
+
+    async with httpx.AsyncClient(
+        timeout=10,
+        headers={"User-Agent": "PlanFind/1.0 (planfind.co.uk)"}
+    ) as c:
+        for app in apps_without_coords:
+            address = app.get("address", "")
+            if not address:
+                continue
+            try:
+                r = await c.get(
+                    "https://nominatim.openstreetmap.org/search",
+                    params={
+                        "q": address + ", United Kingdom",
+                        "format": "json",
+                        "limit": 1,
+                        "countrycodes": "gb",
+                    },
+                )
+                data = r.json()
+                if data:
+                    results[app["reference"]] = (
+                        float(data[0]["lat"]),
+                        float(data[0]["lon"]),
+                    )
+            except Exception:
+                pass
+            await asyncio.sleep(1.1)  # Nominatim rate limit: 1 req/sec
+
+    return results
+
 # ---------------------------------------------------------------------------
 # HTML parsing (same logic as before, now fed by Playwright page.content())
 # ---------------------------------------------------------------------------
@@ -589,6 +630,7 @@ async def process_council(
     browser: Browser,
     sem: asyncio.Semaphore,
     days_back: int,
+    bulk_mode: bool = False,
 ) -> int:
     # council_id comes ONLY from the portal object — never a loose parameter
     # that could get corrupted in async concurrent execution.
@@ -610,7 +652,7 @@ async def process_council(
             })
             return 0
 
-        # Geocode missing coordinates
+        # Geocode missing coordinates — step 1: postcodes.io (fast, batched)
         need = [a["postcode"] for a in apps if not a.get("lat") and a.get("postcode")]
         if need:
             print(f"    Geocoding {len(set(need))} postcodes…")
@@ -620,6 +662,33 @@ async def process_council(
                     pc = app["postcode"].strip().upper().replace(" ", "")
                     if pc in coords:
                         app["lat"], app["lng"] = coords[pc]
+
+        # Step 2: Nominatim address fallback for apps still without coordinates
+        # Only in bulk mode — Nominatim is rate-limited (1 req/sec) so too slow for daily
+        still_missing = [a for a in apps if not a.get("lat") and a.get("address")]
+        if still_missing and bulk_mode:
+            print(f"    Address geocoding {len(still_missing)} ungeocodable apps via Nominatim…")
+            addr_coords = await geocode_addresses(still_missing)
+            for app in apps:
+                if not app.get("lat") and app["reference"] in addr_coords:
+                    app["lat"], app["lng"] = addr_coords[app["reference"]]
+
+        # Step 3: Council centroid fallback — use median of geocoded apps in this batch
+        # Ensures major greenfield applications appear somewhere on the map
+        geocoded = [(a["lat"], a["lng"]) for a in apps if a.get("lat") and a.get("lng")]
+        if geocoded:
+            import statistics
+            centroid_lat = statistics.median(a[0] for a in geocoded)
+            centroid_lng = statistics.median(a[1] for a in geocoded)
+            fallback_count = 0
+            for app in apps:
+                if not app.get("lat"):
+                    app["lat"] = centroid_lat
+                    app["lng"] = centroid_lng
+                    app["geocode_quality"] = "centroid"
+                    fallback_count += 1
+            if fallback_count:
+                print(f"    Council centroid fallback for {fallback_count} apps")
 
         # Build upsert records — cid is captured from portal object, not the parameter
         records = [{
@@ -767,7 +836,7 @@ async def main():
                 skipped += 1
                 continue
             tasks.append(
-                process_council(portal, browser, sem, days)
+                process_council(portal, browser, sem, days, bulk_mode=bulk)
             )
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
