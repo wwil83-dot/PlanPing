@@ -833,21 +833,25 @@ IDOX_COUNCILS = [
     # Note: Falkirk, Midlothian, Renfrewshire, Perth & Kinross, North Lanarkshire,
     #       East/North Ayrshire, Scottish Borders not yet found - DNS fails
     # -------------------------------------------------------------------------
+    # NOTE: Edinburgh monthly list consistently times out — using weekly list
     ("City of Edinburgh Council",
-     "https://citydev-portal.edinburgh.gov.uk/idoxpa-web"),
+     "https://citydev-portal.edinburgh.gov.uk/idoxpa-web", "weekly"),
 
     # NOTE: Dundee uses idoxwam.dundeecity.gov.uk (not portal.dundeecity.gov.uk)
     ("Dundee City Council",
      "https://idoxwam.dundeecity.gov.uk/idoxpa-web"),
 
+    # NOTE: Glasgow monthly list consistently times out — using weekly list
     ("Glasgow City Council",
-     "https://publicaccess.glasgow.gov.uk/online-applications"),
+     "https://publicaccess.glasgow.gov.uk/online-applications", "weekly"),
 
+    # NOTE: Aberdeen monthly list consistently times out — using weekly list
     ("Aberdeen City Council",
-     "https://publicaccess.aberdeencity.gov.uk/online-applications"),
+     "https://publicaccess.aberdeencity.gov.uk/online-applications", "weekly"),
 
+    # NOTE: Highland uses /wam path (not /online-applications) + weekly list mode
     ("Highland Council",
-     "https://wam.highland.gov.uk/online-applications"),
+     "https://wam.highland.gov.uk/wam", "weekly"),
 
     # NOTE: Fife uses /online path (not /online-applications, /publicaccess or /idoxpa-web)
     ("Fife Council",
