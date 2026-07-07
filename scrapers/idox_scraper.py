@@ -403,6 +403,22 @@ CONTEXT_OPTIONS = {
     "ignore_https_errors": True,
 }
 
+# ---------------------------------------------------------------------------
+# monthlyListResults.do?action=firstPage fallback — EXPLICIT ALLOWLIST ONLY.
+#
+# Earlier version tried this fallback on every timeout for every council.
+# That was a mistake: dozens of already-broken councils each burned an extra
+# ~45s+25s retrying a path that was just as blocked, which pushed total run
+# time past GitHub Actions' 65-minute hard job timeout and got the whole
+# workflow cancelled before it finished (see run of 2026-07-07 15:58 UTC —
+# only got through ~2/3 of councils before cancellation, vs 49.6 min for all
+# 157 the run before). Keep this list short and only add councils where the
+# fallback is a genuine, confirmed candidate — not a blanket safety net.
+# ---------------------------------------------------------------------------
+TRY_FIRSTPAGE_FALLBACK_COUNCILS: set[str] = {
+    "Dumfries and Galloway Council",
+}
+
 
 class IdoxPortal:
     """Scrapes one Idox planning portal via Playwright."""
@@ -510,7 +526,12 @@ class IdoxPortal:
             # without the form-submission dance. Only safe for the CURRENT month
             # (month_index 0) — firstPage doesn't support monthYearIndex, so it
             # can't stand in for historical months.
-            if month_index == 0:
+            # GATED to an explicit allowlist + remaining time budget — see
+            # TRY_FIRSTPAGE_FALLBACK_COUNCILS comment above for why this is
+            # not applied to every timeout.
+            if (month_index == 0
+                    and self.council_name in TRY_FIRSTPAGE_FALLBACK_COUNCILS
+                    and not should_stop()):
                 print(f"    ⚠ Page load timeout — trying monthlyListResults.do fallback")
                 return await self._scrape_month_firstpage_fallback(page)
             print(f"    ⚠ Page load timeout")
@@ -529,7 +550,9 @@ class IdoxPortal:
             title = await page.title()
             print(f"    ⚠ Nothing loaded — title: '{title[:60]}'")
             # Try the same fallback if the page loaded but nothing usable appeared
-            if month_index == 0:
+            if (month_index == 0
+                    and self.council_name in TRY_FIRSTPAGE_FALLBACK_COUNCILS
+                    and not should_stop()):
                 print(f"    ⚠ Trying monthlyListResults.do fallback")
                 return await self._scrape_month_firstpage_fallback(page)
             return []
@@ -610,7 +633,9 @@ class IdoxPortal:
             print(f"    ⚠ Results timeout — title: '{title[:60]}'")
             # Try the fallback here too — form submission may have hung on a
             # blocked path even though the initial page load succeeded.
-            if month_index == 0:
+            if (month_index == 0
+                    and self.council_name in TRY_FIRSTPAGE_FALLBACK_COUNCILS
+                    and not should_stop()):
                 print(f"    ⚠ Trying monthlyListResults.do fallback")
                 return await self._scrape_month_firstpage_fallback(page)
             return []
