@@ -841,13 +841,13 @@ IDOX_COUNCILS = [
     ("Dundee City Council",
      "https://idoxwam.dundeecity.gov.uk/idoxpa-web"),
 
-    # NOTE: Glasgow monthly list consistently times out — using weekly list
+    # NOTE: Glasgow weekly list returns Error — back on monthly list
     ("Glasgow City Council",
-     "https://publicaccess.glasgow.gov.uk/online-applications", "weekly"),
+     "https://publicaccess.glasgow.gov.uk/online-applications"),
 
-    # NOTE: Aberdeen monthly list consistently times out — using weekly list
+    # NOTE: Aberdeen weekly list returns Error — back on monthly list
     ("Aberdeen City Council",
-     "https://publicaccess.aberdeencity.gov.uk/online-applications", "weekly"),
+     "https://publicaccess.aberdeencity.gov.uk/online-applications"),
 
     # NOTE: Highland uses /wam path (not /online-applications) + weekly list mode
     ("Highland Council",
