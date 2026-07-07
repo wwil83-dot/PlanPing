@@ -443,14 +443,15 @@ class IdoxPortal:
 
             if self.use_weekly_list:
                 # Weekly list portals don't expose the monthly list action.
-                # Fetch this week and last week to cover the 14-day window.
-                for week_offset in range(2):  # 0 = this week, 1 = last week
-                    apps = await self._scrape_week(page, week_offset)
-                    today_str = date.today().isoformat()
-                    for app in apps:
-                        if not app.get("submitted_date"):
-                            app["_month_fallback"] = today_str
-                    all_apps.extend(apps)
+                # Only fetch current week (week -1 via searchCriteria.weekNum=1
+                # causes ERR_CONNECTION_TIMED_OUT on many servers).
+                # Daily cron covers the rolling 14-day window across consecutive runs.
+                apps = await self._scrape_week(page, week_offset=0)
+                today_str = date.today().isoformat()
+                for app in apps:
+                    if not app.get("submitted_date"):
+                        app["_month_fallback"] = today_str
+                all_apps.extend(apps)
             else:
                 for target_month in months:
                     apps = await self._scrape_month(page, target_month)
