@@ -161,6 +161,10 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Scottish Borders Council":                  351,
     "Orkney Islands Council":                    352,
     "Shetland Islands Council":                  353,
+    # --- Additional Scotland seeded Jul 2026 ---
+    "Falkirk Council":                           354,
+    "Dumfries and Galloway Council":             355,
+    "East Renfrewshire Council":                 356,
 }
 
 IDOX_COUNCILS = [
@@ -828,10 +832,10 @@ IDOX_COUNCILS = [
      "https://www.planning2.cityoflondon.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
-    # SCOTLAND (18 confirmed Idox portals)
+    # SCOTLAND (21 confirmed Idox portals)
     # Note: Edinburgh uses /idoxpa-web path (not /online-applications)
-    # Note: Falkirk, Midlothian, Renfrewshire, Perth & Kinross, North Lanarkshire,
-    #       East/North Ayrshire, Scottish Borders not yet found - DNS fails
+    # Note: Midlothian, Renfrewshire not on monthly list (weekly only)
+    # Note: West Dunbartonshire confirmed NOT Idox (bespoke ASP system) — skip permanently
     # -------------------------------------------------------------------------
     # NOTE: Edinburgh monthly list consistently times out — using weekly list
     ("City of Edinburgh Council",
@@ -924,8 +928,23 @@ IDOX_COUNCILS = [
     ("Shetland Islands Council",
      "https://pa.shetland.gov.uk/online-applications"),
 
-    # East Renfrewshire: ercbuildingstandards.eastrenfrewshire.gov.uk/buildingstandards
-    # is BUILDING WARRANTS not planning applications — skip until planning portal found
+    # --- Additional Scottish councils found Jul 2026 ---
+    ("Falkirk Council",
+     "https://edevelopment.falkirk.gov.uk/online"),
+
+    ("Dumfries and Galloway Council",
+     "https://eaccess.dumgal.gov.uk/online-applications"),
+
+    # NOTE: domain/path say "buildingstandards" but this portal serves BOTH
+    # building standards AND planning applications — confirmed via live refs
+    # like 2026/0175/TP, 2026/0059/LBC (TP/LBC = planning ref formats).
+    # Watch first scrape for building-warrant-style refs mixed in with
+    # planning refs — may need an application_type/reference filter.
+    ("East Renfrewshire Council",
+     "https://ercbuildingstandards.eastrenfrewshire.gov.uk/buildingstandards"),
+
+    # West Dunbartonshire CONFIRMED not Idox — bespoke ASP system at
+    # apps.west-dunbarton.gov.uk/dcsearch_simple.asp. Skip permanently.
 
 ]
 
@@ -967,7 +986,7 @@ VALUES
   ('Leicester City Council','leicester-city-council','idox','england','https://publicaccess.leicester.gov.uk/online-applications','pending',true),
   ('Derby City Council','derby-city-council','idox','england','https://eplanning.derby.gov.uk/online-applications','pending',true),
   ('Nottinghamshire County Council','nottinghamshire-county-council','idox','england','https://publicaccess.nottinghamshire.gov.uk/online-applications','pending',true),
-  ('Newcastle City Council','newcastle-city-council','idox','england','https://publicaccess.newcastle.gov.uk/pa/pa.nsf/SearchSimple?OpenForm','pending',true),
+  ('Newcastle City Council','newcastle-city-council','idox','england','https://publicaccessapplications.newcastle.gov.uk/pa/pa.nsf/SearchSimple?OpenForm','pending',true),
   ('Sunderland City Council','sunderland-city-council','idox','england','https://www.sunderland.gov.uk/online-applications','pending',true),
   ('Gateshead Council','gateshead-council','idox','england','https://planning.gateshead.gov.uk/online-applications','pending',true),
   ('South Tyneside Metropolitan Borough Council','south-tyneside-metropolitan-borough-council','idox','england','https://www.southtyneside.gov.uk/online-applications','pending',true),
