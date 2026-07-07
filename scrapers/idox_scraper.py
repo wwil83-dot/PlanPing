@@ -503,6 +503,16 @@ class IdoxPortal:
         try:
             await page.goto(monthly_url, wait_until="domcontentloaded", timeout=45_000)
         except PlaywrightTimeout:
+            # FALLBACK: some portals (e.g. eaccess.dumgal.gov.uk) block/timeout
+            # on the search.do?action=monthlyList path specifically, but the
+            # monthlyListResults.do?action=firstPage path (what a human clicking
+            # "Weekly/Monthly Lists" actually lands on) goes straight to results
+            # without the form-submission dance. Only safe for the CURRENT month
+            # (month_index 0) — firstPage doesn't support monthYearIndex, so it
+            # can't stand in for historical months.
+            if month_index == 0:
+                print(f"    ⚠ Page load timeout — trying monthlyListResults.do fallback")
+                return await self._scrape_month_firstpage_fallback(page)
             print(f"    ⚠ Page load timeout")
             return []
         except Exception as e:
@@ -518,6 +528,10 @@ class IdoxPortal:
         except PlaywrightTimeout:
             title = await page.title()
             print(f"    ⚠ Nothing loaded — title: '{title[:60]}'")
+            # Try the same fallback if the page loaded but nothing usable appeared
+            if month_index == 0:
+                print(f"    ⚠ Trying monthlyListResults.do fallback")
+                return await self._scrape_month_firstpage_fallback(page)
             return []
 
         # — Step 2: Click "date received" radio & submit form —
@@ -594,6 +608,11 @@ class IdoxPortal:
         except PlaywrightTimeout:
             title = await page.title()
             print(f"    ⚠ Results timeout — title: '{title[:60]}'")
+            # Try the fallback here too — form submission may have hung on a
+            # blocked path even though the initial page load succeeded.
+            if month_index == 0:
+                print(f"    ⚠ Trying monthlyListResults.do fallback")
+                return await self._scrape_month_firstpage_fallback(page)
             return []
 
         # — Step 3: Collect all pages —
@@ -633,6 +652,68 @@ class IdoxPortal:
 
         if page_num > 1:
             print(f"    Total across {page_num} pages: {len(all_apps)}")
+        return all_apps
+
+    async def _scrape_month_firstpage_fallback(self, page: Page) -> list[dict]:
+        """Fallback for portals where search.do?action=monthlyList times out or
+        gets blocked, but monthlyListResults.do?action=firstPage works. This is
+        the URL a human lands on clicking 'Weekly/Monthly Lists' in the UI — it
+        goes straight to results for the CURRENT month, no form submission
+        needed. Only valid for month_index 0 (see caller).
+        """
+        fallback_url = f"{self.base_url}/monthlyListResults.do?action=firstPage"
+
+        try:
+            await page.goto(fallback_url, wait_until="domcontentloaded", timeout=45_000)
+        except PlaywrightTimeout:
+            print(f"    ⚠ Fallback page load timeout")
+            return []
+        except Exception as e:
+            print(f"    ⚠ Fallback navigation error: {e}")
+            return []
+
+        try:
+            await page.wait_for_selector(
+                "ul.searchresults, #searchResultsContainer, .searchresults, "
+                ".no-results, #searchResultsForm",
+                timeout=25_000,
+            )
+        except PlaywrightTimeout:
+            title = await page.title()
+            print(f"    ⚠ Fallback results timeout — title: '{title[:60]}'")
+            return []
+
+        all_apps: list[dict] = []
+        page_num = 1
+
+        while True:
+            html = await page.content()
+            apps, has_next = parse_results_page(
+                html, self.base_url, self.domain_root, self.council_name
+            )
+            all_apps.extend(apps)
+
+            if page_num == 1 and len(apps) > 0:
+                print(f"    Fallback page 1: {len(apps)} results")
+
+            should_continue = has_next or (len(apps) >= 10)
+            if not should_continue or not apps or page_num >= 50:
+                break
+
+            page_num += 1
+            next_url = (
+                f"{self.base_url}/pagedSearchResults.do"
+                f"?action=page&searchCriteria.page={page_num}"
+            )
+            try:
+                await page.goto(next_url, wait_until="domcontentloaded", timeout=15_000)
+                await asyncio.sleep(2)
+            except Exception as e:
+                print(f"    Fallback page {page_num} nav error: {e}")
+                break
+
+        if page_num > 1:
+            print(f"    Fallback total across {page_num} pages: {len(all_apps)}")
         return all_apps
 
     async def _scrape_week(self, page: Page, week_offset: int = 0) -> list[dict]:
