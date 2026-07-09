@@ -31,11 +31,21 @@ def render(template: str, ctx: dict) -> HTMLResponse:
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     async with get_db() as db:
+        # NOTE: requires app_count > 0, not just coverage_source set — a
+        # council can have coverage_source='idox_scraper' left over from a
+        # past attempt (e.g. its portal broke, got commented out of the
+        # active scraper list) while genuinely having zero applications.
+        # Without this check such councils silently count toward the
+        # headline stat forever. See Bury/Durham, fixed 2026-07-09.
         council_count = await db.fetchval("""
-            SELECT COUNT(*) FROM councils
-            WHERE active = true
-            AND coverage_source IN
+            SELECT COUNT(*) FROM councils c
+            WHERE c.active = true
+            AND c.coverage_source IN
             ('idox_scraper','data_gov_uk','gov_api','northgate_scraper')
+            AND EXISTS (
+                SELECT 1 FROM planning_applications pa
+                WHERE pa.council_id = c.id
+            )
         """)
         app_count = await db.fetchval(
             "SELECT COUNT(*) FROM planning_applications"
@@ -182,8 +192,18 @@ async def councils_list(request: Request):
             ORDER BY name
         """)
 
-    covered = [c for c in councils if c["coverage_source"] not in ("pending", "none", "manual_link")]
-    uncovered = [c for c in councils if c["coverage_source"] in ("pending", "none", "manual_link")]
+    # NOTE: "covered" requires app_count > 0, not just a coverage_source
+    # outside the pending/none/manual_link set. A council's coverage_source
+    # can get set to e.g. 'idox_scraper' once and then never reset if its
+    # portal later breaks and it gets commented out of the active scraper
+    # list — without the app_count check it would show "Live" forever with
+    # an empty results page. See Bury/Durham, fixed 2026-07-09.
+    covered = [
+        c for c in councils
+        if c["coverage_source"] not in ("pending", "none", "manual_link")
+        and c["app_count"] > 0
+    ]
+    uncovered = [c for c in councils if c not in covered]
 
     return render("councils.html", {
         "request": request,
