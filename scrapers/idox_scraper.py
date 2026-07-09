@@ -414,10 +414,14 @@ CONTEXT_OPTIONS = {
 # only got through ~2/3 of councils before cancellation, vs 49.6 min for all
 # 157 the run before). Keep this list short and only add councils where the
 # fallback is a genuine, confirmed candidate — not a blanket safety net.
+#
+# Dumfries and Galloway Council tested here 2026-07-07/09 — confirmed
+# Cloudflare/bot-challenge blocked even with this fallback, so it's been
+# removed from both this allowlist AND the active IDOX_COUNCILS list in
+# idox_councils.py. Leaving this set empty for now — add back only for a
+# new, genuinely untested candidate.
 # ---------------------------------------------------------------------------
-TRY_FIRSTPAGE_FALLBACK_COUNCILS: set[str] = {
-    "Dumfries and Galloway Council",
-}
+TRY_FIRSTPAGE_FALLBACK_COUNCILS: set[str] = set()
 
 
 class IdoxPortal:
@@ -643,12 +647,30 @@ class IdoxPortal:
         # — Step 3: Collect all pages —
         all_apps: list[dict] = []
         page_num = 1
+        # Some Idox portals silently redirect back to page 1 when asked for a
+        # page number beyond their actual results, instead of returning an
+        # empty page. Without this check that looks identical to "there's
+        # more data" and the loop runs all the way to the 50-page hard cap,
+        # wasting minutes re-fetching the same content (seen 2026-07-09:
+        # Newham and Brent both looped to 50 pages, one claiming 10,650
+        # "applications" that were really ~150 real ones repeated ~35x).
+        # Comparing each page's reference set to the previous page's catches
+        # this immediately regardless of the portal's specific looping
+        # behavior.
+        previous_refs: frozenset = frozenset()
 
         while True:
             html = await page.content()
             apps, has_next = parse_results_page(
                 html, self.base_url, self.domain_root, self.council_name
             )
+
+            current_refs = frozenset(a["reference"] for a in apps)
+            if page_num > 1 and current_refs and current_refs == previous_refs:
+                print(f"    Page {page_num} identical to previous — portal looped back, stopping")
+                break
+            previous_refs = current_refs
+
             all_apps.extend(apps)
 
             if page_num == 1 and len(apps) > 0:
@@ -710,12 +732,20 @@ class IdoxPortal:
 
         all_apps: list[dict] = []
         page_num = 1
+        previous_refs: frozenset = frozenset()
 
         while True:
             html = await page.content()
             apps, has_next = parse_results_page(
                 html, self.base_url, self.domain_root, self.council_name
             )
+
+            current_refs = frozenset(a["reference"] for a in apps)
+            if page_num > 1 and current_refs and current_refs == previous_refs:
+                print(f"    Fallback page {page_num} identical to previous — portal looped back, stopping")
+                break
+            previous_refs = current_refs
+
             all_apps.extend(apps)
 
             if page_num == 1 and len(apps) > 0:
@@ -789,12 +819,20 @@ class IdoxPortal:
         # Collect all pages (same logic as _scrape_month)
         all_apps: list[dict] = []
         page_num = 1
+        previous_refs: frozenset = frozenset()
 
         while True:
             html = await page.content()
             apps, has_next = parse_results_page(
                 html, self.base_url, self.domain_root, self.council_name
             )
+
+            current_refs = frozenset(a["reference"] for a in apps)
+            if page_num > 1 and current_refs and current_refs == previous_refs:
+                print(f"    Week -{week_offset} page {page_num} identical to previous — portal looped back, stopping")
+                break
+            previous_refs = current_refs
+
             all_apps.extend(apps)
 
             if page_num == 1 and len(apps) > 0:
