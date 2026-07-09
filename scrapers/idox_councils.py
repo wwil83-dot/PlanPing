@@ -175,6 +175,13 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Blaby District Council":                     362,
     "North West Leicestershire District Council": 363,
     "Shropshire Council":                         364,
+    # --- Devon + Dorset + Somerset seeded Jul 2026 ---
+    "Teignbridge District Council":                365,
+    "East Devon District Council":                 366,
+    "Mid Devon District Council":                  367,
+    "Dorset Council":                               368,
+    "Somerset Council (South)":                     369,
+    "Somerset Council (Mendip)":                    370,
 }
 
 IDOX_COUNCILS = [
@@ -348,6 +355,47 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     ("Shropshire Council",
      "https://pa.shropshire.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # DEVON
+    # Note: South Hams and West Devon CONFIRMED sharing a non-Idox portal
+    # (southhams.planning-register.co.uk) — skip both permanently.
+    # North Devon, Torridge not yet checked. Plymouth already flagged broken
+    # (redirects to Gloucester's server, see SOUTH WEST section below).
+    # -------------------------------------------------------------------------
+    ("Teignbridge District Council",
+     "https://publicaccess.teignbridge.gov.uk/online-applications"),
+
+    ("East Devon District Council",
+     "https://planning.eastdevon.gov.uk/online-applications"),
+
+    ("Mid Devon District Council",
+     "https://planning.middevon.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # DORSET
+    # Unitary authority (2019), ~380k population.
+    # -------------------------------------------------------------------------
+    ("Dorset Council",
+     "https://planning.dorset.gov.uk/public-access"),
+
+    # -------------------------------------------------------------------------
+    # SOMERSET
+    # Somerset became a unitary authority in 2023, but planning still runs on
+    # legacy district-level Idox portals that were never merged — hence two
+    # separate council rows for one modern authority, split by legacy area.
+    # Somerset West and Taunton CONFIRMED non-Idox (bespoke ASP system,
+    # www3.somersetwestandtaunton.gov.uk/asp/webpages/plan/plapplookup.asp)
+    # — skip. Sedgemoor area (sdc.somerset.gov.uk/Planning_Online) also looks
+    # non-Idox, not otherwise confirmed.
+    # Note: NOT to be confused with North Somerset Council (id=263), a
+    # completely separate, unrelated unitary authority already live.
+    # -------------------------------------------------------------------------
+    ("Somerset Council (South)",
+     "https://publicaccess.southsomerset.gov.uk/online-applications"),
+
+    ("Somerset Council (Mendip)",
+     "https://publicaccess.mendip.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # EAST MIDLANDS
