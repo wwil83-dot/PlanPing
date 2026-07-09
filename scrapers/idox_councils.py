@@ -168,6 +168,13 @@ COUNCIL_DB_IDS: dict[str, int] = {
     # --- Worcestershire seeded Jul 2026 ---
     "Bromsgrove District Council":                357,
     "Redditch Borough Council":                   358,
+    "Wyre Forest District Council":               359,
+    # --- Leicestershire + Shropshire seeded Jul 2026 ---
+    "Harborough District Council":                360,
+    "Hinckley and Bosworth Borough Council":      361,
+    "Blaby District Council":                     362,
+    "North West Leicestershire District Council": 363,
+    "Shropshire Council":                         364,
 }
 
 IDOX_COUNCILS = [
@@ -296,7 +303,7 @@ IDOX_COUNCILS = [
     # WORCESTERSHIRE
     # Note: Wychavon CONFIRMED not Idox — form-based search with weekly PDF
     # downloads, no /online-applications or search.do trace found. Skip.
-    # Malvern Hills, Worcester City, Wyre Forest not yet checked.
+    # Malvern Hills, Worcester City not yet checked.
     # -------------------------------------------------------------------------
     # NOTE: shared Idox server for Bromsgrove and Redditch — same portal_url,
     # separate council_id per council (same pattern as Lewes/Eastbourne,
@@ -306,6 +313,41 @@ IDOX_COUNCILS = [
 
     ("Redditch Borough Council",
      "https://publicaccess.bromsgroveandredditch.gov.uk/online-applications"),
+
+    ("Wyre Forest District Council",
+     "https://planningpa.wyreforestdc.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # LEICESTERSHIRE
+    # Note: Charnwood CONFIRMED Northgate PlanningExplorerAA (not Idox) —
+    # portal.charnwood.gov.uk/Northgate/PlanningExplorerAA. Good candidate
+    # for the future Northgate/OcellaWeb scraper, not this one.
+    # Melton Borough Council, Rutland (already covered, see id=249) not
+    # otherwise checked further. Leicester City, Oadby & Wigston not tried.
+    # -------------------------------------------------------------------------
+    ("Harborough District Council",
+     "https://pa2.harborough.gov.uk/online-applications"),
+
+    ("Hinckley and Bosworth Borough Council",
+     "https://pa.hinckley-bosworth.gov.uk/online-applications"),
+
+    ("Blaby District Council",
+     "https://pa.blaby.gov.uk/online-applications"),
+
+    # NOTE: North West Leicestershire uses /public-access path — a new path
+    # variant not seen elsewhere in this file (others use /online-applications,
+    # /online, /Online, /OnlinePlanning, /idoxpa-web, /publicaccess, /eplanning,
+    # /wam, /buildingstandards).
+    ("North West Leicestershire District Council",
+     "https://plans.nwleics.gov.uk/public-access"),
+
+    # -------------------------------------------------------------------------
+    # SHROPSHIRE
+    # Unitary authority, ~320k population — largest single population catch
+    # of this batch.
+    # -------------------------------------------------------------------------
+    ("Shropshire Council",
+     "https://pa.shropshire.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # EAST MIDLANDS
@@ -950,8 +992,14 @@ IDOX_COUNCILS = [
     ("Falkirk Council",
      "https://edevelopment.falkirk.gov.uk/online"),
 
-    ("Dumfries and Galloway Council",
-     "https://eaccess.dumgal.gov.uk/online-applications"),
+    # BROKEN — confirmed Cloudflare/bot-challenge blocked ('Just a moment...'
+    # interstitial) across two independent scrape runs (2026-07-07, 2026-07-09),
+    # including with the monthlyListResults.do?action=firstPage fallback. This
+    # is a domain-level WAF block, not a specific-endpoint issue — same
+    # category as Edinburgh/Highland. Not worth retrying without a residential
+    # UK proxy. DB row (id=355) kept for future re-enable if that changes.
+    # ("Dumfries and Galloway Council",
+    #  "https://eaccess.dumgal.gov.uk/online-applications"),
 
     # NOTE: domain/path say "buildingstandards" but this portal serves BOTH
     # building standards AND planning applications — confirmed via live refs
