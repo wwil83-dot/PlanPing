@@ -165,6 +165,9 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Falkirk Council":                           354,
     "Dumfries and Galloway Council":             355,
     "East Renfrewshire Council":                 356,
+    # --- Worcestershire seeded Jul 2026 ---
+    "Bromsgrove District Council":                357,
+    "Redditch Borough Council":                   358,
 }
 
 IDOX_COUNCILS = [
@@ -288,6 +291,21 @@ IDOX_COUNCILS = [
 
     ("Solihull Metropolitan Borough Council",
      "https://publicaccess.solihull.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # WORCESTERSHIRE
+    # Note: Wychavon CONFIRMED not Idox — form-based search with weekly PDF
+    # downloads, no /online-applications or search.do trace found. Skip.
+    # Malvern Hills, Worcester City, Wyre Forest not yet checked.
+    # -------------------------------------------------------------------------
+    # NOTE: shared Idox server for Bromsgrove and Redditch — same portal_url,
+    # separate council_id per council (same pattern as Lewes/Eastbourne,
+    # Maidstone/Tunbridge Wells).
+    ("Bromsgrove District Council",
+     "https://publicaccess.bromsgroveandredditch.gov.uk/online-applications"),
+
+    ("Redditch Borough Council",
+     "https://publicaccess.bromsgroveandredditch.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # EAST MIDLANDS
