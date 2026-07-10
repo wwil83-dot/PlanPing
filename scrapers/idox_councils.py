@@ -182,6 +182,9 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Dorset Council":                               368,
     "Somerset Council (South)":                     369,
     "Somerset Council (Mendip)":                    370,
+    # --- North Yorkshire seeded Jul 2026 ---
+    "North Yorkshire Council":                       371,
+    "North Yorkshire Council (Richmondshire)":       372,
 }
 
 IDOX_COUNCILS = [
@@ -376,8 +379,12 @@ IDOX_COUNCILS = [
     # DORSET
     # Unitary authority (2019), ~380k population.
     # -------------------------------------------------------------------------
-    ("Dorset Council",
-     "https://planning.dorset.gov.uk/public-access"),
+    # BROKEN — CONFIRMED not Idox, form-based search (not search.do/monthlyList
+    # pattern). ERR_NAME_NOT_RESOLVED errors across two runs were a symptom of
+    # this, not a DNS/timeout issue. DB row (id=368) kept, coverage_source
+    # should stay 'pending'.
+    # ("Dorset Council",
+    #  "https://planning.dorset.gov.uk/public-access"),
 
     # -------------------------------------------------------------------------
     # SOMERSET
@@ -396,6 +403,21 @@ IDOX_COUNCILS = [
 
     ("Somerset Council (Mendip)",
      "https://publicaccess.mendip.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # NORTH YORKSHIRE
+    # Unitary authority (2023). Main portal already merges 5 former districts
+    # (Harrogate, Scarborough, Craven, Hambleton, Selby) — deliberately NOT
+    # adding a separate Craven entry (publicaccess.cravendc.gov.uk) since it's
+    # almost certainly the same underlying data, to avoid double-counting.
+    # Richmondshire is a 6th former district still on its own unmerged portal.
+    # Ryedale not otherwise checked.
+    # -------------------------------------------------------------------------
+    ("North Yorkshire Council",
+     "https://publicaccess.northyorks.gov.uk/online-applications"),
+
+    ("North Yorkshire Council (Richmondshire)",
+     "https://planning.richmondshire.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # EAST MIDLANDS
