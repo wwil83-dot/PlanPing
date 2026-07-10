@@ -190,6 +190,12 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Swale Borough Council":                          374,
     "South Staffordshire District Council":           375,
     "Reigate and Banstead Borough Council":           376,
+    # --- Gloucestershire + Buckinghamshire seeded Jul 2026 ---
+    "Cotswold District Council":                      377,
+    "Stroud District Council":                        378,
+    "Tewkesbury Borough Council":                      379,
+    "Forest of Dean District Council":                 380,
+    "Buckinghamshire Council":                          381,
 }
 
 IDOX_COUNCILS = [
@@ -729,6 +735,19 @@ IDOX_COUNCILS = [
      "https://publicaccess.westoxon.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
+    # BUCKINGHAMSHIRE
+    # Unitary authority (2020), ~550k population. Council is mid-merger of 4
+    # legacy planning systems (Aylesbury Vale, Chiltern/South Bucks, Wycombe,
+    # Minerals & Waste) into this one combined portal — confirmed Idox
+    # directly by the council's own accessibility statement: "Public Access
+    # is run by Buckinghamshire Council through our third-party supplier
+    # Idox." Legacy Wycombe portal (publicaccess.wycombe.gov.uk/idoxpa-web)
+    # deliberately NOT added separately, being phased out into this one.
+    # -------------------------------------------------------------------------
+    ("Buckinghamshire Council",
+     "https://publicaccess.buckinghamshire.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
     # NORFOLK
     # -------------------------------------------------------------------------
     ("Breckland District Council",
@@ -822,7 +841,11 @@ IDOX_COUNCILS = [
     # NOTE: Wrexham CONFIRMED running Civica (planning.wrexham.gov.uk/planning,
     # footer says "© Civica"), migrated off Idox May 2024 — not this scraper.
     # Bridgend, RCT, Conwy, Flintshire, Gwynedd, Anglesey, Pembrokeshire,
-    # Ceredigion, Blaenau Gwent, Merthyr Tydfil, Vale of Glamorgan not checked.
+    # Ceredigion, Blaenau Gwent, Merthyr Tydfil not checked.
+    # RCT CONFIRMED bespoke ASPX system, not Idox — skip.
+    # Vale of Glamorgan CONFIRMED same planning-register.co.uk vendor as
+    # South Hams/West Devon — not Idox, skip.
+    # Bridgend unconfirmed either way.
 
     # -------------------------------------------------------------------------
     # SOUTH WEST
@@ -834,6 +857,18 @@ IDOX_COUNCILS = [
     # BROKEN — planning.plymouth.gov.uk redirects to Gloucester; Plymouth needs research.
     # ("Plymouth City Council",
     #  "https://planning.plymouth.gov.uk/online-applications"),
+
+    ("Cotswold District Council",
+     "https://publicaccess.cotswold.gov.uk/online-applications"),
+
+    ("Stroud District Council",
+     "https://publicaccess.stroud.gov.uk/online-applications"),
+
+    ("Tewkesbury Borough Council",
+     "https://publicaccess.tewkesbury.gov.uk/online-applications"),
+
+    ("Forest of Dean District Council",
+     "https://publicaccess.fdean.gov.uk/online-applications"),
 
     ("Exeter City Council",
      "https://publicaccess.exeter.gov.uk/online-applications"),
