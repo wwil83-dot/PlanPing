@@ -989,8 +989,34 @@ async def main():
         print("ERROR: idox_councils.py not found")
         sys.exit(1)
 
+    full_count = len(IDOX_COUNCILS)
+    if batch is not None:
+        midpoint = full_count // 2
+        if batch == 1:
+            IDOX_COUNCILS = IDOX_COUNCILS[:midpoint]
+        else:
+            IDOX_COUNCILS = IDOX_COUNCILS[midpoint:]
+
     bulk = "--bulk" in sys.argv
     days = 365 if bulk else 14  # hardcoded — env var was being overridden
+
+    # --------------------------------------------------------------------
+    # Batch splitting — as the council list grows, a single nightly run
+    # risks exceeding GitHub Actions' hard job timeout (see scrape.yml).
+    # Pass --batch=1 or --batch=2 to run only half the council list.
+    # The split is computed dynamically from IDOX_COUNCILS' current length,
+    # so it auto-rebalances every time councils are added or removed —
+    # no manual reassignment of which council belongs to which batch.
+    # Omit --batch entirely to run the full list (e.g. for --bulk mode,
+    # or local testing).
+    # --------------------------------------------------------------------
+    batch = None
+    for arg in sys.argv:
+        if arg.startswith("--batch="):
+            batch = int(arg.split("=", 1)[1])
+            if batch not in (1, 2):
+                print(f"ERROR: --batch must be 1 or 2, got {batch}")
+                sys.exit(1)
 
     # Bulk runs scrape 13 months per council — use lower concurrency and longer budget
     # to avoid hammering portals and hitting timeouts on slow servers.
@@ -1003,6 +1029,8 @@ async def main():
 
     print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Idox scraper (Playwright)")
     print(f"Mode:        {'BULK' if bulk else 'FAST'} ({days} days back)")
+    if batch is not None:
+        print(f"Batch:       {batch} of 2 ({len(IDOX_COUNCILS)} of {full_count} councils)")
     print(f"Councils:    {len(IDOX_COUNCILS)}")
     print(f"Concurrency: {concurrency}")
     print(f"Budget:      {budget} minutes")
