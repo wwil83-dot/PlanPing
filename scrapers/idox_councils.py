@@ -185,6 +185,11 @@ COUNCIL_DB_IDS: dict[str, int] = {
     # --- North Yorkshire seeded Jul 2026 ---
     "North Yorkshire Council":                       371,
     "North Yorkshire Council (Richmondshire)":       372,
+    # --- Swansea, Swale, South Staffordshire, Reigate and Banstead seeded Jul 2026 ---
+    "Swansea Council":                                373,
+    "Swale Borough Council":                          374,
+    "South Staffordshire District Council":           375,
+    "Reigate and Banstead Borough Council":           376,
 }
 
 IDOX_COUNCILS = [
@@ -308,6 +313,9 @@ IDOX_COUNCILS = [
 
     ("Solihull Metropolitan Borough Council",
      "https://publicaccess.solihull.gov.uk/online-applications"),
+
+    ("South Staffordshire District Council",
+     "https://planning.sstaffs.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # WORCESTERSHIRE
@@ -572,8 +580,14 @@ IDOX_COUNCILS = [
     ("Spelthorne Borough Council",
      "https://publicaccess.spelthorne.gov.uk/online-applications"),
 
+    ("Reigate and Banstead Borough Council",
+     "https://planning.reigate-banstead.gov.uk/online-applications"),
+
     # NOT Idox — skip: Waverley (planning360 system), Runnymede (Northgate),
-    # Elmbridge (emaps system), Woking/Tandridge/Mole Valley/Reigate (DNS not resolved)
+    # Elmbridge (emaps system), Woking (unconfirmed), Tandridge (bespoke ASP
+    # system, tdcplanningsearch.tandridge.gov.uk), Mole Valley (unconfirmed,
+    # not Idox pattern). Reigate and Banstead CONFIRMED Idox — moved out of
+    # this skip list Jul 2026.
 
     # --- KENT districts ---
     ("Sevenoaks District Council",
@@ -588,6 +602,11 @@ IDOX_COUNCILS = [
     # NOTE: twbcpa.midkent.gov.uk is Tunbridge Wells' partition of the shared midkent server.
     ("Tunbridge Wells Borough Council",
      "https://twbcpa.midkent.gov.uk/online-applications"),
+
+    # NOTE: pa.midkent.gov.uk is the same shared server as Maidstone (see above)
+    # — Swale was in the original NOTE comment but never actually added until now.
+    ("Swale Borough Council",
+     "https://pa.midkent.gov.uk/online-applications"),
 
     # --- EAST SUSSEX districts ---
     # NOTE: planningpa.lewes-eastbourne.gov.uk is a shared server for Lewes and Eastbourne.
@@ -796,6 +815,14 @@ IDOX_COUNCILS = [
 
     ("Monmouthshire County Council",
      "https://publicaccess.monmouthshire.gov.uk/online-applications"),
+
+    ("Swansea Council",
+     "https://property.swansea.gov.uk/online-applications"),
+
+    # NOTE: Wrexham CONFIRMED running Civica (planning.wrexham.gov.uk/planning,
+    # footer says "© Civica"), migrated off Idox May 2024 — not this scraper.
+    # Bridgend, RCT, Conwy, Flintshire, Gwynedd, Anglesey, Pembrokeshire,
+    # Ceredigion, Blaenau Gwent, Merthyr Tydfil, Vale of Glamorgan not checked.
 
     # -------------------------------------------------------------------------
     # SOUTH WEST
