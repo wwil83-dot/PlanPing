@@ -983,23 +983,6 @@ async def process_council(
 # Main
 # ---------------------------------------------------------------------------
 async def main():
-    try:
-        from idox_councils import IDOX_COUNCILS, COUNCIL_DB_IDS
-    except ImportError:
-        print("ERROR: idox_councils.py not found")
-        sys.exit(1)
-
-    full_count = len(IDOX_COUNCILS)
-    if batch is not None:
-        midpoint = full_count // 2
-        if batch == 1:
-            IDOX_COUNCILS = IDOX_COUNCILS[:midpoint]
-        else:
-            IDOX_COUNCILS = IDOX_COUNCILS[midpoint:]
-
-    bulk = "--bulk" in sys.argv
-    days = 365 if bulk else 14  # hardcoded — env var was being overridden
-
     # --------------------------------------------------------------------
     # Batch splitting — as the council list grows, a single nightly run
     # risks exceeding GitHub Actions' hard job timeout (see scrape.yml).
@@ -1017,6 +1000,23 @@ async def main():
             if batch not in (1, 2):
                 print(f"ERROR: --batch must be 1 or 2, got {batch}")
                 sys.exit(1)
+
+    try:
+        from idox_councils import IDOX_COUNCILS, COUNCIL_DB_IDS
+    except ImportError:
+        print("ERROR: idox_councils.py not found")
+        sys.exit(1)
+
+    full_count = len(IDOX_COUNCILS)
+    if batch is not None:
+        midpoint = full_count // 2
+        if batch == 1:
+            IDOX_COUNCILS = IDOX_COUNCILS[:midpoint]
+        else:
+            IDOX_COUNCILS = IDOX_COUNCILS[midpoint:]
+
+    bulk = "--bulk" in sys.argv
+    days = 365 if bulk else 14  # hardcoded — env var was being overridden
 
     # Bulk runs scrape 13 months per council — use lower concurrency and longer budget
     # to avoid hammering portals and hitting timeouts on slow servers.
