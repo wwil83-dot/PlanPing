@@ -3,7 +3,8 @@ name: PlanPing scraper
 on:
   schedule:
     - cron: '0 3 * * *'   # open data scrape
-    - cron: '0 4 * * *'   # idox nightly scrape
+    - cron: '0 4 * * *'   # idox nightly scrape — batch 1
+    - cron: '10 4 * * *'  # idox nightly scrape — batch 2
     - cron: '0 9 * * *'   # alerts
   workflow_dispatch:
     inputs:
@@ -12,7 +13,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox, scrape_idox_bulk, alerts]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, alerts]
 
 jobs:
   scrape:
@@ -49,9 +50,28 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: cd scrapers && python data_gov_harvester.py --bulk
 
-  scrape_idox:
+  # ---------------------------------------------------------------------
+  # Idox nightly scrape — split into two batches (2026-07-10).
+  #
+  # A single job covering the full council list was creeping toward
+  # GitHub Actions' 65-minute hard timeout as councils were added
+  # (47.9 → 48.6 → 57.5 → 60.1 → 56.3 → 58.4 → 60.2 minutes across
+  # successive sessions, even after fixing the pagination-loop bug that
+  # was separately wasting time). Splitting in two gives each batch
+  # roughly half the councils and comfortable headroom to keep growing
+  # the list without hitting the ceiling again.
+  #
+  # The split itself is computed dynamically inside idox_scraper.py from
+  # IDOX_COUNCILS' current length (see --batch flag) — nothing here needs
+  # updating as councils are added or removed, it always rebalances.
+  #
+  # Batch 2 is offset 10 minutes after batch 1 starts so they don't both
+  # launch Playwright/Chromium at the exact same instant on GitHub's
+  # shared runner pool.
+  # ---------------------------------------------------------------------
+  scrape_idox_a:
     if: >
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_a') ||
       (github.event_name == 'schedule' && github.event.schedule == '0 4 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 65
@@ -67,14 +87,41 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-v1
       - run: pip install playwright beautifulsoup4 httpx
       - run: playwright install --with-deps chromium
-      - name: Run Idox scraper — nightly (last 14 days)
+      - name: Run Idox scraper — nightly batch 1 of 2 (last 14 days)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MAX_MINUTES: "55"
           DAYS_BACK: "14"
           CONCURRENCY: "3"
-        run: cd scrapers && python idox_scraper.py
+        run: cd scrapers && python idox_scraper.py --batch=1
+
+  scrape_idox_b:
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_b') ||
+      (github.event_name == 'schedule' && github.event.schedule == '10 4 * * *')
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright beautifulsoup4 httpx
+      - run: playwright install --with-deps chromium
+      - name: Run Idox scraper — nightly batch 2 of 2 (last 14 days)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_MINUTES: "55"
+          DAYS_BACK: "14"
+          CONCURRENCY: "3"
+        run: cd scrapers && python idox_scraper.py --batch=2
 
   scrape_idox_bulk:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_bulk'
@@ -92,7 +139,7 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-v1
       - run: pip install playwright beautifulsoup4 httpx
       - run: playwright install --with-deps chromium
-      - name: Run Idox scraper — bulk (last 365 days)
+      - name: Run Idox scraper — bulk (last 180 days, full council list)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
