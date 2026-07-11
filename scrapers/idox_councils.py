@@ -202,6 +202,12 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "South Norfolk Council":                             384,
     "Kings Lynn and West Norfolk Borough Council":       385,
     "North Norfolk District Council":                    386,
+    # --- North Northamptonshire + North East England seeded Jul 2026 ---
+    "North Northamptonshire Council":                    387,
+    "North East Lincolnshire Council":                   388,
+    "North East Derbyshire District Council":            389,
+    "Bolsover District Council":                          390,
+    "Derbyshire Dales District Council":                  391,
 }
 
 IDOX_COUNCILS = [
@@ -756,11 +762,15 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # LINCOLNSHIRE
     # Note: West Lindsey CONFIRMED not Idox — custom system launched May 2024.
-    # Boston, South Holland, North Kesteven, South Kesteven, City of Lincoln
-    # not otherwise confirmed.
+    # North Lincolnshire CONFIRMED not Idox — custom query-string portal
+    # (apps.northlincs.gov.uk). Boston, South Holland, North Kesteven, South
+    # Kesteven, City of Lincoln not otherwise confirmed.
     # -------------------------------------------------------------------------
     ("East Lindsey District Council",
      "https://publicaccess.e-lindsey.gov.uk/online-applications"),
+
+    ("North East Lincolnshire Council",
+     "https://planninganddevelopment.nelincs.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # NORFOLK
@@ -789,6 +799,31 @@ IDOX_COUNCILS = [
     # planning.great-yarmouth.gov.uk/OcellaWeb/planningSearch — NOT Idox.
     # ("Great Yarmouth Borough Council",
     #  "https://planning.great-yarmouth.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # NORTHAMPTONSHIRE
+    # West Northamptonshire CONFIRMED not Idox — planning-register.co.uk
+    # vendor (same as South Hams/West Devon/Vale of Glamorgan). Skip.
+    # -------------------------------------------------------------------------
+    # New unified portal live since 21 August 2025, merging 4 former
+    # districts: Corby, East Northamptonshire, Kettering, Wellingborough.
+    ("North Northamptonshire Council",
+     "https://publicaccess.northnorthants.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # DERBYSHIRE
+    # Amber Valley CONFIRMED not Idox — bespoke ASP.NET "dailylistnew"
+    # system. Erewash, High Peak, South Derbyshire not otherwise checked.
+    # Chesterfield already covered (see COUNCIL_DB_IDS, id=317).
+    # -------------------------------------------------------------------------
+    ("North East Derbyshire District Council",
+     "https://planapps-online.ne-derbyshire.gov.uk/online-applications"),
+
+    ("Bolsover District Council",
+     "https://publicaccess.bolsover.gov.uk/online-applications"),
+
+    ("Derbyshire Dales District Council",
+     "https://planning.derbyshiredales.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # CAMBRIDGESHIRE
