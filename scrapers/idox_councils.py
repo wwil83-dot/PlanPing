@@ -196,6 +196,12 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Tewkesbury Borough Council":                      379,
     "Forest of Dean District Council":                 380,
     "Buckinghamshire Council":                          381,
+    # --- Lincolnshire + Norfolk seeded Jul 2026 ---
+    "East Lindsey District Council":                     33,
+    "Broadland District Council":                        383,
+    "South Norfolk Council":                             384,
+    "Kings Lynn and West Norfolk Borough Council":       385,
+    "North Norfolk District Council":                    386,
 }
 
 IDOX_COUNCILS = [
@@ -748,10 +754,36 @@ IDOX_COUNCILS = [
      "https://publicaccess.buckinghamshire.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
+    # LINCOLNSHIRE
+    # Note: West Lindsey CONFIRMED not Idox — custom system launched May 2024.
+    # Boston, South Holland, North Kesteven, South Kesteven, City of Lincoln
+    # not otherwise confirmed.
+    # -------------------------------------------------------------------------
+    ("East Lindsey District Council",
+     "https://publicaccess.e-lindsey.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
     # NORFOLK
+    # Norfolk essentially complete as of this batch — every district except
+    # Great Yarmouth (Northgate OcellaWeb, see below) now covered.
     # -------------------------------------------------------------------------
     ("Breckland District Council",
      "https://planning.breckland.gov.uk/online-applications"),
+
+    # NOTE: shared Idox server for Broadland and South Norfolk (joint
+    # council service) — same portal_url, separate council_id per council.
+    ("Broadland District Council",
+     "https://info.southnorfolkandbroadland.gov.uk/online-applications"),
+
+    ("South Norfolk Council",
+     "https://info.southnorfolkandbroadland.gov.uk/online-applications"),
+
+    ("Kings Lynn and West Norfolk Borough Council",
+     "https://online.west-norfolk.gov.uk/online-applications"),
+
+    # NOTE: confirmed via on-page "IDOX Public Access" branding.
+    ("North Norfolk District Council",
+     "https://idoxpa.north-norfolk.gov.uk/online-applications"),
 
     # BROKEN — Great Yarmouth uses Northgate OcellaWeb system:
     # planning.great-yarmouth.gov.uk/OcellaWeb/planningSearch — NOT Idox.
