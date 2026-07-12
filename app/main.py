@@ -182,7 +182,7 @@ async def about(request: Request):
 async def councils_list(request: Request):
     async with get_db() as db:
         councils = await db.fetch("""
-            SELECT name, slug, region, system, coverage_source,
+            SELECT name, slug, region, system, coverage_source, portal_url,
                    (SELECT COUNT(*) FROM planning_applications
                     WHERE council_id = c.id) AS app_count,
                    (SELECT MAX(submitted_date) FROM planning_applications
@@ -203,12 +203,28 @@ async def councils_list(request: Request):
         if c["coverage_source"] not in ("pending", "none", "manual_link")
         and c["app_count"] > 0
     ]
-    uncovered = [c for c in councils if c not in covered]
+
+    # Councils we don't scrape but have a known, real portal_url for — these
+    # get a direct external link on the coverage page so people can at least
+    # find their council's own site easily, even though we can't show live
+    # data for it. coverage_source='manual_link' + a non-null portal_url is
+    # the signal for this bucket. Added 2026-07-12.
+    manual_link = [
+        c for c in councils
+        if c not in covered
+        and c["coverage_source"] == "manual_link"
+        and c["portal_url"]
+    ]
+
+    # Everything else — genuinely no known link yet, or coverage_source is
+    # still 'pending'/'none'.
+    pending = [c for c in councils if c not in covered and c not in manual_link]
 
     return render("councils.html", {
         "request": request,
         "covered": covered,
-        "uncovered": uncovered,
+        "manual_link": manual_link,
+        "pending": pending,
         "total": len(councils),
         "covered_count": len(covered),
     })
