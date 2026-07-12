@@ -139,6 +139,27 @@ async def _supa_patch_council(council_id: int, data: dict):
         )
 
 
+async def _supa_increment_empty_runs(council_id: int):
+    """Atomically increments consecutive_empty_runs for a council via a
+    Postgres RPC function (see migration SQL: increment_empty_runs). This is
+    deliberately NOT a fetch-then-patch, because CONCURRENCY=3 means multiple
+    councils' coroutines run at once — a read-then-write here would risk a
+    lost increment if two councils happened to touch the same row at the
+    same instant (not possible for two different councils, but this pattern
+    is the safe default regardless). The RPC does the increment inside a
+    single UPDATE statement in the database, so it's race-free.
+    """
+    async with httpx.AsyncClient(timeout=10) as c:
+        try:
+            await c.post(
+                f"{SUPABASE_URL}/rest/v1/rpc/increment_empty_runs",
+                json={"council_id_param": council_id},
+                headers={**_h(), "Prefer": "return=minimal"},
+            )
+        except Exception as e:
+            print(f"    ⚠ Failed to increment empty-run counter: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Geocoding
 # ---------------------------------------------------------------------------
@@ -887,6 +908,12 @@ async def process_council(
             await _supa_patch_council(cid, {
                 "last_scraped_at": datetime.now(timezone.utc).isoformat()
             })
+            # Track consecutive empty runs so genuinely broken councils can
+            # be distinguished from ones that just had one quiet night —
+            # plenty of low-volume councils legitimately return 0 sometimes.
+            # See council_health_check.py, which alerts once this streak
+            # crosses a threshold (default 5 consecutive nights).
+            await _supa_increment_empty_runs(cid)
             return 0
 
         # Geocode missing coordinates — step 1: postcodes.io (fast, batched)
@@ -971,11 +998,20 @@ async def process_council(
             await _supa_patch_council(cid, {
                 "coverage_source": "idox_scraper",
                 "last_scraped_at": datetime.now(timezone.utc).isoformat(),
+                "last_saved_at": datetime.now(timezone.utc).isoformat(),
+                "consecutive_empty_runs": 0,
                 "active": True,
             })
             print(f"    ✓ Saved {saved}")
         else:
             print(f"    ⚠ Partial save: {saved} of {len(apps)} (see upsert errors above)")
+            if saved > 0:
+                # Some real data landed even though the run wasn't fully
+                # clean — still counts as "not silent", so reset the streak.
+                await _supa_patch_council(cid, {
+                    "last_saved_at": datetime.now(timezone.utc).isoformat(),
+                    "consecutive_empty_runs": 0,
+                })
         return saved
 
 
