@@ -6,7 +6,6 @@
     <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Coverage</h1>
     <p style="color:var(--muted)">We currently have live data for {{ covered_count }} council{{ 's' if covered_count != 1 }}. More being added regularly.</p>
   </div>
-
   {% if covered %}
   <div style="margin-bottom:2rem">
     <h2 style="font-size:1rem;font-weight:600;color:var(--green);margin-bottom:.75rem">✓ Live data ({{ covered_count }})</h2>
@@ -23,12 +22,27 @@
     </div>
   </div>
   {% endif %}
-
+  {% if manual_link %}
+  <div style="margin-bottom:2rem">
+    <h2 style="font-size:1rem;font-weight:600;color:var(--blue-dark);margin-bottom:.35rem">🔗 Direct links ({{ manual_link|length }})</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:.75rem">We don't yet scrape these councils automatically, but here's a direct link to their own planning search — so you can still find what you need in the meantime.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.6rem">
+      {% for c in manual_link %}
+      <a href="{{ c.portal_url }}" target="_blank" rel="noopener noreferrer" style="background:#fff;border:1px solid var(--border);border-left:3px solid #d9a441;border-radius:8px;padding:.8rem 1rem;text-decoration:none;color:var(--text);display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,.04)">
+        <div>
+          <div style="font-size:.88rem;font-weight:600">{{ c.name }}</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:2px">Opens the council's own site ↗</div>
+        </div>
+        <span style="font-size:.7rem;color:#8a6416;background:#fdf3e0;padding:2px 8px;border-radius:10px;font-weight:500">External</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
   <div style="background:var(--blue-light);border:1px solid #c3d9f0;border-radius:12px;padding:1.5rem;margin-bottom:2rem">
     <h3 style="font-size:1rem;font-weight:600;color:var(--blue-dark);margin-bottom:.5rem">🚀 Coverage is growing</h3>
     <p style="font-size:.88rem;color:var(--muted);line-height:1.7">We add new councils regularly as we find and verify their open data feeds. If your council isn't listed yet, join the waitlist below and we'll notify you when it's added. Most major councils publish planning data under the Open Government Licence — we're working through them systematically.</p>
   </div>
-
   <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:1.5rem;max-width:520px">
     <h3 style="font-size:1rem;font-weight:600;color:var(--blue-dark);margin-bottom:.4rem">Join the waitlist</h3>
     <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Tell us your postcode and we'll notify you when your council is covered.</p>
@@ -45,6 +59,5 @@
       <button type="button" class="btn btn-primary btn-full" data-post>Join waitlist</button>
     </form>
   </div>
-
 </main>
 {% endblock %}
