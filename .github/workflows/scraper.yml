@@ -6,6 +6,7 @@ on:
     - cron: '0 4 * * *'   # idox nightly scrape — batch 1
     - cron: '10 4 * * *'  # idox nightly scrape — batch 2
     - cron: '0 9 * * *'   # alerts
+    - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
   workflow_dispatch:
     inputs:
       job:
@@ -13,7 +14,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, alerts]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, alerts, council_health]
 
 jobs:
   scrape:
@@ -168,3 +169,33 @@ jobs:
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
           BASE_URL: ${{ secrets.BASE_URL }}
         run: python dispatch_alerts.py
+
+  # ---------------------------------------------------------------------
+  # Council health digest — weekly. Emails a summary of any Idox-scraped
+  # council that's returned zero applications for EMPTY_RUN_THRESHOLD (see
+  # council_health_check.py, default 5) CONSECUTIVE nightly runs. Sends
+  # nothing if every council is healthy, so a real alert actually stands
+  # out rather than getting lost in routine noise. Requires the
+  # consecutive_empty_runs / last_saved_at columns and increment_empty_runs
+  # RPC function from migration_council_health.sql to already be applied.
+  # ---------------------------------------------------------------------
+  council_health:
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'council_health') ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install httpx
+      - name: Check council health
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+        run: cd scrapers && python council_health_check.py
