@@ -208,6 +208,18 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "North East Derbyshire District Council":            389,
     "Bolsover District Council":                          390,
     "Derbyshire Dales District Council":                  391,
+    # --- Notts + Warwick + Suffolk + Kent + Sussex + Surrey seeded Jul 2026 ---
+    "Dartford Borough Council":                             31,
+    "Bassetlaw District Council":                          392,
+    "Broxtowe Borough Council":                            393,
+    "Mansfield District Council":                          394,
+    "Newark and Sherwood District Council":                395,
+    "Rushcliffe Borough Council":                          396,
+    "Warwick District Council":                            397,
+    "East Suffolk Council":                                398,
+    "West Suffolk Council":                                399,
+    "Worthing Borough Council":                            401,
+    "Woking Borough Council":                              402,
 }
 
 IDOX_COUNCILS = [
@@ -336,6 +348,18 @@ IDOX_COUNCILS = [
      "https://planning.sstaffs.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
+    # WARWICKSHIRE
+    # Note: Rugby CONFIRMED Agile Applications (same vendor as Dudley), not
+    # Idox — skip. North Warwickshire CONFIRMED custom servlet system, not
+    # Idox — skip. Nuneaton and Bedworth uses an AchieveForms platform, not
+    # confirmed Idox — skip. Warwickshire County Council itself runs Swift LG
+    # (same as Walsall) — not Idox. Stratford-on-Avon CONFIRMED bespoke
+    # ASP.NET system, not Idox — skip.
+    # -------------------------------------------------------------------------
+    ("Warwick District Council",
+     "https://planningdocuments.warwickdc.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
     # WORCESTERSHIRE
     # Note: Wychavon CONFIRMED not Idox — form-based search with weekly PDF
     # downloads, no /online-applications or search.do trace found. Skip.
@@ -458,6 +482,25 @@ IDOX_COUNCILS = [
     ("Nottingham City Council",
      "https://publicaccess.nottinghamcity.gov.uk/online-applications"),
 
+    # --- Nottinghamshire districts seeded Jul 2026 — nearly complete county ---
+    # Ashfield CONFIRMED Civica (civica.query URL params) — not Idox, skip.
+    # Gedling uses Idox's Uniform system but via an older ASP interface, not
+    # the classic scrapable pattern — not added, uncertain fit.
+    ("Bassetlaw District Council",
+     "http://publicaccess.bassetlaw.gov.uk/online-applications"),
+
+    ("Broxtowe Borough Council",
+     "https://publicaccess.broxtowe.gov.uk/online-applications"),
+
+    ("Mansfield District Council",
+     "https://planning.mansfield.gov.uk/online-applications"),
+
+    ("Newark and Sherwood District Council",
+     "https://publicaccess.newark-sherwooddc.gov.uk/online-applications"),
+
+    ("Rushcliffe Borough Council",
+     "https://planningon-line.rushcliffe.gov.uk/online-applications"),
+
     ("Rutland County Council",
      "https://publicaccess.rutland.gov.uk/online-applications"),
 
@@ -570,6 +613,12 @@ IDOX_COUNCILS = [
     ("Adur District Council",
      "https://planning.adur-worthing.gov.uk/online-applications"),
 
+    # NOTE: shared Idox server for Adur and Worthing (joint council service,
+    # confirmed by Idox's own case study naming both councils as customers)
+    # — same portal_url, separate council_id per council.
+    ("Worthing Borough Council",
+     "https://planning.adur-worthing.gov.uk/online-applications"),
+
     ("South Downs National Park Authority",
      "https://planningpublicaccess.southdowns.gov.uk/online-applications"),
 
@@ -601,13 +650,20 @@ IDOX_COUNCILS = [
     ("Reigate and Banstead Borough Council",
      "https://planning.reigate-banstead.gov.uk/online-applications"),
 
+    ("Woking Borough Council",
+     "https://caps.woking.gov.uk/online-applications"),
+
     # NOT Idox — skip: Waverley (planning360 system), Runnymede (Northgate),
-    # Elmbridge (emaps system), Woking (unconfirmed), Tandridge (bespoke ASP
-    # system, tdcplanningsearch.tandridge.gov.uk), Mole Valley (unconfirmed,
-    # not Idox pattern). Reigate and Banstead CONFIRMED Idox — moved out of
-    # this skip list Jul 2026.
+    # Elmbridge (emaps system), Tandridge (bespoke ASP system,
+    # tdcplanningsearch.tandridge.gov.uk), Mole Valley (unconfirmed, not Idox
+    # pattern), Wokingham (different council, uses legacy "FastWeb" system —
+    # not to be confused with Woking). Reigate and Banstead and Woking both
+    # CONFIRMED Idox — moved out of this skip list Jul 2026.
 
     # --- KENT districts ---
+    ("Dartford Borough Council",
+     "https://publicaccess.dartford.gov.uk/online-applications"),
+
     ("Sevenoaks District Council",
      "https://pa.sevenoaks.gov.uk/online-applications"),
 
@@ -976,6 +1032,13 @@ IDOX_COUNCILS = [
 
     ("Babergh District Council",
      "https://planning.baberghmidsuffolk.gov.uk/online-applications"),
+
+    # --- Suffolk seeded Jul 2026 — county now complete alongside Ipswich/Babergh ---
+    ("East Suffolk Council",
+     "https://publicaccess.eastsuffolk.gov.uk/online-applications"),
+
+    ("West Suffolk Council",
+     "https://planning.westsuffolk.gov.uk/online-applications"),
 
     ("Tendring District Council",
      "https://idox.tendringdc.gov.uk/online-applications"),
