@@ -231,8 +231,8 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-v1
       - run: pip install playwright
       - run: playwright install --with-deps chromium
-      - name: Run Arcus recon (round 5 — structural link-finding + SSL fix)
-        run: cd scrapers && python arcus_recon_5_structural.py
+      - name: "Run Arcus recon (round 6 — following:: axis link-finding)"
+        run: cd scrapers && python arcus_recon_6_structural_v2.py
       - name: Upload recon output
         if: always()
         uses: actions/upload-artifact@v4
