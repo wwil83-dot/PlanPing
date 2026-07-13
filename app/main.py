@@ -63,10 +63,32 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
     location = await postcode_lookup(postcode)
 
     if not location:
+        # BUG FIX (2026-07-14): this branch used to render index.html without
+        # app_count/council_count, which index.html always references to
+        # build the stats banner — Jinja2 hit an Undefined value and crashed
+        # with a 500 on EVERY failed postcode lookup, not just this one.
+        # Fetch the same stats index() uses so the error page renders
+        # correctly instead of blowing up.
+        async with get_db() as db:
+            council_count = await db.fetchval("""
+                SELECT COUNT(*) FROM councils c
+                WHERE c.active = true
+                AND c.coverage_source IN
+                ('idox_scraper','data_gov_uk','gov_api','northgate_scraper')
+                AND EXISTS (
+                    SELECT 1 FROM planning_applications pa
+                    WHERE pa.council_id = c.id
+                )
+            """)
+            app_count = await db.fetchval(
+                "SELECT COUNT(*) FROM planning_applications"
+            )
         return render("index.html", {
             "request": request,
             "error": f"Could not find postcode '{postcode}'. Please check and try again.",
             "postcode": postcode,
+            "council_count": council_count,
+            "app_count": app_count,
         })
 
     lat, lng = location["lat"], location["lng"]
@@ -181,15 +203,22 @@ async def about(request: Request):
 @app.get("/councils", response_class=HTMLResponse)
 async def councils_list(request: Request):
     async with get_db() as db:
+        # PERFORMANCE FIX (2026-07-14): the old version ran TWO correlated
+        # subqueries PER COUNCIL ROW (a COUNT and a MAX against
+        # planning_applications, which has grown to 100,000+ rows from
+        # months of nightly scraping). With ~250 council rows that's 500+
+        # separate scans of a huge table — this got slower every single day
+        # as more data accumulated, independent of adding new councils. A
+        # single LEFT JOIN + GROUP BY does the same job in one table scan.
         councils = await db.fetch("""
-            SELECT name, slug, region, system, coverage_source, portal_url,
-                   (SELECT COUNT(*) FROM planning_applications
-                    WHERE council_id = c.id) AS app_count,
-                   (SELECT MAX(submitted_date) FROM planning_applications
-                    WHERE council_id = c.id) AS latest_date
+            SELECT c.name, c.slug, c.region, c.system, c.coverage_source, c.portal_url,
+                   COUNT(pa.id) AS app_count,
+                   MAX(pa.submitted_date) AS latest_date
             FROM councils c
-            WHERE active = TRUE
-            ORDER BY name
+            LEFT JOIN planning_applications pa ON pa.council_id = c.id
+            WHERE c.active = TRUE
+            GROUP BY c.id, c.name, c.slug, c.region, c.system, c.coverage_source, c.portal_url
+            ORDER BY c.name
         """)
 
     # NOTE: "covered" requires app_count > 0, not just a coverage_source
