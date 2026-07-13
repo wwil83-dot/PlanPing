@@ -231,12 +231,12 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-v1
       - run: pip install playwright
       - run: playwright install --with-deps chromium
-      - name: Run Arcus recon
-        run: cd scrapers && python arcus_recon.py
+      - name: Run Arcus recon (round 2 — CSV download + network log)
+        run: cd scrapers && python arcus_recon_2.py
       - name: Upload recon output
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: arcus-recon-output
-          path: /tmp/arcus_recon_*
+          path: /tmp/arcus_*
           retention-days: 7
