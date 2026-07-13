@@ -231,8 +231,8 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-v1
       - run: pip install playwright
       - run: playwright install --with-deps chromium
-      - name: Run Arcus recon (round 3 — portability test across councils)
-        run: cd scrapers && python arcus_recon_3_portability.py
+      - name: Run Arcus recon (round 4 — click-based portability test)
+        run: cd scrapers && python arcus_recon_4_click_portability.py
       - name: Upload recon output
         if: always()
         uses: actions/upload-artifact@v4
