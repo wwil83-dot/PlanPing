@@ -220,6 +220,15 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "West Suffolk Council":                                399,
     "Worthing Borough Council":                            401,
     "Woking Borough Council":                              402,
+    # --- Wirral/Winchester/Test Valley/N Herts/Cambridge/Cambs/Luton/Torridge seeded Jul 2026 ---
+    "Wirral Metropolitan Borough Council":                  179,
+    "Winchester City Council":                              412,
+    "Test Valley Borough Council":                          413,
+    "North Hertfordshire District Council":                 414,
+    "Cambridge City Council":                                415,
+    "Cambridgeshire County Council":                         416,
+    "Luton Borough Council":                                 417,
+    "Torridge District Council":                             418,
 }
 
 IDOX_COUNCILS = [
@@ -291,9 +300,12 @@ IDOX_COUNCILS = [
     # ("Liverpool City Council",
     #  "https://planning.liverpool.gov.uk/online-applications"),
 
-    # BROKEN — Wirral uses LAR/Built ID system (online.wirral.gov.uk/planning), not Idox.
-    # ("Wirral Metropolitan Borough Council",
-    #  "https://www.wirral.gov.uk/online-applications"),
+    # CORRECTED Jul 2026 — Wirral RE-CONFIRMED as Idox. Old note below said
+    # "LAR/Built ID system, not Idox" — that may have been true once, or
+    # Wirral runs both in parallel, but planning.wirral.gov.uk/online-applications
+    # directly matches the classic search.do pattern and is confirmed working.
+    ("Wirral Metropolitan Borough Council",
+     "https://planning.wirral.gov.uk/online-applications"),
 
     ("Knowsley Metropolitan Borough Council",
      "https://planapp.knowsley.gov.uk/online-applications"),
@@ -413,9 +425,14 @@ IDOX_COUNCILS = [
     # DEVON
     # Note: South Hams and West Devon CONFIRMED sharing a non-Idox portal
     # (southhams.planning-register.co.uk) — skip both permanently.
-    # North Devon, Torridge not yet checked. Plymouth already flagged broken
+    # North Devon CONFIRMED not Idox (bespoke "Council Services" product,
+    # planning.northdevon.gov.uk/Search/Advanced) — skip.
+    # Torridge CONFIRMED Idox Jul 2026. Plymouth already flagged broken
     # (redirects to Gloucester's server, see SOUTH WEST section below).
     # -------------------------------------------------------------------------
+    ("Torridge District Council",
+     "http://publicaccess.torridge.gov.uk/online-applications"),
+
     ("Teignbridge District Council",
      "https://publicaccess.teignbridge.gov.uk/online-applications"),
 
@@ -748,6 +765,9 @@ IDOX_COUNCILS = [
     # ("Dacorum Borough Council",
     #  "https://planning.dacorum.gov.uk/publicaccess"),
 
+    ("North Hertfordshire District Council",
+     "https://pa2.north-herts.gov.uk/online-applications"),
+
     ("East Hertfordshire District Council",
      "https://publicaccess.eastherts.gov.uk/online-applications"),
 
@@ -765,6 +785,15 @@ IDOX_COUNCILS = [
      "https://planning.welhat.gov.uk/publicaccess"),
 
     # --- CAMBRIDGESHIRE ---
+    # Cambridge City and Cambridgeshire County (minerals & waste) added Jul
+    # 2026 — separate Idox instances, same pattern as Buckinghamshire's
+    # county-level minerals/waste portal.
+    ("Cambridge City Council",
+     "https://idox.cambridge.gov.uk/online-applications"),
+
+    ("Cambridgeshire County Council",
+     "https://planning.cambridgeshire.gov.uk/online-applications"),
+
     ("Huntingdonshire District Council",
      "https://publicaccess.huntingdonshire.gov.uk/online-applications"),
 
@@ -774,9 +803,17 @@ IDOX_COUNCILS = [
 
     # -------------------------------------------------------------------------
     # HAMPSHIRE districts (all confirmed Idox via 403 bot-block test)
-    # Note: Winchester (ASPX), Fareham (bespoke ASPX), Test Valley (unknown) skip
+    # Note: Fareham CONFIRMED bespoke ASPX, not Idox — skip.
+    # Winchester and Test Valley CONFIRMED Idox Jul 2026 — moved out of the
+    # old "skip: unknown/ASPX" note, that assumption was wrong or outdated.
     # Hampshire reorganises into 4 unitaries ~2027 but districts still process apps now
     # -------------------------------------------------------------------------
+    ("Winchester City Council",
+     "https://planningapps.winchester.gov.uk/online-applications"),
+
+    ("Test Valley Borough Council",
+     "https://view-applications.testvalley.gov.uk/online-applications"),
+
     ("Gosport Borough Council",
      "https://publicaccess.gosport.gov.uk/online-applications"),
 
@@ -1029,6 +1066,9 @@ IDOX_COUNCILS = [
 
     ("Bedford Borough Council",
      "https://publicaccess.bedford.gov.uk/online-applications"),
+
+    ("Luton Borough Council",
+     "https://planning.luton.gov.uk/online-applications"),
 
     ("Babergh District Council",
      "https://planning.baberghmidsuffolk.gov.uk/online-applications"),
