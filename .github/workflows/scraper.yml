@@ -231,8 +231,8 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-v1
       - run: pip install playwright
       - run: playwright install --with-deps chromium
-      - name: "Run Arcus recon (round 10 — Lightning combobox category fix)"
-        run: cd scrapers && python arcus_recon_10_lightning_combobox.py
+      - name: "Run Arcus recon (round 11 — wait after category + verify field values)"
+        run: cd scrapers && python arcus_recon_11_wait_and_verify.py
       - name: Upload recon output
         if: always()
         uses: actions/upload-artifact@v4
