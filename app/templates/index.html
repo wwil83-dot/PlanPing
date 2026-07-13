@@ -38,12 +38,18 @@
 <main class="main">
   <div class="stats-band">
     <div class="stat">
-      <span class="stat-number">{{ "{:,}".format(app_count) }}+</span>
+      <!-- SAFETY NET (2026-07-14): |default(0) means a code path that
+           forgets to pass app_count/council_count renders "0+" instead of
+           crashing the whole page with a 500. The real bug that caused this
+           was fixed in main.py's search() error branch, but this filter
+           stays as a defensive backstop against the same class of mistake
+           happening again on some other code path in future. -->
+      <span class="stat-number">{{ "{:,}".format(app_count|default(0)) }}+</span>
       <span class="stat-label">Applications tracked</span>
     </div>
     <div class="stat-divider"></div>
     <div class="stat">
-      <span class="stat-number">{{ council_count }}+</span>
+      <span class="stat-number">{{ council_count|default(0) }}+</span>
       <span class="stat-label">Councils covered</span>
     </div>
     <div class="stat-divider"></div>
