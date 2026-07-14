@@ -41,7 +41,7 @@ async def index(request: Request):
             SELECT COUNT(*) FROM councils c
             WHERE c.active = true
             AND c.coverage_source IN
-            ('idox_scraper','data_gov_uk','gov_api','northgate_scraper')
+            ('idox_scraper','arcus_scraper','data_gov_uk','gov_api','northgate_scraper')
             AND EXISTS (
                 SELECT 1 FROM planning_applications pa
                 WHERE pa.council_id = c.id
@@ -74,7 +74,7 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
                 SELECT COUNT(*) FROM councils c
                 WHERE c.active = true
                 AND c.coverage_source IN
-                ('idox_scraper','data_gov_uk','gov_api','northgate_scraper')
+                ('idox_scraper','arcus_scraper','data_gov_uk','gov_api','northgate_scraper')
                 AND EXISTS (
                     SELECT 1 FROM planning_applications pa
                     WHERE pa.council_id = c.id
@@ -414,7 +414,7 @@ def _coverage_message(council, council_name: str) -> dict:
     name = council["name"]
     portal = council["portal_url"] or ""
 
-    if source in ("idox_scraper", "northgate_scraper", "gov_api", "data_gov_uk"):
+    if source in ("idox_scraper", "arcus_scraper", "northgate_scraper", "gov_api", "data_gov_uk"):
         return {
             "type": "covered",
             "message": f"{name} is fully covered — results below are live.",
