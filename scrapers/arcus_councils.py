@@ -44,10 +44,9 @@ council_id+reference upsert conflict key, same as Idox's dual-month fetch.
 #   SELECT id, name FROM councils WHERE name = 'Council Name';
 # ---------------------------------------------------------------------------
 COUNCIL_DB_IDS: dict[str, int] = {
-    # Filled in once the SQL insert for these three has been run — see
-    # session notes. Left empty here so the scraper's existing "Not in DB
-    # (skipping)" fallback logic (same as idox_scraper.py) makes the gap
-    # obvious rather than silently guessing an ID.
+    "Ashford Borough Council":               7,
+    "Epping Forest District Council":       35,
+    "Manchester City Council":              52,
 }
 
 ARCUS_COUNCILS = [
