@@ -47,6 +47,8 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Ashford Borough Council":               7,
     "Epping Forest District Council":       35,
     "Manchester City Council":              52,
+    "Salford City Council":                 62,
+    "Folkestone and Hythe District Council": 423,
 }
 
 ARCUS_COUNCILS = [
@@ -73,21 +75,47 @@ ARCUS_COUNCILS = [
      ["Weekly List by Date (7 days)",
       "Decision List by Date (7 days)"]),
 
+    # NOTE: Salford uses a different homepage section wording again —
+    # "Quick links" rather than "Weekly lists" — with the general recent-
+    # submissions list called "Cases validated in the last 7 days". A
+    # second link, "Current Major Planning Cases", also exists (majors
+    # only) but isn't included here — same reasoning as not chasing every
+    # Idox council's niche sub-lists, the general list already captures
+    # everything that matters for a nightly scrape.
+    ("Salford City Council",
+     "https://salfordcitycouncil.my.site.com/pr/s",
+     ["Cases validated in the last 7 days"]),
+
+    # NOTE: uses the exact same link text as Ashford — "Planning
+    # Applications Weekly List" — the first repeat wording seen across 5
+    # councils. Path capitalization is genuinely /PR3/s/ (capital PR3),
+    # confirmed correct via real screenshot, not a typo.
+    ("Folkestone and Hythe District Council",
+     "https://folkestonehythedc.my.site.com/PR3/s",
+     ["Planning Applications Weekly List"]),
+
     # -------------------------------------------------------------------
-    # KNOWN ARCUS COUNCILS — NOT YET RECONNOITRED
-    # These were confirmed to be running Arcus during earlier Idox-hunting
-    # sessions (found the platform, not the exact link text), but nobody's
-    # captured a real screenshot of their homepage yet to confirm the
-    # actual "Weekly lists" wording. Do NOT guess — run arcus_recon.py
-    # against each and get a real screenshot first, same process that
-    # worked for the three above.
+    # KNOWN ARCUS COUNCILS — CONFIRMED BUT NOT YET SCRAPABLE
+    # Reconnoitred 2026-07-14. Both genuinely have NO "Weekly lists" or
+    # "Quick links" section at all on their homepage — unlike every other
+    # council above, which all had SOME quick-link shortcut, just worded
+    # differently. Only "Advanced search" is available. arcus_scraper.py
+    # currently only knows how to click a weekly-list link — it has no
+    # Advanced Search code path (category selection, date filling, click
+    # the LAST Search button — see round 12) even though that mechanism
+    # was fully proven working in recon. Adding these two requires
+    # building that second code path into the scraper first; do not
+    # attempt to add them as plain weekly-list entries, there is no such
+    # link to click.
     # -------------------------------------------------------------------
-    # ("Salford City Council",
-    #  "https://salfordcitycouncil.my.site.com/pr/s", []),
     # ("Bracknell Forest Council",
     #  "https://publicaccess.bracknell-forest.gov.uk/s", []),
     # ("Milton Keynes City Council",
     #  "https://www.be.milton-keynes.gov.uk/pr/s", []),
+
+    # -------------------------------------------------------------------
+    # KNOWN ARCUS COUNCILS — NOT YET RECONNOITRED
+    # -------------------------------------------------------------------
     # ("Isle of Anglesey County Council",
     #  "https://ioacc.my.site.com/s", []),  # NOTE: different path shape
     #                                        # (/s/pr-english, not /pr/s) —
