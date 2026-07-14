@@ -5,6 +5,7 @@ on:
     - cron: '0 3 * * *'   # open data scrape
     - cron: '0 4 * * *'   # idox nightly scrape — batch 1
     - cron: '10 4 * * *'  # idox nightly scrape — batch 2
+    - cron: '20 4 * * *'  # arcus nightly scrape
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
   workflow_dispatch:
@@ -14,7 +15,15 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, alerts, council_health, arcus_recon]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, alerts, council_health, arcus_recon]
+      arcus_target_url:
+        description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
+        required: false
+        default: ''
+      arcus_target_name:
+        description: '(arcus_recon only) human-readable name for the council being reconnoitred, purely for log readability'
+        required: false
+        default: ''
 
 jobs:
   scrape:
@@ -149,6 +158,43 @@ jobs:
           CONCURRENCY: "1"
         run: cd scrapers && python idox_scraper.py --bulk
 
+  # ---------------------------------------------------------------------
+  # Arcus (Salesforce Built Environment) nightly scrape — built 2026-07-14
+  # from 12 rounds of live reconnaissance. See arcus_councils.py and
+  # arcus_scraper.py module docstrings for the full mechanism writeup.
+  #
+  # Starts small (3 confirmed councils) deliberately — CONCURRENCY=2 and a
+  # 30-minute budget give generous headroom while the real-world
+  # reliability of this brand-new scraper is still being proven out night
+  # to night. Both can be raised once it's shown to run cleanly for a
+  # week or two, same maturation path idox_scraper.py went through.
+  # ---------------------------------------------------------------------
+  scrape_arcus:
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_arcus') ||
+      (github.event_name == 'schedule' && github.event.schedule == '20 4 * * *')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright beautifulsoup4 httpx
+      - run: playwright install --with-deps chromium
+      - name: Run Arcus scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_MINUTES: "30"
+          CONCURRENCY: "2"
+        run: cd scrapers && python arcus_scraper.py
+
   alerts:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'alerts') ||
@@ -203,13 +249,14 @@ jobs:
   # ---------------------------------------------------------------------
   # Arcus reconnaissance — manual trigger only, no schedule.
   #
-  # Arcus (Salesforce Lightning) planning portals are heavily JS-rendered,
-  # unlike Idox's simple server-rendered HTML. Nobody appears to have
-  # documented what the rendered DOM looks like once Lightning finishes
-  # loading, so this script doesn't try to parse/extract data — it just
-  # captures real rendered HTML + screenshots at a few navigation stages
-  # so the actual production scraper can be built against ground truth
-  # instead of guesses. See scrapers/arcus_recon.py for full detail.
+  # The FINAL, reusable version (2026-07-14) — consolidates 12 rounds of
+  # live investigation into a single tool for onboarding future Arcus
+  # councils. Targets Ashford by default (a known-working sanity check);
+  # override arcus_target_url/arcus_target_name via workflow_dispatch
+  # inputs when reconnoitring a genuinely new council. See
+  # scrapers/arcus_recon.py's module docstring for the full mechanism
+  # writeup and scrapers/arcus_councils.py for how confirmed councils get
+  # added afterward.
   #
   # Results are uploaded as a workflow artifact (Actions run summary page,
   # "Artifacts" section) rather than needing SUPABASE/RESEND secrets —
@@ -231,12 +278,15 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-v1
       - run: pip install playwright
       - run: playwright install --with-deps chromium
-      - name: "Run Arcus recon (round 12 — multiple Search button hypothesis)"
-        run: cd scrapers && python arcus_recon_12_search_button_fix.py
+      - name: Run Arcus recon
+        env:
+          ARCUS_TARGET_URL: ${{ github.event.inputs.arcus_target_url }}
+          ARCUS_TARGET_NAME: ${{ github.event.inputs.arcus_target_name }}
+        run: cd scrapers && python arcus_recon.py
       - name: Upload recon output
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: arcus-recon-output
-          path: /tmp/arcus_*
+          path: /tmp/arcus_recon_*
           retention-days: 7
