@@ -229,6 +229,7 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Cambridgeshire County Council":                         416,
     "Luton Borough Council":                                 417,
     "Torridge District Council":                             418,
+    "Cumberland Council (Carlisle)":                          436,
 }
 
 IDOX_COUNCILS = [
@@ -485,6 +486,23 @@ IDOX_COUNCILS = [
 
     ("North Yorkshire Council (Richmondshire)",
      "https://planning.richmondshire.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # CUMBRIA
+    # Cumberland Council (2023 unitary) is still transitioning — planning
+    # data currently split across FOUR separate systems during the
+    # changeover: a new unified Arcus portal (see arcus_councils.py, low
+    # volume so far — most real activity still flows through the legacy
+    # systems below), plus three still-separate former-district systems:
+    #   - Carlisle: own live Idox portal (confirmed via "Powered by Idox"
+    #     footer) — added here.
+    #   - Copeland: separate bespoke system, NOT Idox (custom search form,
+    #     "Application Reference/Valid Date/Decision Date/Parish" fields) —
+    #     needs its own recon before adding, not attempted yet.
+    #   - Allerdale: not yet checked, presumably another separate system.
+    # -------------------------------------------------------------------------
+    ("Cumberland Council (Carlisle)",
+     "https://publicaccess.carlisle.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # EAST MIDLANDS
