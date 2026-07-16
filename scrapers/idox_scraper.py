@@ -582,7 +582,7 @@ class IdoxPortal:
         cutoff = date.today() - timedelta(days=days_back)
 
         # Build the full list of calendar months to scrape.
-        # Fast mode (14 days): 1-2 months. Bulk mode (365 days): up to 13 months.
+        # Fast mode (14 days): 1-2 months. Bulk mode (180 days): up to ~6-7 months.
         months: list[date] = []
         m = date.today().replace(day=1)
         cutoff_month = cutoff.replace(day=1)
@@ -706,8 +706,24 @@ class IdoxPortal:
         # — Step 2: Click "date received" radio & submit form —
         form_submitted = False
 
-        # Explicitly select the first/current month in the dropdown
-        # (some portals have no default, causing 0 results if not set)
+        # BUG FIX (2026-07-16): this used to unconditionally call
+        # select_option(index=0) — which always selects whatever's FIRST
+        # in the dropdown (the current month), completely ignoring
+        # month_index. In fast mode (only 1-2 months requested) this bug
+        # was mostly invisible, since "wrongly defaults to current" was
+        # often close enough not to notice. In --bulk mode (13 months
+        # requested per council) it became catastrophic: EVERY one of the
+        # 13 requests silently re-fetched the identical current month,
+        # confirmed directly from a real run where councils like Bolton,
+        # Rochdale, Warwick, and Bromsgrove showed byte-identical
+        # "Total across N pages: X" results repeated 13 times in a row.
+        # This likely also contributed to hitting 429 rate-limit errors
+        # and the eventual job cancellation, since the run was doing ~13x
+        # more work than necessary for zero additional data. Select the
+        # option matching the ACTUALLY requested month_index instead —
+        # the original comment's concern (some portals have no default,
+        # causing 0 results if nothing is selected) is still handled,
+        # just correctly now rather than always defaulting to month 0.
         for month_sel in [
             "select[id='searchCriteria.monthYearIndex']",
             "select[name='searchCriteria.monthYearIndex']",
@@ -716,8 +732,18 @@ class IdoxPortal:
         ]:
             try:
                 loc = page.locator(month_sel)
-                if await loc.count() > 0:
-                    await loc.select_option(index=0)
+                option_count = await loc.count()
+                if option_count > 0:
+                    try:
+                        await loc.select_option(index=month_index)
+                    except Exception:
+                        # Requested index may not exist in this dropdown
+                        # (e.g. a council whose list only covers fewer
+                        # months than 13) — fall back to the closest
+                        # valid option rather than silently defaulting
+                        # back to month 0, which is exactly the bug this
+                        # fix addresses.
+                        await loc.select_option(index=0)
                     break
             except Exception:
                 continue
@@ -1173,9 +1199,17 @@ async def main():
             IDOX_COUNCILS = IDOX_COUNCILS[midpoint:]
 
     bulk = "--bulk" in sys.argv
-    days = 365 if bulk else 14  # hardcoded — env var was being overridden
+    # NOTE (2026-07-16): scrape.yml's scrape_idox_bulk job sets
+    # DAYS_BACK=180 in its env vars, but this line was hardcoding 365
+    # regardless — the env var was silently dead configuration, and every
+    # bulk run has actually been requesting a full 365 days despite the
+    # documented earlier decision to scale back to 180 for reliability.
+    # Fixed to match what scrape.yml actually intends. If you genuinely
+    # want 365 back, change this AND the DAYS_BACK value in scrape.yml
+    # together so they can't silently drift apart like this again.
+    days = 180 if bulk else 14  # hardcoded — env var is not read directly
 
-    # Bulk runs scrape 13 months per council — use lower concurrency and longer budget
+    # Bulk runs scrape ~6-7 months per council — use lower concurrency and longer budget
     # to avoid hammering portals and hitting timeouts on slow servers.
     if bulk:
         concurrency = int(os.environ.get("CONCURRENCY", "1"))
