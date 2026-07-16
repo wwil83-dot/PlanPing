@@ -200,6 +200,68 @@ async def about(request: Request):
     return render("about.html", {"request": request})
 
 
+@app.get("/activity", response_class=HTMLResponse)
+async def activity(request: Request):
+    # "Today" here means the application's own real submitted_date/
+    # decision_date as recorded by the council — NOT "records we happened
+    # to scrape in the last 24 hours". A council might publish an
+    # application dated 3 days ago that we're only seeing for the first
+    # time today (normal, given the rolling 14-day scrape window); that
+    # should NOT count as "new today" here, since it genuinely wasn't
+    # submitted today. This keeps the numbers honest even though it means
+    # quiet days (weekends especially) will show low or zero counts —
+    # that's a true reflection of real planning activity, not a bug.
+    async with get_db() as db:
+        row = await db.fetchrow("""
+            SELECT
+                COUNT(*) FILTER (
+                    WHERE submitted_date = CURRENT_DATE
+                ) AS new_applications,
+                COUNT(*) FILTER (
+                    WHERE decision_date = CURRENT_DATE AND status = 'approved'
+                ) AS approved_today,
+                COUNT(*) FILTER (
+                    WHERE decision_date = CURRENT_DATE AND status = 'refused'
+                ) AS refused_today,
+                -- NOTE: appeals are NOT a distinct tracked field anywhere
+                -- in the scraper schema — this is a best-effort match on
+                -- application_type text mentioning "appeal", not a
+                -- guaranteed-accurate count the way the three stats above
+                -- are. Flagged clearly in the template too.
+                COUNT(*) FILTER (
+                    WHERE submitted_date = CURRENT_DATE
+                    AND application_type ILIKE '%appeal%'
+                ) AS appeals_today
+            FROM planning_applications
+        """)
+
+        recent = await db.fetch("""
+            SELECT a.id, a.reference, a.address, a.description,
+                   a.application_type, a.status, a.submitted_date,
+                   c.name AS council_name, c.slug AS council_slug
+            FROM planning_applications a
+            JOIN councils c ON c.id = a.council_id
+            WHERE a.submitted_date = CURRENT_DATE
+            ORDER BY a.id DESC
+            LIMIT 10
+        """)
+
+    highlights = [dict(r) for r in recent]
+    for h in highlights:
+        h["type_badge"] = _type_badge(h.get("application_type", ""))
+        h["status_class"] = _status_class(h.get("status", ""))
+
+    return render("activity.html", {
+        "request": request,
+        "today": date.today().strftime("%A, %-d %B %Y"),
+        "new_applications": row["new_applications"],
+        "approved_today": row["approved_today"],
+        "refused_today": row["refused_today"],
+        "appeals_today": row["appeals_today"],
+        "highlights": highlights,
+    })
+
+
 @app.get("/councils", response_class=HTMLResponse)
 async def councils_list(request: Request):
     async with get_db() as db:
