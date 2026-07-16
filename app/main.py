@@ -128,6 +128,28 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
         a["status_class"] = _status_class(a.get("status", ""))
         a["days_ago"] = _days_ago(a.get("submitted_date"))
 
+    # BUG FIX (2026-07-16): the results-page map used to serialize entire
+    # application dicts straight to JSON in the template via Jinja's
+    # tojson filter. Those dicts include submitted_date/decision_date as
+    # real Python date objects — plain JSON has no concept of a date, so
+    # trying to serialize one raises an unhandled exception, which turned
+    # into the 500 error on every postcode search. Building a small,
+    # explicitly JSON-safe subset here (only int/float/str/bool fields)
+    # avoids the problem at the source rather than trying to work around
+    # it in the template.
+    map_markers = [
+        {
+            "id": a["id"],
+            "lat": a["lat"],
+            "lng": a["lng"],
+            "reference": a.get("reference") or "",
+            "address": a.get("address") or "",
+            "is_centroid": a.get("geocode_quality") == "centroid",
+        }
+        for a in applications
+        if a.get("lat") is not None and a.get("lng") is not None
+    ]
+
     coverage = _coverage_message(council, council_name)
 
     return render("results.html", {
@@ -136,6 +158,7 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
         "radius": radius,
         "days": days,
         "applications": applications,
+        "map_markers": map_markers,
         "total": len(applications),
         "lat": lat,
         "lng": lng,
