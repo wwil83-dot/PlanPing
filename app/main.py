@@ -101,6 +101,7 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
                 a.id, a.reference, a.address, a.postcode,
                 a.description, a.application_type, a.status,
                 a.submitted_date, a.decision_date, a.council_url,
+                a.lat, a.lng,
                 c.name AS council_name, c.slug AS council_slug,
                 c.coverage_source,
                 an.distance_miles
