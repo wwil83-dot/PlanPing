@@ -204,15 +204,16 @@
     var searchLat = {{ lat }};
     var searchLng = {{ lng }};
 
-    // Only apps with real coordinates get a pin. rejectattr(...,'none')
-    // specifically checks for None, not truthiness — important because a
-    // plain truthy check would incorrectly exclude any application with
-    // lng exactly 0.0, which is a genuine possibility for London
-    // postcodes near the Prime Meridian (Greenwich), not just a
-    // theoretical edge case. Centroid-fallback locations get a visually
-    // distinct, smaller/muted marker so they never look falsely precise
-    // next to genuinely geocoded addresses.
-    var apps = {{ applications | rejectattr('lat', 'none') | rejectattr('lng', 'none') | list | tojson }};
+    // BUG FIX (2026-07-16): this used to serialize entire application
+    // objects here via `applications | rejectattr(...) | tojson` — those
+    // objects include submitted_date/decision_date as real Python date
+    // objects, which plain JSON cannot represent, causing an unhandled
+    // exception on EVERY postcode search (a 500 error site-wide). Fixed
+    // by building a small, explicitly JSON-safe marker list in Python
+    // (main.py's /search route) instead — only int/float/str/bool
+    // fields, guaranteed serializable, and already filtered to only
+    // applications with real coordinates.
+    var apps = {{ map_markers | tojson }};
 
     var map = L.map('results-map').setView([searchLat, searchLng], 14);
 
@@ -229,8 +230,7 @@
     var bounds = [[searchLat, searchLng]];
 
     apps.forEach(function (app) {
-      if (app.lat == null || app.lng == null) return;
-      var isCentroid = app.geocode_quality === 'centroid';
+      var isCentroid = app.is_centroid;
       var marker = L.circleMarker([app.lat, app.lng], {
         radius: isCentroid ? 5 : 7,
         color: isCentroid ? '#999' : '#c0392b',
