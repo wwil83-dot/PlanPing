@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Planning applications near {{ postcode }} — PlanPing{% endblock %}
+{% block head_extra %}
+{% if total > 0 %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+{% endif %}
+{% endblock %}
 
 {% block content %}
 <header class="hero hero-compact">
@@ -57,9 +62,20 @@
     <button class="btn btn-primary" onclick="openModal('modal-alert')">Set up an alert for future applications</button>
   </div>
   {% else %}
+
+  {# Map view — toggleable so the list stays the default, uncluttered
+     experience, with the map available for anyone who wants to see
+     applications spatially. Only applications with real coordinates get
+     a pin; centroid-fallback locations are visually distinguished
+     (smaller, muted marker) so they don't look falsely precise. #}
+  <div style="margin-bottom:1rem">
+    <button class="btn btn-sm" id="map-toggle-btn" onclick="toggleResultsMap()">🗺️ Show map</button>
+  </div>
+  <div id="results-map" style="display:none;height:420px;border-radius:10px;border:1px solid var(--border);margin-bottom:1.25rem"></div>
+
   <div class="app-list">
     {% for app in applications %}
-    <article class="app-card status-{{ app.status_class }}">
+    <article class="app-card status-{{ app.status_class }}" id="app-card-{{ app.id }}">
       <div class="app-card-top">
         <div class="app-meta">
           <span class="app-ref">{{ app.reference }}</span>
@@ -157,5 +173,91 @@
     </form>
   </div>
 </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if total > 0 %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  var _resultsMapInitialized = false;
+
+  function toggleResultsMap() {
+    var mapDiv = document.getElementById('results-map');
+    var btn = document.getElementById('map-toggle-btn');
+    var showing = mapDiv.style.display !== 'none';
+
+    if (showing) {
+      mapDiv.style.display = 'none';
+      btn.textContent = '🗺️ Show map';
+      return;
+    }
+
+    mapDiv.style.display = 'block';
+    btn.textContent = '📋 Hide map';
+
+    // Only build the map once — Leaflet can't cleanly re-init into the
+    // same div, and there's no need to rebuild it on every toggle.
+    if (_resultsMapInitialized) return;
+    _resultsMapInitialized = true;
+
+    var searchLat = {{ lat }};
+    var searchLng = {{ lng }};
+
+    // Only apps with real coordinates get a pin. rejectattr(...,'none')
+    // specifically checks for None, not truthiness — important because a
+    // plain truthy check would incorrectly exclude any application with
+    // lng exactly 0.0, which is a genuine possibility for London
+    // postcodes near the Prime Meridian (Greenwich), not just a
+    // theoretical edge case. Centroid-fallback locations get a visually
+    // distinct, smaller/muted marker so they never look falsely precise
+    // next to genuinely geocoded addresses.
+    var apps = {{ applications | rejectattr('lat', 'none') | rejectattr('lng', 'none') | list | tojson }};
+
+    var map = L.map('results-map').setView([searchLat, searchLng], 14);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // Distinct marker for the searched postcode itself
+    L.circleMarker([searchLat, searchLng], {
+      radius: 8, color: '#1a3a5c', fillColor: '#1a3a5c', fillOpacity: 1, weight: 2
+    }).addTo(map).bindPopup('{{ postcode }}');
+
+    var bounds = [[searchLat, searchLng]];
+
+    apps.forEach(function (app) {
+      if (app.lat == null || app.lng == null) return;
+      var isCentroid = app.geocode_quality === 'centroid';
+      var marker = L.circleMarker([app.lat, app.lng], {
+        radius: isCentroid ? 5 : 7,
+        color: isCentroid ? '#999' : '#c0392b',
+        fillColor: isCentroid ? '#ccc' : '#e74c3c',
+        fillOpacity: isCentroid ? 0.5 : 0.85,
+        weight: 1.5
+      }).addTo(map);
+
+      var popupHtml = '<strong>' + (app.reference || '') + '</strong><br>' +
+        (app.address || '') +
+        (isCentroid ? '<br><em style="font-size:.75rem">Approximate location</em>' : '') +
+        '<br><a href="/application/' + app.id + '">View details →</a>';
+      marker.bindPopup(popupHtml);
+
+      // Clicking a pin also highlights the matching card in the list below
+      marker.on('click', function () {
+        var card = document.getElementById('app-card-' + app.id);
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+
+      bounds.push([app.lat, app.lng]);
+    });
+
+    if (bounds.length > 1) {
+      map.fitBounds(bounds, { padding: [30, 30] });
+    }
+  }
+</script>
 {% endif %}
 {% endblock %}
