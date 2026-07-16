@@ -283,9 +283,15 @@ def _abs_url(base_url: str, domain_root: str, href: str) -> str:
 
 
 # Tracks which councils have already had a date-diagnostic sample printed
-# this run — see the DIAGNOSTIC block in _parse_result() below. Resets
+# this run — see the DIAGNOSTIC blocks in _parse_result() below. Resets
 # naturally every run since each scrape invocation is a fresh process.
+# Two SEPARATE sets: one for the "field extraction collapsed entirely"
+# diagnostic, one for the "date specifically not found" diagnostic — kept
+# independent so fixing one class of bug can't accidentally silence
+# visibility into the other, which is exactly what happened when these
+# were briefly merged into a single check (see round-3 comment below).
 _DATE_DIAGNOSED_COUNCILS: set[str] = set()
+_DATE_LABEL_DIAGNOSED_COUNCILS: set[str] = set()
 
 
 def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> Optional[dict]:
@@ -415,6 +421,29 @@ def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> O
         raw_preview = (meta_raw_text or "(no metaInfo/meta-info/metadata element found at all)")[:400]
         print(f"    ⚠ FIELD DIAGNOSTIC [{council_name}]: only {list(fields.keys())} "
               f"extracted — raw text was: {raw_preview!r}")
+
+    # DIAGNOSTIC (2026-07-16, round 3): the round-2 separator fix worked —
+    # confirmed by round-2 diagnostic almost never firing across a full
+    # 210-council run. But real "submitted_date = today" counts barely
+    # moved (Leeds 211→211, Stockport 121→121, Richmond 93→93 — nearly
+    # identical before and after). Root cause: broadening the diagnostic
+    # trigger to len(fields) <= 1 accidentally SILENCED the original,
+    # still-unsolved problem for any council where the separator fix now
+    # correctly recovers several OTHER fields (address, status, etc.) but
+    # the DATE field specifically still uses a label not in the fallback
+    # chain above — date_raw stays empty and the today-fallback still
+    # fires, just with no diagnostic output anymore since len(fields) > 1
+    # no longer trips the round-2 check. This is a SEPARATE, independently
+    # rate-limited diagnostic specifically for "date not found" regardless
+    # of how many other fields WERE found — and prints full key/value
+    # pairs (not just keys) so a real date value can be spotted directly
+    # sitting under whatever unrecognized label the council actually uses,
+    # rather than guessing at label names blind a third time.
+    if not date_raw and council_name not in _DATE_LABEL_DIAGNOSED_COUNCILS:
+        _DATE_LABEL_DIAGNOSED_COUNCILS.add(council_name)
+        preview_items = {k: v[:40] for k, v in fields.items()}
+        print(f"    ⚠ DATE LABEL DIAGNOSTIC [{council_name}]: {len(fields)} field(s) "
+              f"extracted but none matched a known date label. Full fields: {preview_items}")
 
     return {
         "reference":        ref.strip(),
