@@ -159,8 +159,14 @@ ARCUS_COUNCILS = [
     # mode="tabbed_weekly_list" — activated 2026-07-16. Same first-live-run
     # caveat as above.
     # -------------------------------------------------------------------
+    # NOTE (2026-07-16, after 1st live run failed): base_url corrected to
+    # the specific /public-register path — the bare /s/ homepage only
+    # shows a generic welcome page with a "Search for Applications" link
+    # to click through, NOT the tabs directly. Confirmed from screenshot
+    # that /s/public-register is where the real Quick Search / Advanced
+    # Search / Weekly List tabs actually live for this council.
     ("Eastleigh Borough Council",
-     "https://planning.eastleigh.gov.uk/s",
+     "https://planning.eastleigh.gov.uk/s/public-register",
      "tabbed_weekly_list", None),  # confirmed via screenshot: results
                                    # render immediately off the tab
                                    # click alone, no category dropdown
