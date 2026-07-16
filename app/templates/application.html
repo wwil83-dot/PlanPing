@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 {% block title %}{{ app.reference }} — PlanPing{% endblock %}
+{% block head_extra %}
+{% if app.lat and app.lng %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+{% endif %}
+{% endblock %}
 {% block content %}
 <main class="main" style="max-width:680px">
   <a href="javascript:history.back()" class="btn" style="margin-bottom:1.25rem;display:inline-flex">← Back</a>
@@ -21,6 +26,18 @@
       {% if app.decision_date %}<div><span style="color:var(--muted)">Decision</span><br><strong>{{ app.decision_date.strftime('%-d %b %Y') }}</strong></div>{% endif %}
       {% if app.postcode %}<div><span style="color:var(--muted)">Postcode</span><br><strong>{{ app.postcode }}</strong></div>{% endif %}
     </div>
+
+    {% if app.lat and app.lng %}
+    <div style="margin-top:1.25rem">
+      <div id="app-map" style="height:280px;border-radius:8px;border:1px solid var(--border)"></div>
+      {% if app.geocode_quality == 'centroid' %}
+      <p style="font-size:.75rem;color:var(--muted);margin-top:.4rem">
+        Approximate location — exact address couldn't be pinpointed, showing this council's general area instead.
+      </p>
+      {% endif %}
+    </div>
+    {% endif %}
+
     {% if app.council_url %}
     <div style="margin-top:1.25rem">
       <a href="{{ app.council_url }}" target="_blank" rel="noopener" class="btn btn-primary">View on council portal →</a>
@@ -28,4 +45,28 @@
     {% endif %}
   </div>
 </main>
+{% endblock %}
+
+{% block scripts %}
+{% if app.lat and app.lng %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  (function () {
+    var lat = {{ app.lat }};
+    var lng = {{ app.lng }};
+    var map = L.map('app-map', {
+      scrollWheelZoom: false,
+      zoomControl: true,
+    }).setView([lat, lng], {{ 15 if app.geocode_quality != 'centroid' else 12 }});
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    L.marker([lat, lng]).addTo(map)
+      .bindPopup({{ (app.address or app.reference) | tojson }});
+  })();
+</script>
+{% endif %}
 {% endblock %}
