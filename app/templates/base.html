@@ -22,21 +22,19 @@
         <span class="brand-name">PlanFind</span>
       </a>
       <div class="nav-links">
+        <a href="/activity">Today's Activity</a>
         <a href="/councils">Coverage</a>
         <a href="/about">About</a>
       </div>
     </div>
   </nav>
-
   {% block content %}{% endblock %}
-
   <footer class="footer">
     <div class="footer-inner">
       <p>© 2026 PlanFind · Planning Application Search Made Easy · <a href="/about">About</a> · <a href="/privacy">Privacy</a> · <a href="/councils">Coverage</a></p>
       <p style="margin-top:.4rem">Planning data sourced from council portals and planning.data.gov.uk under the Open Government Licence v3.0. PlanFind is an independent service not affiliated with any council or government body.</p>
     </div>
   </footer>
-
   <div class="toast" id="toast" role="alert"></div>
   <script>
     function showToast(msg) {
