@@ -282,6 +282,12 @@ def _abs_url(base_url: str, domain_root: str, href: str) -> str:
     return f"{base_url}/{href.lstrip('/')}"
 
 
+# Tracks which councils have already had a date-diagnostic sample printed
+# this run — see the DIAGNOSTIC block in _parse_result() below. Resets
+# naturally every run since each scrape invocation is a fresh process.
+_DATE_DIAGNOSED_COUNCILS: set[str] = set()
+
+
 def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> Optional[dict]:
     link = item.find("a", href=True)
     if not link: return None
@@ -368,6 +374,25 @@ def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> O
         fields.get("reg date") or
         ""
     )
+
+    # DIAGNOSTIC (2026-07-16): discovered via cross-referencing Supabase
+    # "submitted_date = today" counts against actual per-council save
+    # counts from a real scrape run — for many councils (Leeds, Bradford,
+    # Stockport, Babergh, Fife, and others spanning completely different
+    # portal templates, not just one shared-service quirk like Adur's day-
+    # name-prefix bug) the counts matched almost exactly, meaning a large
+    # fraction of applications are silently getting stamped with TODAY's
+    # date rather than their real submitted date. If none of the known
+    # date-field labels above matched, this is almost certainly why — the
+    # real label on this council's page just isn't in that list yet.
+    # Print (once per council per run, not per-record, to avoid flooding
+    # the log) exactly what field labels WERE found, so the real label
+    # can be identified and added to the fallback chain above with
+    # evidence instead of another guess.
+    if not date_raw and council_name not in _DATE_DIAGNOSED_COUNCILS:
+        _DATE_DIAGNOSED_COUNCILS.add(council_name)
+        print(f"    ⚠ DATE DIAGNOSTIC [{council_name}]: no date field matched "
+              f"any known label. Fields actually found on this page: {list(fields.keys())}")
 
     return {
         "reference":        ref.strip(),
