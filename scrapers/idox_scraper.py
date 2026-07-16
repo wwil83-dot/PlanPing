@@ -302,8 +302,28 @@ def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> O
     # Parse metadata fields first (metaInfo contains the real reference)
     fields: dict[str, str] = {}
     meta = item.find(class_=re.compile(r"metaInfo|meta-info|metadata", re.I))
+    # meta_raw_text: NO forced separator — kept purely for the diagnostic
+    # below, showing exactly what the underlying markup looks like
+    # unmodified, for comparison/proof.
+    meta_raw_text = meta.get_text(strip=True) if meta else None
     if meta:
-        for part in meta.get_text(strip=True).split("|"):
+        # FIX (2026-07-16, round 2): confirmed via cross-referencing
+        # Supabase "submitted_date = today" counts against real per-
+        # council save counts, then reproduced exactly via simulation —
+        # the OLD code called get_text(strip=True) with NO separator,
+        # which concatenates text from separate child elements with
+        # NOTHING between them if the source markup doesn't literally
+        # contain a "|" character in the text itself (only visual/CSS
+        # spacing between elements, common in modern Idox templates).
+        # That collapsed every field after the first into one giant blob,
+        # attached as the VALUE of whichever key came first (almost
+        # always "ref. no") — explaining why so many different councils'
+        # diagnostics showed ONLY ['ref. no'] and nothing else, not just
+        # a missing date. Forcing separator="|" here is a safe superset
+        # fix: for councils whose HTML genuinely already contains a real
+        # "|" character, this just adds a second one, which strips down
+        # to an empty, harmless segment — no regression risk either way.
+        for part in meta.get_text(separator="|", strip=True).split("|"):
             part = part.strip()
             if ":" in part:
                 k, _, v = part.partition(":")
@@ -375,24 +395,26 @@ def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> O
         ""
     )
 
-    # DIAGNOSTIC (2026-07-16): discovered via cross-referencing Supabase
-    # "submitted_date = today" counts against actual per-council save
-    # counts from a real scrape run — for many councils (Leeds, Bradford,
-    # Stockport, Babergh, Fife, and others spanning completely different
-    # portal templates, not just one shared-service quirk like Adur's day-
-    # name-prefix bug) the counts matched almost exactly, meaning a large
-    # fraction of applications are silently getting stamped with TODAY's
-    # date rather than their real submitted date. If none of the known
-    # date-field labels above matched, this is almost certainly why — the
-    # real label on this council's page just isn't in that list yet.
-    # Print (once per council per run, not per-record, to avoid flooding
-    # the log) exactly what field labels WERE found, so the real label
-    # can be identified and added to the fallback chain above with
-    # evidence instead of another guess.
-    if not date_raw and council_name not in _DATE_DIAGNOSED_COUNCILS:
+    # DIAGNOSTIC (2026-07-16, round 2): the first version of this
+    # diagnostic only printed the parsed field KEYS, and every affected
+    # council showed the exact same thing: ['ref. no'] and nothing else —
+    # no address, no status, no proposal, not just a missing date. That's
+    # not "wrong date label", that's the whole field-splitting mechanism
+    # only ever capturing the FIRST field. Working theory: the parser
+    # splits on a literal "|" character, assuming that's how Idox
+    # separates fields in the rendered text — if the real markup no
+    # longer contains a literal "|" (e.g. fields are now separate child
+    # elements with CSS-only visual spacing, no pipe symbol in the actual
+    # text), splitting on "|" returns the WHOLE block as one blob, and
+    # partition(":") then grabs "ref. no" as the key and silently
+    # swallows every other field's text into that one value. Printing the
+    # raw meta text directly (once per council per run) proves or
+    # disproves this rather than guessing again.
+    if len(fields) <= 1 and council_name not in _DATE_DIAGNOSED_COUNCILS:
         _DATE_DIAGNOSED_COUNCILS.add(council_name)
-        print(f"    ⚠ DATE DIAGNOSTIC [{council_name}]: no date field matched "
-              f"any known label. Fields actually found on this page: {list(fields.keys())}")
+        raw_preview = (meta_raw_text or "(no metaInfo/meta-info/metadata element found at all)")[:400]
+        print(f"    ⚠ FIELD DIAGNOSTIC [{council_name}]: only {list(fields.keys())} "
+              f"extracted — raw text was: {raw_preview!r}")
 
     return {
         "reference":        ref.strip(),
