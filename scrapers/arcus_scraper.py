@@ -699,9 +699,19 @@ class ArcusPortal:
         category from a dropdown first — category_hint is the exact
         dropdown option text to select in that case, or None to skip
         straight to checking for results after the tab click alone.
+
+        BUG FIX (2026-07-16, after first live run): this used to navigate
+        to self.register_url (the "/register-view?c__r=Arcus_BE_Public_
+        Register" suffix every OTHER Arcus template needs), which caused
+        both Eastleigh and Anglesey to fail with "Weekly List tab not
+        found" on their live debut. Real screenshots show neither council
+        ever uses that suffix — Eastleigh's actual page is
+        planning.eastleigh.gov.uk/s/public-register, Anglesey's is
+        ioacc.my.site.com/s/pr-english?language=en_GB. Both are just the
+        plain base_url with no extra suffix. Navigate there directly.
         """
         try:
-            await page.goto(self.register_url, wait_until="domcontentloaded", timeout=45_000)
+            await page.goto(self.base_url, wait_until="domcontentloaded", timeout=45_000)
             await asyncio.sleep(2)
         except Exception as e:
             print(f"    ⚠ Navigation error: {e}")
