@@ -425,13 +425,48 @@ CONTEXT_OPTIONS = {
 
 
 class ArcusPortal:
-    """Scrapes one Arcus planning portal via Playwright."""
+    """Scrapes one Arcus planning portal via Playwright.
 
-    def __init__(self, council_name: str, base_url: str, weekly_list_texts: list[str],
-                 db_council_id: int):
+    Supports three distinct navigation patterns, discovered across two
+    days of reconnaissance since not every council's Arcus instance uses
+    the same homepage layout:
+
+      mode="weekly_list" (most councils): homepage has a "Weekly lists" or
+        "Quick links" section with one or more clickable links leading
+        straight to results. config = list of exact link texts to click.
+
+      mode="advanced_search" (Bromley, Bracknell Forest, Milton Keynes):
+        homepage has NO quick-link shortcut at all — only "Advanced
+        search". Uses the exact sequence proven in recon round 12: click
+        Advanced search, select "Planning Applications" category via
+        Lightning combobox, fill a 14-day date range, click the LAST
+        "Search" button on the page (critical fix from round 12 — there
+        are usually 2-3 buttons named "Search", the form's real submit
+        button is reliably the last one in document order). config unused.
+
+      mode="tabbed_weekly_list" (Eastleigh, Isle of Anglesey): a visibly
+        different Arcus template using tabbed navigation (Quick Search /
+        Advanced Search / Weekly List as tabs) rather than homepage links.
+        Click the "Weekly List" tab; some councils (Eastleigh) render
+        results immediately with no further interaction, others (Anglesey)
+        need a category dropdown selected first. config = the exact
+        dropdown option text to select if one is needed, or None if
+        results render directly off the tab click alone.
+
+    NOTE: advanced_search and tabbed_weekly_list modes are built directly
+    from documented recon findings but have NOT yet been run against a
+    live council in production — unlike weekly_list mode, which has run
+    successfully for 7 councils across 3 nights. Treat the first live run
+    using either new mode as the real test, the same way weekly_list mode
+    itself was validated.
+    """
+
+    def __init__(self, council_name: str, base_url: str, mode: str,
+                 config, db_council_id: int):
         self.council_name = council_name
         self.base_url = base_url.rstrip("/")
-        self.weekly_list_texts = weekly_list_texts
+        self.mode = mode
+        self.config = config
         self.db_council_id = db_council_id
         self.register_url = f"{self.base_url}/register-view?c__r=Arcus_BE_Public_Register"
 
@@ -440,9 +475,23 @@ class ArcusPortal:
         context: BrowserContext = await browser.new_context(**CONTEXT_OPTIONS)
         try:
             page: Page = await context.new_page()
-            for link_text in self.weekly_list_texts:
-                apps = await self._scrape_weekly_list(page, link_text)
+
+            if self.mode == "weekly_list":
+                for link_text in self.config:
+                    apps = await self._scrape_weekly_list(page, link_text)
+                    all_apps.extend(apps)
+
+            elif self.mode == "advanced_search":
+                apps = await self._scrape_advanced_search(page)
                 all_apps.extend(apps)
+
+            elif self.mode == "tabbed_weekly_list":
+                apps = await self._scrape_tabbed_weekly_list(page, self.config)
+                all_apps.extend(apps)
+
+            else:
+                print(f"    ✗ Unknown mode '{self.mode}' — skipping")
+
         except Exception as e:
             print(f"    ✗ Context error: {e}")
         finally:
@@ -511,6 +560,218 @@ class ArcusPortal:
             print(f"    ✓ '{link_text}': {len(apps)} via HTML fallback (CSV unavailable)")
         else:
             print(f"    ⚠ '{link_text}': no results found via CSV or HTML fallback")
+        return apps
+
+    async def _scrape_advanced_search(self, page: Page) -> list[dict]:
+        """For councils with NO homepage weekly-list quick-link (Bromley,
+        Bracknell Forest, Milton Keynes) — the exact sequence proven
+        working in recon round 12, after 11 earlier rounds of trial and
+        error. The critical, non-obvious fix: there are usually 2-3
+        buttons named "Search" on the page (a quick-search box near the
+        top, plus the Advanced Search form's own submit button) — the
+        form's real submit button is reliably the LAST one in document
+        order, not the first. Clicking .first here silently submits the
+        wrong search and returns nothing, which is exactly what happened
+        across rounds 8-11 before this was diagnosed.
+        """
+        try:
+            await page.goto(self.register_url, wait_until="domcontentloaded", timeout=45_000)
+            await asyncio.sleep(2)
+        except Exception as e:
+            print(f"    ⚠ Navigation error: {e}")
+            return []
+
+        try:
+            await page.wait_for_load_state("networkidle", timeout=20_000)
+        except PlaywrightTimeout:
+            pass
+        await asyncio.sleep(5)
+
+        # --- Click "Advanced search" ---
+        try:
+            loc = page.get_by_text("Advanced search", exact=False)
+            if await loc.count() == 0:
+                print(f"    ⚠ 'Advanced search' link not found — council may have "
+                      f"changed its homepage, re-run arcus_recon.py to confirm")
+                return []
+            await loc.first.click(timeout=5_000)
+        except Exception as e:
+            print(f"    ⚠ Failed to click 'Advanced search': {e}")
+            return []
+
+        await asyncio.sleep(5)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=15_000)
+        except PlaywrightTimeout:
+            pass
+
+        # --- Select Category via Lightning combobox (click to open, click
+        # the matching option — NOT select_option(), which only works on
+        # native <select> elements and silently fails on Lightning's
+        # custom combobox component) ---
+        try:
+            category_field = page.get_by_label("Category", exact=False)
+            if await category_field.count() > 0:
+                await category_field.first.click(timeout=5_000)
+                await asyncio.sleep(1)
+                for variant in ["Planning Applications", "Planning Application", "Planning"]:
+                    option = page.get_by_role("option", name=variant, exact=False)
+                    if await option.count() > 0:
+                        await option.first.click(timeout=5_000)
+                        break
+                # Selecting the category commonly re-renders the form with a
+                # different field set for that application type — give it a
+                # proper wait before hunting for date fields (round 11 fix;
+                # skipping this wait caused date-field lookups to fail
+                # against DOM elements that were mid-swap).
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=10_000)
+                except PlaywrightTimeout:
+                    pass
+                await asyncio.sleep(3)
+        except Exception:
+            print("    ⚠ Category selection not confirmed — continuing anyway, "
+                  "some councils' Advanced Search may not require it")
+
+        # --- Fill a 14-day date range, matching DAYS_BACK used elsewhere ---
+        today = date.today()
+        two_weeks_ago = today - timedelta(days=14)
+        for label in ["Valid date from", "Date from", "Received date from"]:
+            try:
+                field = page.get_by_label(label, exact=False)
+                if await field.count() > 0:
+                    await field.first.fill(two_weeks_ago.strftime("%d/%m/%Y"), timeout=5_000)
+                    await field.first.press("Tab")
+                    break
+            except Exception:
+                continue
+        for label in ["Valid date to", "Date to", "Received date to"]:
+            try:
+                field = page.get_by_label(label, exact=False)
+                if await field.count() > 0:
+                    await field.first.fill(today.strftime("%d/%m/%Y"), timeout=5_000)
+                    await field.first.press("Tab")
+                    break
+            except Exception:
+                continue
+
+        await asyncio.sleep(1)
+
+        # --- Click the LAST "Search" button — the round-12 fix ---
+        try:
+            search_buttons = page.get_by_role("button", name="Search", exact=False)
+            btn_count = await search_buttons.count()
+            if btn_count == 0:
+                print("    ⚠ No 'Search' button found")
+                return []
+            await search_buttons.last.click(timeout=5_000)
+        except Exception as e:
+            print(f"    ⚠ Error clicking Search: {e}")
+            return []
+
+        await asyncio.sleep(5)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=15_000)
+        except PlaywrightTimeout:
+            pass
+
+        # --- Try CSV first, HTML fallback second — same as weekly_list mode ---
+        apps = await self._try_csv_download(page)
+        if apps:
+            print(f"    ✓ Advanced Search: {len(apps)} via CSV")
+            return apps
+
+        html = await page.content()
+        apps = _parse_results_html_fallback(html, self.council_name)
+        if apps:
+            print(f"    ✓ Advanced Search: {len(apps)} via HTML fallback (CSV unavailable)")
+        else:
+            print("    ⚠ Advanced Search: no results found via CSV or HTML fallback")
+        return apps
+
+    async def _scrape_tabbed_weekly_list(self, page: Page, category_hint: Optional[str]) -> list[dict]:
+        """For councils using the visibly different tabbed Arcus template
+        (Eastleigh, Isle of Anglesey) — Quick Search / Advanced Search /
+        Weekly List as TABS rather than homepage quick-links. Click the
+        "Weekly List" tab; some councils (Eastleigh, confirmed via
+        screenshot) render results immediately with no further
+        interaction needed. Others (Anglesey) require selecting a
+        category from a dropdown first — category_hint is the exact
+        dropdown option text to select in that case, or None to skip
+        straight to checking for results after the tab click alone.
+        """
+        try:
+            await page.goto(self.register_url, wait_until="domcontentloaded", timeout=45_000)
+            await asyncio.sleep(2)
+        except Exception as e:
+            print(f"    ⚠ Navigation error: {e}")
+            return []
+
+        try:
+            await page.wait_for_load_state("networkidle", timeout=20_000)
+        except PlaywrightTimeout:
+            pass
+        await asyncio.sleep(5)
+
+        # --- Click the "Weekly List" tab ---
+        try:
+            tab = page.get_by_text("Weekly List", exact=False)
+            if await tab.count() == 0:
+                print("    ⚠ 'Weekly List' tab not found — council may have "
+                      "changed its layout, re-run arcus_recon.py to confirm")
+                return []
+            await tab.first.click(timeout=5_000)
+        except Exception as e:
+            print(f"    ⚠ Failed to click 'Weekly List' tab: {e}")
+            return []
+
+        await asyncio.sleep(3)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=10_000)
+        except PlaywrightTimeout:
+            pass
+
+        # --- If a category dropdown needs a specific option selected
+        # (Anglesey-style), do that and click Search. If category_hint is
+        # None (Eastleigh-style), skip straight to checking for results —
+        # confirmed via screenshot that results render directly off the
+        # tab click alone for that council. ---
+        if category_hint:
+            try:
+                category_field = page.get_by_label("Application Category", exact=False)
+                if await category_field.count() == 0:
+                    category_field = page.get_by_label("Category", exact=False)
+                if await category_field.count() > 0:
+                    await category_field.first.click(timeout=5_000)
+                    await asyncio.sleep(1)
+                    option = page.get_by_role("option", name=category_hint, exact=False)
+                    if await option.count() > 0:
+                        await option.first.click(timeout=5_000)
+                    await asyncio.sleep(1)
+
+                search_buttons = page.get_by_role("button", name="Search", exact=False)
+                if await search_buttons.count() > 0:
+                    await search_buttons.last.click(timeout=5_000)
+                    await asyncio.sleep(5)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=15_000)
+                    except PlaywrightTimeout:
+                        pass
+            except Exception as e:
+                print(f"    ⚠ Category/Search interaction failed: {e}")
+
+        # --- Try CSV first, HTML fallback second ---
+        apps = await self._try_csv_download(page)
+        if apps:
+            print(f"    ✓ Weekly List tab: {len(apps)} via CSV")
+            return apps
+
+        html = await page.content()
+        apps = _parse_results_html_fallback(html, self.council_name)
+        if apps:
+            print(f"    ✓ Weekly List tab: {len(apps)} via HTML fallback (CSV unavailable)")
+        else:
+            print("    ⚠ Weekly List tab: no results found via CSV or HTML fallback")
         return apps
 
     async def _try_csv_download(self, page: Page) -> list[dict]:
@@ -680,7 +941,7 @@ async def main():
     to_scrape: list[ArcusPortal] = []
     missing: list[str] = []
 
-    for name, base_url, link_texts in ARCUS_COUNCILS:
+    for name, base_url, mode, config in ARCUS_COUNCILS:
         council_id = COUNCIL_DB_IDS.get(name) or db_by_name.get(name.lower())
 
         if not council_id:
@@ -693,7 +954,7 @@ async def main():
             id_source = "HARDCODED" if name in COUNCIL_DB_IDS else "db-lookup"
             if id_source == "HARDCODED":
                 print(f"  [HARDCODED] {name} → id={council_id}")
-            to_scrape.append(ArcusPortal(name, base_url, link_texts, council_id))
+            to_scrape.append(ArcusPortal(name, base_url, mode, config, council_id))
         else:
             missing.append(name)
 
