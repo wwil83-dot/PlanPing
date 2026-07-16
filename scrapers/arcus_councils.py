@@ -49,6 +49,8 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Manchester City Council":              52,
     "Salford City Council":                 62,
     "Folkestone and Hythe District Council": 423,
+    "London Borough of Haringey":            243,
+    "Cumberland Council":                    424,
 }
 
 ARCUS_COUNCILS = [
@@ -94,32 +96,63 @@ ARCUS_COUNCILS = [
      "https://folkestonehythedc.my.site.com/PR3/s",
      ["Planning Applications Weekly List"]),
 
+    ("London Borough of Haringey",
+     "https://publicregister.haringey.gov.uk/pr/s",
+     ["Planning Applications Validated in last 7 days"]),
+
+    ("Cumberland Council",
+     "https://cumberlandcouncil.my.site.com/pr3/s",
+     ["Decisions made in the last 7 days",
+      "Applications Validated past 7 days"]),
+
     # -------------------------------------------------------------------
     # KNOWN ARCUS COUNCILS — CONFIRMED BUT NOT YET SCRAPABLE
-    # Reconnoitred 2026-07-14. Both genuinely have NO "Weekly lists" or
-    # "Quick links" section at all on their homepage — unlike every other
-    # council above, which all had SOME quick-link shortcut, just worded
-    # differently. Only "Advanced search" is available. arcus_scraper.py
-    # currently only knows how to click a weekly-list link — it has no
-    # Advanced Search code path (category selection, date filling, click
-    # the LAST Search button — see round 12) even though that mechanism
-    # was fully proven working in recon. Adding these two requires
-    # building that second code path into the scraper first; do not
-    # attempt to add them as plain weekly-list entries, there is no such
-    # link to click.
+    # Reconnoitred 2026-07-14. All three genuinely have NO "Weekly lists"
+    # or "Quick links" section at all on their homepage — unlike every
+    # other council above, which all had SOME quick-link shortcut, just
+    # worded differently. Only "Advanced search" is available.
+    # arcus_scraper.py currently only knows how to click a weekly-list
+    # link — it has no Advanced Search code path (category selection,
+    # date filling, click the LAST Search button — see round 12) even
+    # though that mechanism was fully proven working in recon. Adding
+    # these requires building that second code path into the scraper
+    # first; do not attempt to add them as plain weekly-list entries,
+    # there is no such link to click.
     # -------------------------------------------------------------------
     # ("Bracknell Forest Council",
     #  "https://publicaccess.bracknell-forest.gov.uk/s", []),
     # ("Milton Keynes City Council",
     #  "https://www.be.milton-keynes.gov.uk/pr/s", []),
+    # ("London Borough of Bromley",
+    #  "https://planningaccess.bromley.gov.uk/pr/s", []),  # NOTE: may be
+    #                                        # replacing an existing WORKING
+    #                                        # Idox entry — check whether
+    #                                        # that Idox portal has gone
+    #                                        # stale before assuming so.
 
     # -------------------------------------------------------------------
-    # KNOWN ARCUS COUNCILS — NOT YET RECONNOITRED
+    # KNOWN ARCUS COUNCILS — CONFIRMED LIVE, DIFFERENT UI TEMPLATE
+    # Reconnoitred 2026-07-14. Both use a visibly different Arcus template
+    # — tabbed navigation (Quick Search / Advanced Search / Weekly List as
+    # tabs, not homepage links) rather than the "Weekly lists" section
+    # every other council above has. Eastleigh in particular renders
+    # results immediately with no Lightning-loading delay, unlike every
+    # other council. Real, working, worth adding — but the current click
+    # sequence in arcus_scraper.py was built against the OTHER template
+    # and will likely need its own dedicated logic, not just a new link
+    # text. Needs its own testing before being added as an active entry.
     # -------------------------------------------------------------------
+    # ("Eastleigh Borough Council",
+    #  "https://planning.eastleigh.gov.uk/s", []),  # weekly list tab
+    #                                        # confirmed present, real
+    #                                        # results render without delay
     # ("Isle of Anglesey County Council",
-    #  "https://ioacc.my.site.com/s", []),  # NOTE: different path shape
-    #                                        # (/s/pr-english, not /pr/s) —
-    #                                        # confirm before adding.
+    #  "https://ioacc.my.site.com/s/pr-english", []),  # NOTE: confirmed
+    #                                        # correct path shape now —
+    #                                        # /s/pr-english, tabbed UI,
+    #                                        # "Planning applications valid
+    #                                        # this week" dropdown option
+    #                                        # under the Weekly List tab.
 ]
 
 # ---------------------------------------------------------------------------
