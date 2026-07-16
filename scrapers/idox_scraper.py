@@ -73,20 +73,65 @@ def _extract_postcode(text: str) -> Optional[str]:
 
 
 def _parse_date(s: str) -> Optional[str]:
+    """
+    BUG FIX (2026-07-16): the old version unconditionally split on the
+    first space/T/+ character before trying to match any format, on the
+    assumption any space meant "date followed by a time" (e.g.
+    "2026-07-01 14:30:00" -> "2026-07-01"). But several Idox councils
+    (confirmed: Adur/Worthing's shared portal, likely others sharing the
+    same shared-service template) format dates with a leading day name,
+    e.g. "Wed 01 Jul 2026" — splitting on the first space there destroyed
+    the date down to just "Wed", which then failed every format in the
+    list, fell through to the scraper's undated-application fallback, and
+    silently got stamped with TODAY'S date instead of the real one. That
+    looked like "Today" on the site for an application actually submitted
+    weeks earlier.
+
+    Fixed by trying the FULL raw string against every known format FIRST
+    (including new day-name-prefixed formats below) before ever
+    destructively splitting on a separator — the separator-split is now
+    only a fallback for genuine date+time strings that don't match
+    anything on their own.
+    """
     if not s: return None
     s = str(s).strip()
-    for sep in ("+", "T", " "):
-        if sep in s: s = s.split(sep)[0].strip()
-    s = s[:10]
-    for fmt in (
+
+    all_formats = (
         "%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y",
         "%d/%m/%y", "%Y/%m/%d",
         "%d %B %Y", "%d %b %Y",
-    ):
+        # Day-name-prefixed formats — confirmed needed for Adur/Worthing's
+        # shared Idox portal ("Wed 01 Jul 2026"), likely other councils
+        # sharing the same template too.
+        "%a %d %b %Y", "%A %d %B %Y",
+        "%a %d %B %Y", "%A %d %b %Y",
+    )
+
+    # Try the untouched string first — this is what fixes day-name-prefixed
+    # dates, which a naive space-split would have destroyed before this
+    # point in the old version.
+    for fmt in all_formats:
         try:
             return datetime.strptime(s, fmt).date().isoformat()
         except ValueError:
             continue
+
+    # Fallback: genuine "date + time" strings (e.g. "2026-07-01T14:30:00Z"
+    # or "2026-07-01 14:30:00") that didn't match anything whole — NOW
+    # it's safe to split on a separator, since we've already given the
+    # full string every reasonable chance first.
+    stripped = s
+    for sep in ("+", "T", " "):
+        if sep in stripped:
+            stripped = stripped.split(sep)[0].strip()
+    stripped = stripped[:10]
+    if stripped != s:
+        for fmt in all_formats:
+            try:
+                return datetime.strptime(stripped, fmt).date().isoformat()
+            except ValueError:
+                continue
+
     return None
 
 
