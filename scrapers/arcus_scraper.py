@@ -709,6 +709,26 @@ class ArcusPortal:
         planning.eastleigh.gov.uk/s/public-register, Anglesey's is
         ioacc.my.site.com/s/pr-english?language=en_GB. Both are just the
         plain base_url with no extra suffix. Navigate there directly.
+
+        BUG FIX #2 (2026-07-16, after second live run): with the URL fix
+        above, Anglesey's real tab element was correctly LOCATED this
+        time, but the click failed — a cookie consent banner ("cc-panel")
+        was sitting on top of it, intercepting the click. Dismiss it
+        proactively, and use force=True as a robust fallback regardless
+        of which cookie tool a given council's site runs.
+
+        BUG FIX #3 (2026-07-16, same run): the detailed error log also
+        revealed Anglesey's category dropdown is a genuine native HTML
+        <select> element (confirmed: "<select id=... class='slds-select'
+        name='applicationCategory'>"), NOT a Lightning custom combobox
+        like the Advanced Search councils use. Native <select> elements
+        need Playwright's select_option(), not the click-to-open,
+        click-the-option pattern that works for Lightning comboboxes —
+        that pattern was failing here because .click() on a native select
+        doesn't reveal role="option" elements the way a Lightning
+        combobox does. Try select_option() first, fall back to the
+        Lightning pattern in case some OTHER tabbed-template council uses
+        a genuine combobox instead.
         """
         try:
             await page.goto(self.base_url, wait_until="domcontentloaded", timeout=45_000)
@@ -723,6 +743,20 @@ class ArcusPortal:
             pass
         await asyncio.sleep(5)
 
+        # --- Best-effort cookie banner dismissal — several common UK
+        # council cookie-tool button texts. Silently continues if none
+        # match; force=True on the tab click below is the real safety net
+        # regardless of whether this succeeds. ---
+        for banner_text in ["Accept all", "Accept All", "Accept", "I agree", "Allow all cookies", "Reject"]:
+            try:
+                banner_btn = page.get_by_role("button", name=banner_text, exact=False)
+                if await banner_btn.count() > 0:
+                    await banner_btn.first.click(timeout=3_000)
+                    await asyncio.sleep(1)
+                    break
+            except Exception:
+                continue
+
         # --- Click the "Weekly List" tab ---
         try:
             tab = page.get_by_text("Weekly List", exact=False)
@@ -730,7 +764,11 @@ class ArcusPortal:
                 print("    ⚠ 'Weekly List' tab not found — council may have "
                       "changed its layout, re-run arcus_recon.py to confirm")
                 return []
-            await tab.first.click(timeout=5_000)
+            # force=True bypasses Playwright's "receives pointer events"
+            # actionability check — safe here specifically because the
+            # error log confirmed the element itself is visible, enabled
+            # and stable, just visually covered by a cookie banner.
+            await tab.first.click(timeout=5_000, force=True)
         except Exception as e:
             print(f"    ⚠ Failed to click 'Weekly List' tab: {e}")
             return []
@@ -752,16 +790,31 @@ class ArcusPortal:
                 if await category_field.count() == 0:
                     category_field = page.get_by_label("Category", exact=False)
                 if await category_field.count() > 0:
-                    await category_field.first.click(timeout=5_000)
-                    await asyncio.sleep(1)
-                    option = page.get_by_role("option", name=category_hint, exact=False)
-                    if await option.count() > 0:
-                        await option.first.click(timeout=5_000)
+                    selected = False
+                    # Try native <select> first — confirmed this is what
+                    # Anglesey actually uses.
+                    try:
+                        await category_field.first.select_option(label=category_hint, timeout=5_000)
+                        selected = True
+                    except Exception:
+                        pass
+                    # Fall back to the Lightning combobox pattern in case
+                    # some other tabbed-template council uses a genuine
+                    # combobox instead of a native select.
+                    if not selected:
+                        try:
+                            await category_field.first.click(timeout=5_000, force=True)
+                            await asyncio.sleep(1)
+                            option = page.get_by_role("option", name=category_hint, exact=False)
+                            if await option.count() > 0:
+                                await option.first.click(timeout=5_000, force=True)
+                        except Exception:
+                            pass
                     await asyncio.sleep(1)
 
                 search_buttons = page.get_by_role("button", name="Search", exact=False)
                 if await search_buttons.count() > 0:
-                    await search_buttons.last.click(timeout=5_000)
+                    await search_buttons.last.click(timeout=5_000, force=True)
                     await asyncio.sleep(5)
                     try:
                         await page.wait_for_load_state("networkidle", timeout=15_000)
