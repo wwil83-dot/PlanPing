@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Today's Planning Activity — PlanFind{% endblock %}
+{% block content %}
+<main class="main">
+  <div style="margin-bottom:1.75rem">
+    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Today's Planning Activity</h1>
+    <p style="color:var(--muted)">{{ today }} — across every council we cover</p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.9rem;margin-bottom:2rem">
+    <div style="background:#fff;border:1px solid var(--border);border-left:3px solid var(--blue-dark);border-radius:8px;padding:1.2rem">
+      <div style="font-size:2rem;font-weight:700;color:var(--blue-dark)">{{ new_applications }}</div>
+      <div style="font-size:.85rem;color:var(--muted);margin-top:.2rem">New applications</div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--border);border-left:3px solid var(--green);border-radius:8px;padding:1.2rem">
+      <div style="font-size:2rem;font-weight:700;color:var(--green)">{{ approved_today }}</div>
+      <div style="font-size:.85rem;color:var(--muted);margin-top:.2rem">Approved</div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--border);border-left:3px solid #c0392b;border-radius:8px;padding:1.2rem">
+      <div style="font-size:2rem;font-weight:700;color:#c0392b">{{ refused_today }}</div>
+      <div style="font-size:.85rem;color:var(--muted);margin-top:.2rem">Refused</div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--border);border-left:3px solid #8a6416;border-radius:8px;padding:1.2rem">
+      <div style="font-size:2rem;font-weight:700;color:#8a6416">{{ appeals_today }}</div>
+      <div style="font-size:.85rem;color:var(--muted);margin-top:.2rem">Appeals lodged*</div>
+    </div>
+  </div>
+
+  <p style="font-size:.78rem;color:var(--muted);margin-bottom:2rem">
+    * Appeals figure is a best-effort match on application type wording — unlike the other three
+    figures, appeals aren't tracked as a distinct category everywhere, so this number may
+    undercount the real total.
+  </p>
+
+  {% if highlights %}
+  <div style="margin-bottom:1rem">
+    <h2 style="font-size:1rem;font-weight:600;color:var(--blue-dark);margin-bottom:.75rem">Today's new applications</h2>
+    <div style="display:grid;gap:.6rem">
+      {% for h in highlights %}
+      <a href="/application/{{ h.id }}" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:.9rem 1.1rem;text-decoration:none;color:var(--text);display:block;box-shadow:0 1px 4px rgba(0,0,0,.04)">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
+          <span style="font-size:.78rem;color:var(--muted);font-weight:600">{{ h.reference }} · {{ h.council_name }}</span>
+          <span class="badge badge-{{ h.status_class }}" style="font-size:.7rem">{{ h.status }}</span>
+        </div>
+        <div style="font-size:.9rem;margin-top:.3rem">{{ h.description or h.address }}</div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div style="background:var(--blue-light);border:1px solid #c3d9f0;border-radius:12px;padding:1.5rem">
+    <p style="font-size:.9rem;color:var(--muted)">No new applications recorded yet today — check back after tonight's update, or
+    <a href="/councils">see full coverage</a> in the meantime.</p>
+  </div>
+  {% endif %}
+</main>
+{% endblock %}
