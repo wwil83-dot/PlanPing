@@ -15,7 +15,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, alerts, council_health, arcus_recon]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, alerts, council_health, arcus_recon, idox_month_test]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -194,6 +194,38 @@ jobs:
           MAX_MINUTES: "30"
           CONCURRENCY: "2"
         run: cd scrapers && python arcus_scraper.py
+
+  # ---------------------------------------------------------------------
+  # Idox month-selection diagnostic — manual trigger only, no schedule.
+  #
+  # Built 2026-07-17 after the round-3 bulk-mode fix (select the correct
+  # dropdown option by month_index instead of always index=0) did NOT
+  # resolve identical-results-across-months on a real bulk run. Rather
+  # than guess at a further fix and burn another ~3-hour, 210-council
+  # bulk run to find out if it worked, this tests just 3 councils x 3
+  # month indices directly using the REAL IdoxPortal._scrape_month()
+  # method (imported, not reimplemented) — a few minutes, not hours.
+  # Does NOT touch Supabase at all — purely diagnostic, prints results
+  # straight to the log.
+  # ---------------------------------------------------------------------
+  idox_month_test:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_month_test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright beautifulsoup4 httpx
+      - run: playwright install --with-deps chromium
+      - name: Run Idox month-selection diagnostic
+        run: cd scrapers && python idox_month_test.py
 
   alerts:
     if: >
