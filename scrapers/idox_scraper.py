@@ -712,26 +712,34 @@ class IdoxPortal:
         # — Step 2: Click "date received" radio & submit form —
         form_submitted = False
 
-        # BUG FIX (2026-07-16): this used to unconditionally call
+        # BUG FIX (2026-07-16/17): this used to unconditionally call
         # select_option(index=0) — which always selects whatever's FIRST
         # in the dropdown (the current month), completely ignoring
-        # month_index. In fast mode (only 1-2 months requested) this bug
-        # was mostly invisible, since "wrongly defaults to current" was
-        # often close enough not to notice. In --bulk mode (13 months
-        # requested per council) it became catastrophic: EVERY one of the
-        # 13 requests silently re-fetched the identical current month,
-        # confirmed directly from a real run where councils like Bolton,
-        # Rochdale, Warwick, and Bromsgrove showed byte-identical
-        # "Total across N pages: X" results repeated 13 times in a row.
-        # This likely also contributed to hitting 429 rate-limit errors
-        # and the eventual job cancellation, since the run was doing ~13x
-        # more work than necessary for zero additional data. Select the
-        # option matching the ACTUALLY requested month_index instead —
-        # the original comment's concern (some portals have no default,
-        # causing 0 results if nothing is selected) is still handled,
-        # just correctly now rather than always defaulting to month 0.
+        # month_index. Then a round-3 fix (select the correct index
+        # instead of always 0) STILL didn't resolve it — because the real
+        # bug was one level deeper: idox_form_recon.py captured direct
+        # HTML evidence from a real monthly-list page and proved the
+        # month dropdown's actual attribute is simply id='month'/
+        # name='month' — NOT 'searchCriteria.monthYearIndex' or anything
+        # containing 'monthYear'. None of the 4 old candidate selectors
+        # could EVER have matched, on ANY council, confirmed via
+        # idox_month_test.py showing identical results across all tested
+        # months for all 3 test councils (2 different underlying server
+        # setups). This affects more than just --bulk mode: normal nightly
+        # fast-mode scraping needs 2 months (index 0 and 1) whenever the
+        # 14-day window crosses a calendar-month boundary — this bug would
+        # have silently returned duplicate current-month data instead of
+        # genuine previous-month data for that portion of every month too.
+        # The real id='month' selector is listed FIRST now, since it's
+        # confirmed correct via direct evidence, not a guess. The old
+        # candidates are kept as fallbacks in case some other council's
+        # Idox instance genuinely uses different naming (Idox
+        # installations vary significantly by council, as this whole
+        # investigation has repeatedly shown).
         dropdown_found = False
         for month_sel in [
+            "select[id='month']",
+            "select[name='month']",
             "select[id='searchCriteria.monthYearIndex']",
             "select[name='searchCriteria.monthYearIndex']",
             "select[name*='monthYear']",
