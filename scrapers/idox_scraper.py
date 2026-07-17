@@ -1074,12 +1074,58 @@ async def process_council(
     sem: asyncio.Semaphore,
     days_back: int,
     bulk_mode: bool = False,
+    budget_minutes: int = MAX_MINUTES,
 ) -> int:
     # council_id comes ONLY from the portal object — never a loose parameter
     # that could get corrupted in async concurrent execution.
     cid = portal.db_council_id
 
     async with sem:
+        # BUG FIX (2026-07-17): the OLD time-budget check happened in a
+        # synchronous loop that built the ENTIRE task list (all 210
+        # coroutine objects) in one fast pass, BEFORE asyncio.gather() ever
+        # started running any of them for real. That loop finishes in
+        # microseconds, so elapsed_minutes() was essentially always ~0 for
+        # every single council checked there — the "stop starting new
+        # councils once close to budget" safety mechanism never actually
+        # triggered in practice, confirmed directly: a real bulk run got
+        # forcibly cancelled by GitHub Actions' external 200-minute limit
+        # at council #15 (Wyre Forest) despite the internal 180-minute
+        # budget supposedly having a 3-minute safety buffer built in. The
+        # check needed to happen HERE instead — fresh, for each council,
+        # at the genuine moment its turn has actually arrived (especially
+        # meaningful at CONCURRENCY=1 in bulk mode, where this really is
+        # real sequential time, not a synchronous formality).
+        # BUG FIX (2026-07-17): the OLD time-budget check happened in a
+        # synchronous loop that built the ENTIRE task list (all 210
+        # coroutine objects) in one fast pass, BEFORE asyncio.gather() ever
+        # started running any of them for real. That loop finishes in
+        # microseconds, so elapsed_minutes() was essentially always ~0 for
+        # every single council checked there — the "stop starting new
+        # councils once close to budget" safety mechanism never actually
+        # triggered in practice, confirmed directly: a real bulk run got
+        # forcibly cancelled by GitHub Actions' external 200-minute limit
+        # at council #15 (Wyre Forest) despite the internal 180-minute
+        # budget supposedly having a 3-minute safety buffer built in. The
+        # check needed to happen HERE instead — fresh, for each council,
+        # at the genuine moment its turn has actually arrived (especially
+        # meaningful at CONCURRENCY=1 in bulk mode, where this really is
+        # real sequential time, not a synchronous formality).
+        #
+        # NOTE: deliberately uses the explicitly-passed budget_minutes
+        # parameter, NOT the should_stop()/MAX_MINUTES module-level
+        # global — that global is hardcoded to 55 (the FAST-mode value)
+        # and does not reflect bulk mode's real 180-minute budget (read
+        # fresh from an env var inside main()). Using should_stop() here
+        # would have silently cut every bulk run off at ~52 minutes
+        # instead of ~177 — caught before shipping by checking rather
+        # than assuming the existing should_stop() helper used the right
+        # value for whichever mode was actually running.
+        if elapsed_minutes() >= budget_minutes - 3:
+            print(f"\n[{portal.council_name}] — skipping, time budget reached "
+                  f"({elapsed_minutes():.1f} min elapsed)")
+            return 0
+
         print(f"\n[{portal.council_name}] (council_id={cid})")
         await asyncio.sleep(1)  # stagger requests — avoids triggering WAF rate limits
 
@@ -1320,6 +1366,31 @@ async def main():
     if missing:
         print(f"Not in DB (skipping): {', '.join(missing[:5])}{'...' if len(missing)>5 else ''}\n")
 
+    # BUG FIX (2026-07-17): to_scrape was always built in IDOX_COUNCILS'
+    # fixed file order (Stockport, Bolton, Rochdale, ... — always the same
+    # sequence, every run). Fine for fast mode (nightly, plenty of budget
+    # to reach every council), but a real problem for --bulk mode: a
+    # single 200-minute run genuinely cannot get through all 210 councils
+    # now that months are being fetched correctly (confirmed: a real bulk
+    # run only completed 14 councils, ~10,000 records, before GitHub
+    # Actions' external timeout killed it). Without reordering, EVERY
+    # future bulk run would keep re-doing the same first ~14 councils and
+    # never reach the rest. db_rows (fetched above, already sorted
+    # last_scraped_at ascending — least-recently-scraped first) already
+    # has exactly the information needed to fix this; it just wasn't
+    # being used for anything beyond name lookups. Reorder to_scrape by
+    # that same priority for bulk mode specifically, so councils just
+    # scraped tonight naturally sink to the back of the queue and
+    # councils that haven't been reached in longest (or ever) rise to
+    # the front for the NEXT bulk run — successive runs now genuinely
+    # converge on covering the full council list over time, rather than
+    # looping the same ~14 forever.
+    if bulk:
+        db_priority = {r["id"]: i for i, r in enumerate(db_rows)}
+        to_scrape.sort(key=lambda pair: db_priority.get(pair[1], len(db_rows)))
+        print(f"Bulk mode: reordered by least-recently-scraped — "
+              f"starting with {to_scrape[0][0].council_name if to_scrape else '(none)'}\n")
+
     print(f"Scraping {len(to_scrape)} councils with Playwright…\n")
 
     async with async_playwright() as pw:
@@ -1330,22 +1401,26 @@ async def main():
         print(f"Chromium launched: {browser.version}\n")
 
         sem = asyncio.Semaphore(concurrency)
-        skipped = 0
-        tasks = []
-
-        for portal, council_id in to_scrape:
-            if elapsed_minutes() >= budget - 3:
-                skipped += 1
-                continue
-            tasks.append(
-                process_council(portal, browser, sem, days, bulk_mode=bulk)
-            )
+        # NOTE: the old pre-loop "if elapsed_minutes() >= budget - 3: skip"
+        # check lived here and never actually worked — see the detailed
+        # comment in process_council() for why. All councils are now
+        # queued unconditionally; process_council() itself checks the
+        # real elapsed time at the genuine moment each one's turn arrives,
+        # via the explicitly-passed budget_minutes parameter below.
+        tasks = [
+            process_council(portal, browser, sem, days, bulk_mode=bulk,
+                             budget_minutes=budget)
+            for portal, council_id in to_scrape
+        ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
         await browser.close()
 
-    total  = sum(r for r in results if isinstance(r, int))
-    errors = sum(1 for r in results if isinstance(r, Exception))
+    total   = sum(r for r in results if isinstance(r, int))
+    errors  = sum(1 for r in results if isinstance(r, Exception))
+    skipped = sum(1 for r in results if r == 0)  # best-effort — some
+        # genuine 0-application councils will also show as 0, this is a
+        # rough count for the summary line only, not used for any real logic
 
     print(f"\n{'=' * 50}")
     print(f"Finished in {elapsed_minutes():.1f} minutes")
