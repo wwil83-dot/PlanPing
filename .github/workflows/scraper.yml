@@ -15,7 +15,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, alerts, council_health, arcus_recon, idox_month_test]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -226,6 +226,42 @@ jobs:
       - run: playwright install --with-deps chromium
       - name: Run Idox month-selection diagnostic
         run: cd scrapers && python idox_month_test.py
+
+  # ---------------------------------------------------------------------
+  # Idox form-element recon — manual trigger only, no schedule.
+  #
+  # Built 2026-07-17 right after idox_month_test.py conclusively proved
+  # the month-selection dropdown genuinely isn't found by any of the 4
+  # candidate selectors, across 3 councils on 2 different server setups.
+  # Captures direct evidence of every real <select>/<input> element on an
+  # actual monthly-list page, so the correct selector can be identified
+  # from real HTML rather than guessed a 5th time.
+  # ---------------------------------------------------------------------
+  idox_form_recon:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_form_recon'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright
+      - run: playwright install --with-deps chromium
+      - name: Run Idox form-element recon
+        run: cd scrapers && python idox_form_recon.py
+      - name: Upload recon output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idox-form-recon-output
+          path: /tmp/idox_form_recon.*
+          retention-days: 7
 
   alerts:
     if: >
