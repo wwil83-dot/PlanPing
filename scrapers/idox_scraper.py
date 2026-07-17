@@ -292,6 +292,12 @@ def _abs_url(base_url: str, domain_root: str, href: str) -> str:
 # were briefly merged into a single check (see round-3 comment below).
 _DATE_DIAGNOSED_COUNCILS: set[str] = set()
 _DATE_LABEL_DIAGNOSED_COUNCILS: set[str] = set()
+# Round 4 (2026-07-16): tracks councils where the month-selection dropdown
+# couldn't be found by ANY known CSS selector at all — see the DIAGNOSTIC
+# in _scrape_month() below. This was completely silent before; the
+# round-3 fix (select month_index instead of always 0) can't help if the
+# selector never even matches the real element in the first place.
+_MONTH_DROPDOWN_DIAGNOSED: set[str] = set()
 
 
 def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> Optional[dict]:
@@ -724,6 +730,7 @@ class IdoxPortal:
         # the original comment's concern (some portals have no default,
         # causing 0 results if nothing is selected) is still handled,
         # just correctly now rather than always defaulting to month 0.
+        dropdown_found = False
         for month_sel in [
             "select[id='searchCriteria.monthYearIndex']",
             "select[name='searchCriteria.monthYearIndex']",
@@ -744,9 +751,32 @@ class IdoxPortal:
                         # back to month 0, which is exactly the bug this
                         # fix addresses.
                         await loc.select_option(index=0)
+                    dropdown_found = True
                     break
             except Exception:
                 continue
+
+        # DIAGNOSTIC (2026-07-16, round 4): the round-3 fix (select the
+        # correct month_index instead of always index=0) did NOT resolve
+        # the identical-results problem on a real bulk run — Stockport,
+        # Bolton, and others still showed byte-identical totals across
+        # every month attempt even with the fix in place. One likely
+        # explanation the previous fix couldn't catch: if NONE of the 4
+        # candidate CSS selectors match this council's real dropdown
+        # element at all, the whole selection loop silently no-ops —
+        # nothing gets selected, the form submits with its own default
+        # (probably "current month" again), and the URL's month_index
+        # parameter alone isn't enough to determine what the SUBMITTED
+        # FORM actually requests. This was previously completely silent —
+        # no warning printed either way. Surfacing it now, rate-limited to
+        # once per council per run.
+        if not dropdown_found and self.council_name not in _MONTH_DROPDOWN_DIAGNOSED:
+            _MONTH_DROPDOWN_DIAGNOSED.add(self.council_name)
+            print(f"    ⚠ MONTH DROPDOWN DIAGNOSTIC [{self.council_name}]: none of the "
+                  f"known dropdown selectors matched ANY element on this page — "
+                  f"month selection is being silently skipped entirely, form is "
+                  f"submitting with whatever its own default is regardless of "
+                  f"month_index={month_index}.")
 
         # Try clicking the date-received radio button.
         # Different Idox versions use different values: dateReceived, dc, dv, dr.
