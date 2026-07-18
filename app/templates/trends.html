@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Council Approval Trends — PlanFind{% endblock %}
+{% block content %}
+<main class="main">
+  <div style="margin-bottom:1.75rem">
+    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Council Approval Trends</h1>
+    <p style="color:var(--muted)">Approval rate by council, based on every decided application we've recorded. Councils with fewer than 10 decided applications aren't shown, to avoid a misleading rate from a tiny sample.</p>
+  </div>
+
+  {% if councils_ranked %}
+  <div style="background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="background:var(--blue-light);text-align:left">
+          <th style="padding:.85rem 1rem;font-size:.8rem;color:var(--muted);font-weight:600">Council</th>
+          <th style="padding:.85rem 1rem;font-size:.8rem;color:var(--muted);font-weight:600;text-align:right">Approval rate</th>
+          <th style="padding:.85rem 1rem;font-size:.8rem;color:var(--muted);font-weight:600;text-align:right">Approved</th>
+          <th style="padding:.85rem 1rem;font-size:.8rem;color:var(--muted);font-weight:600;text-align:right">Refused</th>
+          <th style="padding:.85rem 1rem;font-size:.8rem;color:var(--muted);font-weight:600;text-align:right">Decided</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in councils_ranked %}
+        <tr style="border-top:1px solid var(--border)">
+          <td style="padding:.85rem 1rem">
+            <a href="/council/{{ c.slug }}" style="color:var(--text);text-decoration:none;font-weight:500">{{ c.name }}</a>
+          </td>
+          <td style="padding:.85rem 1rem;text-align:right">
+            <span style="font-weight:700;color:{{ 'var(--green)' if c.approval_rate_pct >= 70 else '#c0392b' if c.approval_rate_pct < 40 else 'var(--text)' }}">{{ c.approval_rate_pct }}%</span>
+          </td>
+          <td style="padding:.85rem 1rem;text-align:right;color:var(--muted)">{{ c.approved_count }}</td>
+          <td style="padding:.85rem 1rem;text-align:right;color:var(--muted)">{{ c.refused_count }}</td>
+          <td style="padding:.85rem 1rem;text-align:right;color:var(--muted)">{{ c.decided_count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:.78rem;color:var(--muted);margin-top:1rem">Showing {{ total_councils }} council{{ 's' if total_councils != 1 }} with at least 10 decided applications on record.</p>
+  {% else %}
+  <div style="background:var(--blue-light);border:1px solid #c3d9f0;border-radius:12px;padding:1.5rem">
+    <p style="font-size:.9rem;color:var(--muted)">Not enough decided applications recorded yet to show meaningful trends — check back as more data comes in.</p>
+  </div>
+  {% endif %}
+</main>
+{% endblock %}
