@@ -316,15 +316,27 @@ async def about(request: Request):
 
 @app.get("/activity", response_class=HTMLResponse)
 async def activity(request: Request):
-    # "Today" here means the application's own real submitted_date/
-    # decision_date as recorded by the council — NOT "records we happened
-    # to scrape in the last 24 hours". A council might publish an
-    # application dated 3 days ago that we're only seeing for the first
-    # time today (normal, given the rolling 14-day scrape window); that
-    # should NOT count as "new today" here, since it genuinely wasn't
-    # submitted today. This keeps the numbers honest even though it means
-    # quiet days (weekends especially) will show low or zero counts —
-    # that's a true reflection of real planning activity, not a bug.
+    # "Today" for NEW APPLICATIONS means the application's own real
+    # submitted_date as recorded by the council — NOT "records we
+    # happened to scrape in the last 24 hours". A council might publish
+    # an application dated 3 days ago that we're only seeing for the
+    # first time today (normal, given the rolling 14-day scrape window);
+    # that should NOT count as "new today" here, since it genuinely
+    # wasn't submitted today.
+    #
+    # "Today" for APPROVED/REFUSED is DIFFERENT, and deliberately so —
+    # see migration_decision_detected.sql for the full story. Confirmed
+    # this session, via a diagnostic firing identically across 5+
+    # unrelated councils, that a council's OFFICIAL decision_date
+    # genuinely isn't present on the Idox monthly-list pages being
+    # scraped (not a mislabeled field — actually absent). Filtering on
+    # decision_date = CURRENT_DATE was therefore returning 0 almost every
+    # day, regardless of how much real decision activity happened.
+    # decision_detected_at answers a different, honestly-achievable
+    # question instead: "when did PlanFind FIRST observe this application
+    # had been decided?" — populated by a database trigger that fires
+    # only on a genuine transition into approved/refused, not on every
+    # routine re-scrape of an application already sitting in that state.
     async with get_db() as db:
         row = await db.fetchrow("""
             SELECT
@@ -332,10 +344,10 @@ async def activity(request: Request):
                     WHERE submitted_date = CURRENT_DATE
                 ) AS new_applications,
                 COUNT(*) FILTER (
-                    WHERE decision_date = CURRENT_DATE AND status = 'approved'
+                    WHERE decision_detected_at::date = CURRENT_DATE AND status = 'approved'
                 ) AS approved_today,
                 COUNT(*) FILTER (
-                    WHERE decision_date = CURRENT_DATE AND status = 'refused'
+                    WHERE decision_detected_at::date = CURRENT_DATE AND status = 'refused'
                 ) AS refused_today,
                 -- NOTE: appeals are NOT a distinct tracked field anywhere
                 -- in the scraper schema — this is a best-effort match on
