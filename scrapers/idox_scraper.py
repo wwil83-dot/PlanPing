@@ -298,6 +298,9 @@ _DATE_LABEL_DIAGNOSED_COUNCILS: set[str] = set()
 # round-3 fix (select month_index instead of always 0) can't help if the
 # selector never even matches the real element in the first place.
 _MONTH_DROPDOWN_DIAGNOSED: set[str] = set()
+# 2026-07-18: tracks councils where a genuinely decided application had
+# no decision date found — see the DIAGNOSTIC in _parse_result() below.
+_DECISION_DATE_DIAGNOSED: set[str] = set()
 
 
 def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> Optional[dict]:
@@ -407,6 +410,32 @@ def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> O
         ""
     )
 
+    # NEW (2026-07-18): decision_date was previously ALWAYS hardcoded to
+    # None here — genuinely never attempted, not a mislabeled-field bug
+    # like submitted_date turned out to be. Confirmed via direct evidence:
+    # 64% of every decided (approved/refused) application in the database
+    # had no decision date at all, and this line was literally
+    # `"decision_date": None,` unconditionally. Building real extraction
+    # now, using the same proven _parse_date() function. "decision notice
+    # was sent date" is a REAL confirmed Idox label — seen directly in a
+    # Bromley Advanced Search screenshot earlier this session ("Decision
+    # notice was sent date from/to"). The rest are plausible variants,
+    # not yet confirmed — the diagnostic below will reveal the real label
+    # for any council where none of these match, same evidence-based
+    # approach that eventually cracked submitted_date, rather than
+    # guessing blind a second time.
+    decision_date_raw = (
+        fields.get("decision notice was sent date") or
+        fields.get("decision date") or
+        fields.get("date decision") or
+        fields.get("date decided") or
+        fields.get("decided") or
+        fields.get("decision issued date") or
+        fields.get("date of decision") or
+        fields.get("decision made date") or
+        ""
+    )
+
     # DIAGNOSTIC (2026-07-16, round 2): the first version of this
     # diagnostic only printed the parsed field KEYS, and every affected
     # council showed the exact same thing: ['ref. no'] and nothing else —
@@ -451,6 +480,23 @@ def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> O
         print(f"    ⚠ DATE LABEL DIAGNOSTIC [{council_name}]: {len(fields)} field(s) "
               f"extracted but none matched a known date label. Full fields: {preview_items}")
 
+    normalised_status = _normalise_status(status_raw)
+    parsed_decision_date = _parse_date(decision_date_raw)
+
+    # DIAGNOSTIC: fires only when the application is genuinely decided
+    # (approved/refused) but no decision date was found — deliberately
+    # NOT firing for pending applications, which correctly have no
+    # decision date yet (that's not a bug, that's reality). Rate-limited
+    # per council per run, same pattern as the other diagnostics.
+    if (normalised_status in ("approved", "refused")
+            and not parsed_decision_date
+            and council_name not in _DECISION_DATE_DIAGNOSED):
+        _DECISION_DATE_DIAGNOSED.add(council_name)
+        preview_items = {k: v[:40] for k, v in fields.items()}
+        print(f"    ⚠ DECISION DATE DIAGNOSTIC [{council_name}]: status is "
+              f"'{normalised_status}' but no decision date matched any known "
+              f"label. Full fields: {preview_items}")
+
     return {
         "reference":        ref.strip(),
         "address":          address.strip(),
@@ -459,9 +505,9 @@ def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> O
         "lng":              None,
         "description":      description.strip(),
         "application_type": app_type.strip(),
-        "status":           _normalise_status(status_raw),
+        "status":           normalised_status,
         "submitted_date":   _parse_date(date_raw),
-        "decision_date":    None,
+        "decision_date":    parsed_decision_date,
         "council_name":     council_name,
         "council_url":      portal_url,
         "source":           "idox_scraper",
