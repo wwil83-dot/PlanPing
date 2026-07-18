@@ -3,12 +3,14 @@ PlanPing — FastAPI backend
 Run with: uvicorn app.main:app --reload
 """
 import os
+import csv
+import io
 from datetime import datetime, date
 from typing import Optional
 from jinja2 import Environment, FileSystemLoader
 
 from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.db import get_db, lifespan
@@ -57,8 +59,69 @@ async def index(request: Request):
     })
 
 
+async def _fetch_applications(db, lat: float, lng: float, radius: float, days: int,
+                               status: Optional[str] = None,
+                               app_type: Optional[str] = None) -> list[dict]:
+    """Shared query + classification logic for /search and /search.csv —
+    factored out so both routes stay in sync rather than risking two
+    slightly different copies of the same query drifting apart over time.
+
+    status filters directly in SQL — safe, because every scraper already
+    normalizes status to a fixed set (pending/approved/refused/withdrawn)
+    before writing to the database, via each scraper's own
+    _normalise_status() function.
+
+    app_type filtering happens in Python AFTER fetching, matching against
+    the existing _type_badge() classification — deliberately NOT
+    replicated as SQL ILIKE logic, since application_type is messy
+    free text straight from council portals and duplicating the
+    classification rules in two places would risk them silently drifting
+    out of sync. Result sets for a single postcode search are naturally
+    small (radius-bounded), so filtering in Python costs nothing
+    meaningful in practice.
+    """
+    rows = await db.fetch("""
+        SELECT
+            a.id, a.reference, a.address, a.postcode,
+            a.description, a.application_type, a.status,
+            a.submitted_date, a.decision_date, a.council_url,
+            a.lat, a.lng,
+            c.name AS council_name, c.slug AS council_slug,
+            c.coverage_source,
+            an.distance_miles
+        FROM applications_near($1, $2, $3, $4) an
+        JOIN planning_applications a ON a.id = an.application_id
+        JOIN councils c ON c.id = a.council_id
+        WHERE ($5::text IS NULL OR a.status = $5)
+        ORDER BY a.submitted_date DESC NULLS LAST, an.distance_miles
+    """, lat, lng, radius, days, status)
+
+    applications = [dict(r) for r in rows]
+    for a in applications:
+        a["distance_miles"] = round(a["distance_miles"], 1)
+        a["type_badge"] = _type_badge(a.get("application_type", ""))
+        a["is_major"] = _is_major(a.get("application_type", ""))
+        a["status_class"] = _status_class(a.get("status", ""))
+        a["days_ago"] = _days_ago(a.get("submitted_date"))
+
+    if app_type:
+        applications = [a for a in applications if a["type_badge"] == app_type]
+
+    return applications
+
+
+# Filter dropdown options, matching exactly what _type_badge()/_status_class()
+# actually produce — kept as a single source of truth here so the UI
+# dropdowns can never silently drift out of sync with the real
+# classification categories.
+STATUS_FILTER_OPTIONS = ["pending", "approved", "refused", "withdrawn"]
+TYPE_FILTER_OPTIONS = ["householder", "full", "outline", "listed", "tree",
+                       "advert", "prior", "major", "other"]
+
+
 @app.get("/search", response_class=HTMLResponse)
-async def search(request: Request, postcode: str, radius: float = 1.0, days: int = 30):
+async def search(request: Request, postcode: str, radius: float = 1.0, days: int = 30,
+                  status: Optional[str] = None, app_type: Optional[str] = None):
     postcode = postcode.strip().upper()
     location = await postcode_lookup(postcode)
 
@@ -95,21 +158,7 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
     council_name = location.get("council", "")
 
     async with get_db() as db:
-        # Find applications near this postcode
-        rows = await db.fetch("""
-            SELECT
-                a.id, a.reference, a.address, a.postcode,
-                a.description, a.application_type, a.status,
-                a.submitted_date, a.decision_date, a.council_url,
-                a.lat, a.lng,
-                c.name AS council_name, c.slug AS council_slug,
-                c.coverage_source,
-                an.distance_miles
-            FROM applications_near($1, $2, $3, $4) an
-            JOIN planning_applications a ON a.id = an.application_id
-            JOIN councils c ON c.id = a.council_id
-            ORDER BY a.submitted_date DESC NULLS LAST, an.distance_miles
-        """, lat, lng, radius, days)
+        applications = await _fetch_applications(db, lat, lng, radius, days, status, app_type)
 
         # Check if this council is covered
         council = await db.fetchrow("""
@@ -119,14 +168,6 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
                OR name ILIKE $2
             LIMIT 1
         """, f"%{council_name}%", f"{council_name}%")
-
-    applications = [dict(r) for r in rows]
-    for a in applications:
-        a["distance_miles"] = round(a["distance_miles"], 1)
-        a["type_badge"] = _type_badge(a.get("application_type", ""))
-        a["is_major"] = _is_major(a.get("application_type", ""))
-        a["status_class"] = _status_class(a.get("status", ""))
-        a["days_ago"] = _days_ago(a.get("submitted_date"))
 
     # BUG FIX (2026-07-16): the results-page map used to serialize entire
     # application dicts straight to JSON in the template via Jinja's
@@ -157,6 +198,10 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
         "postcode": postcode,
         "radius": radius,
         "days": days,
+        "status": status,
+        "app_type": app_type,
+        "status_options": STATUS_FILTER_OPTIONS,
+        "type_options": TYPE_FILTER_OPTIONS,
         "applications": applications,
         "map_markers": map_markers,
         "total": len(applications),
@@ -166,6 +211,51 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
         "council_name": council_name,
         "coverage": coverage,
     })
+
+
+@app.get("/search.csv")
+async def search_csv(postcode: str, radius: float = 1.0, days: int = 30,
+                      status: Optional[str] = None, app_type: Optional[str] = None):
+    """CSV export — reuses the exact same _fetch_applications() helper as
+    /search, so results are guaranteed identical to whatever's on screen,
+    just in downloadable form. Built for the planning-consultants segment
+    specifically (explicitly requested: "export to CSV").
+    """
+    postcode = postcode.strip().upper()
+    location = await postcode_lookup(postcode)
+    if not location:
+        raise HTTPException(status_code=404, detail=f"Could not find postcode '{postcode}'")
+
+    lat, lng = location["lat"], location["lng"]
+
+    async with get_db() as db:
+        applications = await _fetch_applications(db, lat, lng, radius, days, status, app_type)
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "Reference", "Council", "Address", "Postcode", "Description",
+        "Application Type", "Status", "Submitted Date", "Decision Date",
+        "Distance (miles)", "Council URL",
+    ])
+    for a in applications:
+        writer.writerow([
+            a.get("reference", ""), a.get("council_name", ""),
+            a.get("address", ""), a.get("postcode", ""),
+            a.get("description", ""), a.get("application_type", ""),
+            a.get("status", ""),
+            a.get("submitted_date").isoformat() if a.get("submitted_date") else "",
+            a.get("decision_date").isoformat() if a.get("decision_date") else "",
+            a.get("distance_miles", ""), a.get("council_url", ""),
+        ])
+    buffer.seek(0)
+
+    filename = f"planfind_{postcode.replace(' ', '')}.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.get("/application/{app_id}", response_class=HTMLResponse)
@@ -283,6 +373,44 @@ async def activity(request: Request):
         "refused_today": row["refused_today"],
         "appeals_today": row["appeals_today"],
         "highlights": highlights,
+    })
+
+
+@app.get("/trends", response_class=HTMLResponse)
+async def trends(request: Request):
+    """Approval-rate analytics — which councils approve the highest/lowest
+    proportion of decided applications. Deliberately simple: a plain SQL
+    aggregation over the existing normalized status field, no new data
+    source needed. HAVING >= 10 decided applications avoids small-sample
+    councils showing a misleading 100%/0% rate off just one or two
+    decisions.
+    """
+    async with get_db() as db:
+        rows = await db.fetch("""
+            SELECT
+                c.name,
+                c.slug,
+                COUNT(*) FILTER (WHERE pa.status IN ('approved', 'refused')) AS decided_count,
+                COUNT(*) FILTER (WHERE pa.status = 'approved') AS approved_count,
+                COUNT(*) FILTER (WHERE pa.status = 'refused') AS refused_count,
+                ROUND(
+                    100.0 * COUNT(*) FILTER (WHERE pa.status = 'approved')
+                    / NULLIF(COUNT(*) FILTER (WHERE pa.status IN ('approved', 'refused')), 0),
+                    1
+                ) AS approval_rate_pct
+            FROM councils c
+            JOIN planning_applications pa ON pa.council_id = c.id
+            GROUP BY c.id, c.name, c.slug
+            HAVING COUNT(*) FILTER (WHERE pa.status IN ('approved', 'refused')) >= 10
+            ORDER BY approval_rate_pct DESC
+        """)
+
+    councils_ranked = [dict(r) for r in rows]
+
+    return render("trends.html", {
+        "request": request,
+        "councils_ranked": councils_ranked,
+        "total_councils": len(councils_ranked),
     })
 
 
