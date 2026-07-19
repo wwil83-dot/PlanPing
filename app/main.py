@@ -258,6 +258,164 @@ async def search_csv(postcode: str, radius: float = 1.0, days: int = 30,
     )
 
 
+@app.get("/bulk-search", response_class=HTMLResponse)
+async def bulk_search_form(request: Request):
+    return render("bulk_search.html", {
+        "request": request,
+        "postcodes_input": "",
+        "radius": 1.0,
+        "days": 30,
+        "submitted": False,
+        "results_by_postcode": {},
+        "all_applications": [],
+        "errors": [],
+        "total": 0,
+    })
+
+
+@app.post("/bulk-search", response_class=HTMLResponse)
+async def bulk_search(request: Request, postcodes: str = Form(...),
+                       radius: float = Form(1.0), days: int = Form(30)):
+    """Batch multiple postcode searches into one combined result set —
+    reuses the exact same _fetch_applications() helper as /search and
+    /search.csv, called once per postcode. Built for the planning
+    consultants segment specifically (explicitly requested: "bulk
+    searches"). Capped at 50 postcodes per submission — generous enough
+    for real consultant workflows, bounded enough to avoid one submission
+    accidentally hammering the postcode-lookup service or the database
+    with an unbounded batch.
+    """
+    postcode_list = [p.strip().upper() for p in postcodes.splitlines() if p.strip()][:50]
+
+    results_by_postcode: dict[str, list[dict]] = {}
+    errors: list[str] = []
+    all_applications: list[dict] = []
+    seen_ids: set[int] = set()
+
+    async with get_db() as db:
+        for pc in postcode_list:
+            location = await postcode_lookup(pc)
+            if not location:
+                errors.append(pc)
+                continue
+
+            apps = await _fetch_applications(db, location["lat"], location["lng"], radius, days)
+            results_by_postcode[pc] = apps
+
+            # Dedupe across postcodes — an application within radius of
+            # TWO searched postcodes should appear once in the combined
+            # list, not twice, while still being counted correctly in
+            # each individual postcode's own breakdown above.
+            for a in apps:
+                if a["id"] not in seen_ids:
+                    seen_ids.add(a["id"])
+                    all_applications.append(a)
+
+    return render("bulk_search.html", {
+        "request": request,
+        "postcodes_input": postcodes,
+        "radius": radius,
+        "days": days,
+        "submitted": True,
+        "results_by_postcode": results_by_postcode,
+        "all_applications": all_applications,
+        "errors": errors,
+        "total": len(all_applications),
+    })
+
+
+@app.post("/bulk-search.csv")
+async def bulk_search_csv(postcodes: str = Form(...), radius: float = Form(1.0), days: int = Form(30)):
+    """CSV export for the combined bulk search — same collection logic as
+    bulk_search() above, same CSV-writing pattern as /search.csv, applied
+    to the deduplicated combined set across every postcode submitted.
+    """
+    postcode_list = [p.strip().upper() for p in postcodes.splitlines() if p.strip()][:50]
+
+    all_applications: list[dict] = []
+    seen_ids: set[int] = set()
+
+    async with get_db() as db:
+        for pc in postcode_list:
+            location = await postcode_lookup(pc)
+            if not location:
+                continue
+            apps = await _fetch_applications(db, location["lat"], location["lng"], radius, days)
+            for a in apps:
+                if a["id"] not in seen_ids:
+                    seen_ids.add(a["id"])
+                    all_applications.append(a)
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "Reference", "Council", "Address", "Postcode", "Description",
+        "Application Type", "Status", "Submitted Date", "Decision Date",
+        "Distance (miles)", "Council URL",
+    ])
+    for a in all_applications:
+        writer.writerow([
+            a.get("reference", ""), a.get("council_name", ""),
+            a.get("address", ""), a.get("postcode", ""),
+            a.get("description", ""), a.get("application_type", ""),
+            a.get("status", ""),
+            a.get("submitted_date").isoformat() if a.get("submitted_date") else "",
+            a.get("decision_date").isoformat() if a.get("decision_date") else "",
+            a.get("distance_miles", ""), a.get("council_url", ""),
+        ])
+    buffer.seek(0)
+
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="planfind_bulk_search.csv"'},
+    )
+
+
+@app.get("/street-history", response_class=HTMLResponse)
+async def street_history(request: Request, q: Optional[str] = None):
+    """Free-text address/street search — distinct from the postcode+radius
+    search on the main results page. Deliberately simple: an ILIKE match
+    against the existing address field, no new data source needed.
+
+    Honest limit worth keeping in mind: this only surfaces what's
+    actually been scraped, which currently goes back as far as bulk
+    mode's window (~180 days) for most councils — not genuine multi-year
+    "history" yet. The template says so directly rather than implying
+    more depth than the data actually has.
+    """
+    applications = []
+    q_clean = (q or "").strip()
+
+    if q_clean and len(q_clean) >= 3:  # avoid overly broad 1-2 char matches
+        async with get_db() as db:
+            rows = await db.fetch("""
+                SELECT
+                    a.id, a.reference, a.address, a.postcode, a.description,
+                    a.application_type, a.status, a.submitted_date, a.decision_date,
+                    a.council_url, c.name AS council_name
+                FROM planning_applications a
+                JOIN councils c ON c.id = a.council_id
+                WHERE a.address ILIKE $1
+                ORDER BY a.submitted_date DESC NULLS LAST
+                LIMIT 200
+            """, f"%{q_clean}%")
+
+        applications = [dict(r) for r in rows]
+        for a in applications:
+            a["type_badge"] = _type_badge(a.get("application_type", ""))
+            a["status_class"] = _status_class(a.get("status", ""))
+            a["days_ago"] = _days_ago(a.get("submitted_date"))
+
+    return render("street_history.html", {
+        "request": request,
+        "q": q_clean,
+        "applications": applications,
+        "total": len(applications),
+        "searched": bool(q_clean),
+    })
+
+
 @app.get("/application/{app_id}", response_class=HTMLResponse)
 async def application_detail(request: Request, app_id: int):
     async with get_db() as db:
@@ -270,9 +428,31 @@ async def application_detail(request: Request, app_id: int):
         if not row:
             raise HTTPException(404, "Application not found")
 
+        app_data = dict(row)
+
+        # "Neighbouring applications" — reuses the exact same
+        # _fetch_applications() helper Tier 1 built for /search, just
+        # centered on THIS application's own coordinates instead of a
+        # postcode lookup. Deliberately tighter radius (0.3 miles, not
+        # the search page's 1-mile default) since "what's happening on
+        # this street" should mean genuinely nearby, not a whole
+        # postcode's worth of area. Deliberately generous days (365) so
+        # this reads as real local context/history, not just "the last
+        # month" — bounded naturally by however far back your data
+        # actually goes (currently ~180 days via bulk mode), so this
+        # isn't overselling anything, just not artificially limiting it
+        # either.
+        neighbours = []
+        if app_data.get("lat") and app_data.get("lng"):
+            nearby = await _fetch_applications(
+                db, app_data["lat"], app_data["lng"], radius=0.3, days=365
+            )
+            neighbours = [n for n in nearby if n["id"] != app_id][:20]
+
     return render("application.html", {
         "request": request,
-        "app": dict(row),
+        "app": app_data,
+        "neighbours": neighbours,
     })
 
 
