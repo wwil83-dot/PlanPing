@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Street History — PlanFind{% endblock %}
+{% block content %}
+<main class="main">
+  <div style="margin-bottom:1.75rem">
+    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Street History</h1>
+    <p style="color:var(--muted)">Search by street or address to see everything we've recorded there — not a postcode radius, just that specific place.</p>
+  </div>
+
+  <form action="/street-history" method="get" style="display:flex;gap:.6rem;margin-bottom:1.5rem;flex-wrap:wrap">
+    <input type="text" name="q" value="{{ q }}" placeholder="e.g. High Street, Leigh-on-Sea"
+      class="search-input" style="flex:1;min-width:220px" autocomplete="off">
+    <button type="submit" class="btn btn-primary">Search</button>
+  </form>
+
+  {% if searched %}
+    {% if applications %}
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">
+      {{ total }} application{{ 's' if total != 1 }} matching "{{ q }}"
+    </p>
+    {% for a in applications %}
+    <a href="/application/{{ a.id }}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;margin-bottom:.6rem;text-decoration:none;color:var(--text)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:.85rem;font-weight:500">{{ a.address }}</div>
+          <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem">{{ a.description | truncate(100) }}</div>
+        </div>
+        <span class="badge badge-status badge-{{ a.status_class }}" style="flex-shrink:0">{{ a.status | title }}</span>
+      </div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:.4rem">{{ a.reference }} · {{ a.council_name }} · {{ a.days_ago }}</div>
+    </a>
+    {% endfor %}
+    {% else %}
+    <div style="background:var(--blue-light);border:1px solid #c3d9f0;border-radius:12px;padding:1.5rem">
+      <p style="font-size:.9rem;color:var(--muted)">No applications found matching "{{ q }}" in our records.</p>
+    </div>
+    {% endif %}
+    <p style="font-size:.75rem;color:var(--muted);margin-top:1.25rem">
+      Showing everything we've scraped for this search — for most councils that's roughly the last 6 months, not a complete multi-year history.
+    </p>
+  {% endif %}
+</main>
+{% endblock %}
