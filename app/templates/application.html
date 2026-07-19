@@ -44,6 +44,31 @@
     </div>
     {% endif %}
   </div>
+
+  {% if neighbours %}
+  <div style="margin-top:1.5rem">
+    <h2 style="font-size:1.1rem;font-weight:600;margin-bottom:.3rem">Nearby applications</h2>
+    <p style="font-size:.8rem;color:var(--muted);margin-bottom:.9rem">
+      Within 0.3 miles — as far back as our records go for this area.
+    </p>
+    {% for n in neighbours %}
+    <a href="/application/{{ n.id }}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;margin-bottom:.6rem;text-decoration:none;color:var(--text)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:.85rem;font-weight:500">{{ n.address }}</div>
+          <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem">{{ n.description | truncate(90) }}</div>
+        </div>
+        <span class="badge badge-status badge-{{ n.status_class }}" style="flex-shrink:0">{{ n.status | title }}</span>
+      </div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:.4rem">{{ n.reference }} · {{ n.distance_miles }} mi away · {{ n.days_ago }}</div>
+    </a>
+    {% endfor %}
+  </div>
+  {% elif app.lat and app.lng %}
+  <div style="margin-top:1.5rem;background:var(--blue-light);border:1px solid #c3d9f0;border-radius:12px;padding:1.25rem">
+    <p style="font-size:.85rem;color:var(--muted)">No other applications found within 0.3 miles in our records for this area.</p>
+  </div>
+  {% endif %}
 </main>
 {% endblock %}
 
