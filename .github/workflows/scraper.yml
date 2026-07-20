@@ -15,7 +15,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -261,6 +261,48 @@ jobs:
         with:
           name: idox-form-recon-output
           path: /tmp/idox_form_recon.*
+          retention-days: 7
+
+  # ---------------------------------------------------------------------
+  # Idox multi-council recon — manual trigger only, no schedule.
+  #
+  # Built 2026-07-20 after council_health_check.py flagged 4 councils
+  # failing PERSISTENTLY (5+ consecutive empty runs each, not just a
+  # noisy timeout night): Renfrewshire, Brighton and Hove, Tonbridge and
+  # Malling, London Borough of Brent. Each showed a distinct, stable
+  # failure signature across multiple real runs, so this captures direct
+  # HTML evidence from all 4 in one pass rather than guessing a fix.
+  #
+  # IMPORTANT: Renfrewshire is configured "weekly" in idox_councils.py —
+  # it goes through a completely different code path than the other
+  # three's standard monthly-list flow, and this script correctly probes
+  # each council with its real production flow rather than one shared
+  # template.
+  # ---------------------------------------------------------------------
+  idox_multi_recon:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_multi_recon'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright
+      - run: playwright install --with-deps chromium
+      - name: Run Idox multi-council recon (Renfrewshire/Brighton/Tonbridge/Brent)
+        run: cd scrapers && python idox_multi_recon.py
+      - name: Upload recon output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idox-multi-recon-output
+          path: /tmp/idox_recon_*.html
           retention-days: 7
 
   alerts:
