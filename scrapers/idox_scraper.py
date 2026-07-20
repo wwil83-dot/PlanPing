@@ -566,6 +566,15 @@ def parse_results_page(
                 "unusual traffic", "captcha", "incapsula", "are you a robot",
                 "bot detection", "request blocked", "security service",
                 "reference id", "akamai", "perimeterx", "distil",
+                # Added 2026-07-20 after a real run showed multiple genuine
+                # 429 responses (both plain server-level, e.g. "IDOX Public
+                # Access Error 429", and WAF-flavored, e.g. "Too Many
+                # Requests... unusual traffic... automated queries") that
+                # weren't being tagged because "429"/"too many requests"
+                # wasn't in this list at all — a significant miss, since
+                # this turned out to be one of the most common real
+                # signatures once request volume increased.
+                "429", "too many requests", "rate limit",
             )
             combined = f"{title_text} {body_snippet}".lower()
             matched = [sig for sig in waf_signatures if sig in combined]
@@ -728,7 +737,18 @@ class IdoxPortal:
             # can't balloon nightly runtime — oldest first, since those are
             # the most "overdue" for a decision and most useful to recheck.
             recheck_months.sort()
-            MAX_RECHECK_MONTHS = 4
+            # REDUCED 2026-07-20 (was 4): a real run confirmed this was too
+            # generous once the pagination fix let the true pending
+            # backlog through (previously silently capped at 1000 rows,
+            # hiding the real scope). With the real backlog visible,
+            # batch 1 ran 61.0 minutes against a 55-minute budget and had
+            # to hard-skip 49 councils entirely, and multiple councils
+            # returned genuine 429 "Too Many Requests" responses — real
+            # evidence, not a guess, that this many extra paginated
+            # requests to the same council in one run is too much. Halving
+            # the cap directly reduces both the per-council request volume
+            # (the proximate cause of the 429s) and total batch runtime.
+            MAX_RECHECK_MONTHS = 2
             months.extend(recheck_months[:MAX_RECHECK_MONTHS])
 
         all_apps: list[dict] = []
