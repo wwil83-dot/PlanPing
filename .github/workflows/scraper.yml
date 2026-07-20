@@ -15,7 +15,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -303,6 +303,47 @@ jobs:
         with:
           name: idox-multi-recon-output
           path: /tmp/idox_recon_*.html
+          retention-days: 7
+
+  # ---------------------------------------------------------------------
+  # Idox recon round 2 — manual trigger only, no schedule.
+  #
+  # Built 2026-07-20 right after idox_multi_recon.py's first pass caught
+  # its own mistake: it only did page.goto() + checked for a results
+  # container immediately, but production's real _scrape_month() flow
+  # selects the month dropdown, clicks a date-received radio, clicks
+  # Submit, THEN waits for results. Brighton/Brent's "no results
+  # container" finding from round 1 was an artifact of skipping that
+  # interaction. This round replicates the REAL production flow
+  # (identical selectors/order/waits, copied from idox_scraper.py) for
+  # Brighton and Brent, and separately tests whether Renfrewshire's
+  # standard monthly flow works fine (its 'weekly' tag was never itself
+  # verified as correct).
+  # ---------------------------------------------------------------------
+  idox_recon_round2:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_recon_round2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright
+      - run: playwright install --with-deps chromium
+      - name: Run Idox recon round 2 (real form-submit flow)
+        run: cd scrapers && python idox_recon_round2.py
+      - name: Upload recon output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idox-recon-round2-output
+          path: /tmp/idox_recon2_*.html
           retention-days: 7
 
   alerts:
