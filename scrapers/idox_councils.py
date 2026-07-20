@@ -705,8 +705,20 @@ IDOX_COUNCILS = [
     ("Dover District Council",
      "https://publicaccess.dover.gov.uk/online-applications"),
 
-    ("Tonbridge and Malling Borough Council",
-     "https://publicaccess.tmbc.gov.uk/online-applications"),
+    # BROKEN — Tonbridge and Malling confirmed blocked (2026-07-20), not
+    # off-Idox like Warrington/Liverpool/Medway above. This one IS a real
+    # Idox portal at this URL — a real browser from a normal residential
+    # connection loads it cleanly (confirmed via screenshot). But our
+    # scraper gets net::ERR_CONNECTION_RESET on every single attempt from
+    # GitHub Actions, reproduced identically across 3 independent runs
+    # (2 nightly batches + a dedicated idox_multi_recon.py pass with zero
+    # concurrency pressure). That combination — clean for a normal
+    # browser, consistently reset for automated traffic — is the
+    # signature of a working anti-bot measure, not a broken site.
+    # coverage_source manually set to 'manual_link' in Supabase to match;
+    # see other 'manual_link' councils for the same pattern.
+    # ("Tonbridge and Malling Borough Council",
+    #  "https://publicaccess.tmbc.gov.uk/online-applications"),
 
     # NOTE: twbcpa.midkent.gov.uk is Tunbridge Wells' partition of the shared midkent server.
     ("Tunbridge Wells Borough Council",
@@ -1286,8 +1298,23 @@ IDOX_COUNCILS = [
     ("Midlothian Council",
      "https://planning-applications.midlothian.gov.uk/OnlinePlanning", "weekly"),
 
+    # FIXED 2026-07-20: was tagged "weekly" per the note above, but
+    # Renfrewshire had 17 consecutive empty runs (weeklyListResults.do
+    # returning a genuine council-side "Error / Server Problem" page,
+    # confirmed via idox_multi_recon.py real HTML evidence — not a WAF
+    # block, an actually broken endpoint). idox_recon_round2.py then
+    # tested the STANDARD monthly flow directly (real month-select +
+    # radio + submit, identical to production's real interaction) and it
+    # returned a genuine working results page — real title 'Search
+    # Results', real content. The "monthly list disabled" note above was
+    # either wrong from the start or became stale since it was written;
+    # either way, current real evidence says monthly works. Only verified
+    # for month_index=0 (current month) so far — worth watching the next
+    # bulk-mode run (which needs older months too) to confirm this holds
+    # for month_index=1+ as well, since the weekly-only assumption might
+    # have been based on historical-month behavior specifically.
     ("Renfrewshire Council",
-     "https://pl-bs.renfrewshire.gov.uk/online-applications", "weekly"),
+     "https://pl-bs.renfrewshire.gov.uk/online-applications"),
 
     ("Perth and Kinross Council",
      "https://planningapps.pkc.gov.uk/online-applications"),
