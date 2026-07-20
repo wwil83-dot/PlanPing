@@ -630,7 +630,8 @@ class IdoxPortal:
         parsed = urlparse(self.base_url)
         self.domain_root = f"{parsed.scheme}://{parsed.netloc}"
 
-    async def scrape(self, browser: Browser, days_back: int = 7) -> list[dict]:
+    async def scrape(self, browser: Browser, days_back: int = 7,
+                      pending_recheck: Optional[list[dict]] = None) -> list[dict]:
         cutoff = date.today() - timedelta(days=days_back)
 
         # Build the full list of calendar months to scrape.
@@ -644,6 +645,42 @@ class IdoxPortal:
                 m = m.replace(year=m.year - 1, month=12)
             else:
                 m = m.replace(month=m.month - 1)
+
+        # DECISION-CADENCE FIX (2026-07-20): fast mode's 14-day cutoff means
+        # an application submitted, say, 40 days ago drops out of the month
+        # range entirely — so once it leaves the window, nightly scraping
+        # never looks at it again, even though UK decisions typically land
+        # 8+ weeks after submission. That's why decision_detected_at was
+        # only accumulating via occasional bulk runs (confirmed: 1 total
+        # detection since deployment). pending_recheck is a list of
+        # {reference, submitted_date} for applications we already have on
+        # file as still "pending" — main() fetches this from Supabase before
+        # scraping starts. We add their months to the scrape (capped, so a
+        # council with a huge backlog doesn't blow the nightly time budget)
+        # so their status can genuinely be re-observed and, if changed,
+        # upserted — which is what lets the decision_detected_at trigger
+        # actually fire close to when a decision happens, not just whenever
+        # bulk mode next happens to run.
+        pending_refs: set[str] = set()
+        if pending_recheck:
+            pending_refs = {p["reference"] for p in pending_recheck if p.get("reference")}
+            recheck_months: list[date] = []
+            for p in pending_recheck:
+                d = p.get("submitted_date")
+                if not d:
+                    continue
+                try:
+                    month_start = date.fromisoformat(d).replace(day=1)
+                except ValueError:
+                    continue
+                if month_start not in months and month_start not in recheck_months:
+                    recheck_months.append(month_start)
+            # Cap extra months so a council with a large pending backlog
+            # can't balloon nightly runtime — oldest first, since those are
+            # the most "overdue" for a decision and most useful to recheck.
+            recheck_months.sort()
+            MAX_RECHECK_MONTHS = 4
+            months.extend(recheck_months[:MAX_RECHECK_MONTHS])
 
         all_apps: list[dict] = []
 
@@ -684,7 +721,9 @@ class IdoxPortal:
 
         recent = [
             a for a in all_apps
-            if not a.get("submitted_date") or a["submitted_date"] >= cutoff.isoformat()
+            if not a.get("submitted_date")
+            or a["submitted_date"] >= cutoff.isoformat()
+            or a.get("reference") in pending_refs
         ]
 
         # Apply month-based fallback dates AFTER the filter (so "2026-06-01" doesn't
@@ -1121,6 +1160,7 @@ async def process_council(
     days_back: int,
     bulk_mode: bool = False,
     budget_minutes: int = MAX_MINUTES,
+    pending_recheck: Optional[list[dict]] = None,
 ) -> int:
     # council_id comes ONLY from the portal object — never a loose parameter
     # that could get corrupted in async concurrent execution.
@@ -1176,7 +1216,7 @@ async def process_council(
         await asyncio.sleep(1)  # stagger requests — avoids triggering WAF rate limits
 
         try:
-            apps = await portal.scrape(browser, days_back)
+            apps = await portal.scrape(browser, days_back, pending_recheck=pending_recheck)
         except Exception as e:
             print(f"    ✗ Error: {e}")
             return 0
@@ -1437,6 +1477,49 @@ async def main():
         print(f"Bulk mode: reordered by least-recently-scraped — "
               f"starting with {to_scrape[0][0].council_name if to_scrape else '(none)'}\n")
 
+    # DECISION-CADENCE FIX (2026-07-20): fast mode only looks at the last
+    # `days` (14) worth of submitted_date by default, so an application
+    # that's still "pending" from further back never gets re-visited, and
+    # can never be observed transitioning to approved/refused outside a
+    # bulk run. Fetch the current pending backlog per council (bounded to
+    # 15-120 days back — old enough to be outside the normal window,
+    # young enough that still checking is realistic) and pass it into
+    # each council's scrape so those applications' months get re-scraped
+    # and their status changes can actually reach decision_detected_at.
+    # Bulk mode already covers a 180-day window on its own, so this is
+    # deliberately fast-mode-only.
+    pending_by_council: dict[int, list[dict]] = {}
+    if not bulk:
+        recheck_lo = (date.today() - timedelta(days=120)).isoformat()
+        recheck_hi = (date.today() - timedelta(days=15)).isoformat()
+        # Scoped to THIS batch's councils only (to_scrape is already the
+        # post-split list at this point) — batch A and batch B run as
+        # separate jobs with separate time budgets, so there's no reason
+        # for batch A's job to fetch/carry pending-recheck data for batch
+        # B's councils, or vice versa.
+        batch_council_ids = sorted({council_id for _, council_id in to_scrape})
+        try:
+            if batch_council_ids:
+                ids_csv = ",".join(str(i) for i in batch_council_ids)
+                pending_rows = await _supa_get(
+                    "planning_applications",
+                    **{
+                        "select": "council_id,reference,submitted_date",
+                        "status": "eq.pending",
+                        "council_id": f"in.({ids_csv})",
+                        "and": f"(submitted_date.gte.{recheck_lo},submitted_date.lte.{recheck_hi})",
+                        "limit": "20000",
+                    },
+                )
+            else:
+                pending_rows = []
+            for row in pending_rows:
+                pending_by_council.setdefault(row["council_id"], []).append(row)
+            print(f"Pending recheck: {len(pending_rows)} applications across "
+                  f"{len(pending_by_council)} councils ({recheck_lo} to {recheck_hi})\n")
+        except Exception as e:
+            print(f"⚠ Failed to fetch pending recheck list (continuing without it): {e}\n")
+
     print(f"Scraping {len(to_scrape)} councils with Playwright…\n")
 
     async with async_playwright() as pw:
@@ -1455,7 +1538,8 @@ async def main():
         # via the explicitly-passed budget_minutes parameter below.
         tasks = [
             process_council(portal, browser, sem, days, bulk_mode=bulk,
-                             budget_minutes=budget)
+                             budget_minutes=budget,
+                             pending_recheck=pending_by_council.get(council_id))
             for portal, council_id in to_scrape
         ]
 
