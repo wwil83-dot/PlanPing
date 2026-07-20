@@ -301,6 +301,19 @@ _MONTH_DROPDOWN_DIAGNOSED: set[str] = set()
 # 2026-07-18: tracks councils where a genuinely decided application had
 # no decision date found — see the DIAGNOSTIC in _parse_result() below.
 _DECISION_DATE_DIAGNOSED: set[str] = set()
+# 2026-07-20: tracks councils where the results-list container itself
+# (ul.searchresults / #searchResultsContainer / etc.) wasn't found on a
+# results page at all — see the DIAGNOSTIC in parse_results_page() below.
+# Found while investigating why ~15+ recently-added councils were being
+# scraped every run (wait_for_selector was succeeding — e.g. matching
+# '.no-results' or '#searchResultsForm' — so no timeout was ever logged)
+# but silently saving zero applications forever. This was completely
+# invisible before: parse_results_page() just returned an empty list with
+# no distinction between "genuinely 0 applications this month" and "the
+# container selector doesn't match this council's real page structure at
+# all" — same category of silent failure as the month-dropdown bug before
+# its diagnostic was added.
+_RESULTS_CONTAINER_DIAGNOSED: set[str] = set()
 
 
 def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> Optional[dict]:
@@ -527,6 +540,42 @@ def parse_results_page(
         or soup.find("div", id="searchResultsContainer")
     )
     if not container:
+        if council_name not in _RESULTS_CONTAINER_DIAGNOSED:
+            _RESULTS_CONTAINER_DIAGNOSED.add(council_name)
+            # Show what IS on the page, since that's the real evidence
+            # needed to fix this — same "capture real HTML, don't guess"
+            # principle idox_form_recon.py already established for the
+            # month-dropdown investigation.
+            title_match = soup.find("title")
+            title_text = title_match.get_text(strip=True) if title_match else "(no <title>)"
+            body_snippet = soup.get_text(" ", strip=True)[:200]
+
+            # WAF/BOT-BLOCK SIGNATURE CHECK (2026-07-20): a blocked request
+            # to an Idox portal still returns a normal 200-status HTML page
+            # — it just isn't the results page, so wait_for_selector()
+            # upstream doesn't time out and this failure mode was
+            # previously indistinguishable from a genuine selector
+            # mismatch. Checking title+body against known WAF/bot-block
+            # vendor phrasing turns "go read the HTML yourself" into an
+            # immediate answer in the log line itself. Not exhaustive —
+            # absence of a match doesn't rule out a block, just an
+            # unrecognised one — but a match is a strong positive signal.
+            waf_signatures = (
+                "attention required", "cloudflare", "just a moment",
+                "access denied", "forbidden", "pardon our interruption",
+                "unusual traffic", "captcha", "incapsula", "are you a robot",
+                "bot detection", "request blocked", "security service",
+                "reference id", "akamai", "perimeterx", "distil",
+            )
+            combined = f"{title_text} {body_snippet}".lower()
+            matched = [sig for sig in waf_signatures if sig in combined]
+            waf_tag = f" [LIKELY WAF/BOT BLOCK — matched: {', '.join(matched)}]" if matched else ""
+
+            print(f"    ⚠ RESULTS CONTAINER DIAGNOSTIC [{council_name}]{waf_tag}: none of the "
+                  f"known result-container selectors "
+                  f"(ul.searchresults / #searchresults / div.searchresults / "
+                  f"#searchResultsContainer) matched anything on this page. "
+                  f"Page title: {title_text!r}. Body starts: {body_snippet!r}")
         return apps, False
 
     items = (
@@ -1210,7 +1259,17 @@ async def process_council(
         if elapsed_minutes() >= budget_minutes - 3:
             print(f"\n[{portal.council_name}] — skipping, time budget reached "
                   f"({elapsed_minutes():.1f} min elapsed)")
-            return 0
+            # LOGGING FIX (2026-07-20): this used to return 0, identical to
+            # every OTHER reason a council saves nothing (timeout, WAF
+            # block, dead URL, template mismatch). That made the summary
+            # line's "Skipped (time): N" figure meaningless — a real run's
+            # log showed 47-65 "time skips" despite finishing in ~33-36
+            # minutes against a 55-minute budget, nowhere near triggering
+            # this branch even once. Returning a distinct sentinel here
+            # lets main() report genuine time-budget skips separately from
+            # the much larger "saved 0 for some other real reason" bucket,
+            # instead of conflating them under a misleading label.
+            return "TIME_BUDGET_SKIP"
 
         print(f"\n[{portal.council_name}] (council_id={cid})")
         await asyncio.sleep(1)  # stagger requests — avoids triggering WAF rate limits
@@ -1501,16 +1560,36 @@ async def main():
         try:
             if batch_council_ids:
                 ids_csv = ",".join(str(i) for i in batch_council_ids)
-                pending_rows = await _supa_get(
-                    "planning_applications",
-                    **{
-                        "select": "council_id,reference,submitted_date",
-                        "status": "eq.pending",
-                        "council_id": f"in.({ids_csv})",
-                        "and": f"(submitted_date.gte.{recheck_lo},submitted_date.lte.{recheck_hi})",
-                        "limit": "20000",
-                    },
-                )
+                # PAGINATION FIX (2026-07-20): a real run showed "Pending
+                # recheck: 1000 applications" in BOTH batches, on the nose
+                # — a strong signal this was silently hitting Supabase's
+                # default max-rows cap rather than genuinely being exactly
+                # 1000 twice. limit=20000 alone doesn't override that
+                # server-side cap. Paginate explicitly via offset until a
+                # page comes back short, with a generous-but-bounded safety
+                # cap (10 pages = 10,000 rows) so a pathological backlog
+                # still can't run away. Also added explicit oldest-first
+                # ordering, so if the cap IS ever hit, what's kept is the
+                # most overdue-for-decision backlog — the most useful
+                # subset to recheck — rather than arbitrary database order.
+                pending_rows = []
+                page_size = 1000
+                for page_num in range(10):  # safety cap: 10,000 rows max
+                    page_rows = await _supa_get(
+                        "planning_applications",
+                        **{
+                            "select": "council_id,reference,submitted_date",
+                            "status": "eq.pending",
+                            "council_id": f"in.({ids_csv})",
+                            "and": f"(submitted_date.gte.{recheck_lo},submitted_date.lte.{recheck_hi})",
+                            "order": "submitted_date.asc",
+                            "limit": str(page_size),
+                            "offset": str(page_num * page_size),
+                        },
+                    )
+                    pending_rows.extend(page_rows)
+                    if len(page_rows) < page_size:
+                        break  # got everything — last page was short
             else:
                 pending_rows = []
             for row in pending_rows:
@@ -1546,17 +1625,26 @@ async def main():
         results = await asyncio.gather(*tasks, return_exceptions=True)
         await browser.close()
 
-    total   = sum(r for r in results if isinstance(r, int))
-    errors  = sum(1 for r in results if isinstance(r, Exception))
-    skipped = sum(1 for r in results if r == 0)  # best-effort — some
-        # genuine 0-application councils will also show as 0, this is a
-        # rough count for the summary line only, not used for any real logic
+    total        = sum(r for r in results if isinstance(r, int))
+    errors       = sum(1 for r in results if isinstance(r, Exception))
+    # LOGGING FIX (2026-07-20): previously both counted as "Skipped (time)"
+    # under one meaningless label — see the sentinel-return comment in
+    # process_council() for the full story. time_skipped is the REAL
+    # time-budget-triggered count; zero_result is everything else that
+    # saved nothing (timeouts, WAF/bot blocks, dead URLs, template
+    # mismatches, genuinely empty nights) — a much larger and more
+    # actionable bucket that was being hidden inside a budget-sounding
+    # label.
+    time_skipped = sum(1 for r in results if r == "TIME_BUDGET_SKIP")
+    zero_result  = sum(1 for r in results if r == 0)
 
     print(f"\n{'=' * 50}")
     print(f"Finished in {elapsed_minutes():.1f} minutes")
     print(f"Applications saved: {total}")
-    if errors:  print(f"Errors:             {errors}")
-    if skipped: print(f"Skipped (time):     {skipped} councils")
+    if errors:       print(f"Errors:                    {errors}")
+    if time_skipped: print(f"Skipped (time budget):     {time_skipped} councils")
+    if zero_result:  print(f"Saved 0 (other reason — see per-council log lines "
+                            f"above for timeout/block/error details): {zero_result} councils")
 
 
 if __name__ == "__main__":
