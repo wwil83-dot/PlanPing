@@ -110,6 +110,77 @@ async def _fetch_applications(db, lat: float, lng: float, radius: float, days: i
     return applications
 
 
+# TIER 3 — smart tagging (2026-07-20). Tags are precomputed and stored on
+# each row by a Postgres trigger (see migrations/migration_smart_tags.sql)
+# rather than classified live in Python like _type_badge() — deliberately,
+# because these three pages search the WHOLE database by category, not a
+# postcode-radius-bounded result set, so running regex per-request over
+# every row wouldn't scale the way _type_badge() reasonably does for a
+# small radius search. One shared engine, three thin pages on top of it,
+# per the original Tier 3 roadmap note.
+TAG_META = {
+    "large_site": {
+        "title": "Large Site Developments",
+        "intro": "Applications describing a significant number of dwellings/units, "
+                  "a site measured in hectares, or explicitly flagged as a major "
+                  "development.",
+    },
+    "farm_diversification": {
+        "title": "Farm Diversification",
+        "intro": "Agricultural or rural sites being converted, diversified, or put "
+                  "to a new use — barn conversions, farm shops, holiday lets, and "
+                  "similar.",
+    },
+    "commercial_conversion": {
+        "title": "Commercial-to-Residential Conversion",
+        "intro": "Offices, shops, retail units, or warehouses being converted to "
+                  "residential use, including Permitted Development (Class MA/O) "
+                  "prior approvals.",
+    },
+}
+
+
+async def _fetch_tagged_applications(db, tag: str, status: Optional[str] = None,
+                                      limit: int = 200) -> list[dict]:
+    """Shared query for the three Tier 3 tag pages — searches the full
+    database by precomputed tag, not a postcode radius. Kept as its own
+    helper (not folded into _fetch_applications) because the underlying
+    query is genuinely different in shape: no applications_near() radius
+    function, no lat/lng/distance, and it needs its own LIMIT since an
+    unbounded national query has no natural result-set ceiling the way a
+    radius search does.
+
+    HONEST LIMITATION (documented in the migration too, repeated here
+    since it directly affects what this function returns): tags are
+    keyword/regex classification against free text from 130+ councils
+    with inconsistent phrasing. This will have false negatives (real
+    matches missed) and occasional false positives — a reasonable first
+    pass, not a guarantee.
+    """
+    rows = await db.fetch("""
+        SELECT
+            a.id, a.reference, a.address, a.postcode,
+            a.description, a.application_type, a.status,
+            a.submitted_date, a.decision_date, a.council_url,
+            c.name AS council_name, c.slug AS council_slug
+        FROM planning_applications a
+        JOIN councils c ON c.id = a.council_id
+        WHERE a.tags @> ARRAY[$1]::text[]
+        AND ($2::text IS NULL OR a.status = $2)
+        ORDER BY a.submitted_date DESC NULLS LAST
+        LIMIT $3
+    """, tag, status, limit)
+
+    applications = [dict(r) for r in rows]
+    for a in applications:
+        a["type_badge"] = _type_badge(a.get("application_type", ""))
+        a["is_major"] = _is_major(a.get("application_type", ""))
+        a["status_class"] = _status_class(a.get("status", ""))
+        a["days_ago"] = _days_ago(a.get("submitted_date"))
+
+    return applications
+
+
 # Filter dropdown options, matching exactly what _type_badge()/_status_class()
 # actually produce — kept as a single source of truth here so the UI
 # dropdowns can never silently drift out of sync with the real
@@ -604,6 +675,41 @@ async def trends(request: Request):
         "councils_ranked": councils_ranked,
         "total_councils": len(councils_ranked),
     })
+
+
+async def _render_tag_page(request: Request, tag: str, status: Optional[str]) -> HTMLResponse:
+    """Shared body for all three Tier 3 tag routes below — same shape of
+    factoring as _fetch_applications/_fetch_tagged_applications, so the
+    three pages can't silently drift into three different implementations
+    of what is genuinely the same operation with a different tag."""
+    meta = TAG_META[tag]
+    async with get_db() as db:
+        applications = await _fetch_tagged_applications(db, tag, status=status)
+
+    return render("tag_search.html", {
+        "request": request,
+        "tag": tag,
+        "title": meta["title"],
+        "intro": meta["intro"],
+        "applications": applications,
+        "total": len(applications),
+        "status": status,
+    })
+
+
+@app.get("/large-sites", response_class=HTMLResponse)
+async def large_sites(request: Request, status: Optional[str] = None):
+    return await _render_tag_page(request, "large_site", status)
+
+
+@app.get("/farm-diversification", response_class=HTMLResponse)
+async def farm_diversification(request: Request, status: Optional[str] = None):
+    return await _render_tag_page(request, "farm_diversification", status)
+
+
+@app.get("/commercial-conversion", response_class=HTMLResponse)
+async def commercial_conversion(request: Request, status: Optional[str] = None):
+    return await _render_tag_page(request, "commercial_conversion", status)
 
 
 @app.get("/councils", response_class=HTMLResponse)
