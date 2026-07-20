@@ -314,6 +314,15 @@ _DECISION_DATE_DIAGNOSED: set[str] = set()
 # all" — same category of silent failure as the month-dropdown bug before
 # its diagnostic was added.
 _RESULTS_CONTAINER_DIAGNOSED: set[str] = set()
+# 2026-07-20 (round 2 recon): tracks councils where a results-wait timeout
+# was actually caused by the portal's OWN "too many results, narrow your
+# search" validation error — not a WAF block, not a template mismatch.
+# Discovered via idox_recon_round2.py replicating the real form-submit
+# flow for London Borough of Brent: the page it landed on after a genuine
+# submit read "Please check the search criteria: Too many results found.
+# Please enter some more parameters." — an entirely different failure
+# category that a generic "Results timeout" line was previously hiding.
+_TOO_MANY_RESULTS_DIAGNOSED: set[str] = set()
 
 
 def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> Optional[dict]:
@@ -525,6 +534,35 @@ def _parse_result(item, base_url: str, domain_root: str, council_name: str) -> O
         "council_url":      portal_url,
         "source":           "idox_scraper",
     }
+
+
+async def _diagnose_results_timeout(page, council_name: str) -> str:
+    """Called when the results-wait times out. Checks whether the real
+    cause is the portal's OWN "too many results" validation error rather
+    than a genuine timeout/block — discovered 2026-07-20 via
+    idox_recon_round2.py on London Borough of Brent, whose portal shows
+    "Please check the search criteria: Too many results found." instead
+    of a results list when a query (e.g. one whole month, no narrower
+    filter) matches more applications than it's configured to return.
+    That page never contains any of the known results-container
+    selectors, so it looked identical to a generic timeout/block before
+    this. Returns the real page title (so callers don't need a second
+    page.title() call) and prints a distinguishing diagnostic, rate
+    limited per council, when this specific cause is detected.
+    """
+    title = await page.title()
+    try:
+        body_text = await page.locator("body").inner_text()
+    except Exception:
+        body_text = ""
+    if "too many results" in body_text.lower() or "enter some more parameters" in body_text.lower():
+        if council_name not in _TOO_MANY_RESULTS_DIAGNOSED:
+            _TOO_MANY_RESULTS_DIAGNOSED.add(council_name)
+            snippet = " ".join(body_text.split())[:200]
+            print(f"    ⚠ TOO MANY RESULTS DIAGNOSTIC [{council_name}]: the portal's own "
+                  f"validation rejected this query as too broad, not a timeout/block. "
+                  f"Body: {snippet!r}")
+    return title
 
 
 def parse_results_page(
@@ -993,7 +1031,7 @@ class IdoxPortal:
                 timeout=25_000,
             )
         except PlaywrightTimeout:
-            title = await page.title()
+            title = await _diagnose_results_timeout(page, self.council_name)
             print(f"    ⚠ Results timeout — title: '{title[:60]}'")
             # Try the fallback here too — form submission may have hung on a
             # blocked path even though the initial page load succeeded.
@@ -1172,7 +1210,7 @@ class IdoxPortal:
                 timeout=25_000,
             )
         except PlaywrightTimeout:
-            title = await page.title()
+            title = await _diagnose_results_timeout(page, self.council_name)
             print(f"    ⚠ Results timeout — title: '{title[:60]}'")
             return []
 
