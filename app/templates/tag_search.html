@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — PlanFind{% endblock %}
+
+{% block content %}
+<header class="hero hero-compact">
+  <div class="hero-inner">
+    <h1 style="margin:0 0 .4rem">{{ title }}</h1>
+    <p style="margin:0;color:var(--muted)">{{ intro }}</p>
+  </div>
+</header>
+
+<main class="main">
+
+  <p style="font-size:.8rem;color:var(--muted);margin-bottom:1rem">
+    Tagged automatically from each application's description using keyword
+    matching — a reasonable first pass, not a guarantee. Some genuine
+    matches may be missed if a council's wording is unusual, and
+    occasional false positives are possible. Showing the {{ applications|length }}
+    most recent matches nationally.
+  </p>
+
+  <div class="results-header">
+    <div>
+      <h2 class="results-title">
+        {% if total > 0 %}
+          {{ total }} application{{ 's' if total != 1 }} matched
+        {% else %}
+          No matching applications found yet
+        {% endif %}
+      </h2>
+    </div>
+  </div>
+
+  {# Filter bar — status refinement only; this is a national search, not
+     a postcode/radius one, so it deliberately doesn't carry those params. #}
+  <form method="get" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.25rem;padding:.85rem 1rem;background:#fff;border:1px solid var(--border);border-radius:8px">
+    <label style="font-size:.8rem;color:var(--muted);font-weight:600">Filter:</label>
+    <select name="status" class="form-input" style="max-width:150px" onchange="this.form.submit()">
+      <option value="">Any status</option>
+      <option value="pending" {{ 'selected' if status == 'pending' }}>Pending</option>
+      <option value="approved" {{ 'selected' if status == 'approved' }}>Approved</option>
+      <option value="refused" {{ 'selected' if status == 'refused' }}>Refused</option>
+      <option value="withdrawn" {{ 'selected' if status == 'withdrawn' }}>Withdrawn</option>
+    </select>
+  </form>
+
+  {% if total == 0 %}
+  <div class="banner banner-amber">
+    No applications currently match this category. This may mean genuinely
+    none exist right now, or that the keyword rules missed some real
+    matches — worth checking back as more councils get scraped.
+  </div>
+  {% else %}
+
+  <div class="app-list">
+    {% for app in applications %}
+    <article class="app-card status-{{ app.status_class }}" id="app-card-{{ app.id }}">
+      <div class="app-card-top">
+        <div class="app-meta">
+          <span class="app-ref">{{ app.reference }}</span>
+          <span class="app-council">{{ app.council_name }}</span>
+        </div>
+        <div class="app-badges">
+          <span class="badge badge-type badge-{{ app.type_badge }}">{{ app.application_type or 'Unknown type' }}</span>
+          <span class="badge badge-status badge-{{ app.status_class }}">{{ app.status | title }}</span>
+        </div>
+      </div>
+
+      <h3 class="app-address">{{ app.address or 'Address not available' }}</h3>
+      <p class="app-description">{{ app.description or 'No description provided' }}</p>
+
+      <div class="app-footer">
+        <span class="app-date">{{ app.days_ago }}</span>
+        <div class="app-actions">
+          {% if app.council_url %}
+          <a href="{{ app.council_url }}" target="_blank" rel="noopener" class="btn btn-sm">
+            View on council portal →
+          </a>
+          {% endif %}
+          <a href="/application/{{ app.id }}" class="btn btn-sm">Details</a>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+
+  {% endif %}
+
+</main>
+{% endblock %}
