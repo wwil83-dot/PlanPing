@@ -61,6 +61,36 @@ async def run():
         ("budget_minutes=999 returns genuine 0 (not the sentinel)", check3),
         ("a non-skipped council genuinely attempts to scrape", check4),
     ]
+
+    # 5. A real exception AFTER scrape() succeeds (e.g. during geocoding)
+    # should be caught by the new safety net, print a message naming the
+    # council, and return 0 — not propagate as an anonymous Exception
+    # object into asyncio.gather's results with zero indication of which
+    # council or why (the exact blind spot found in the real Eastleigh
+    # investigation this fix responds to).
+    import io
+    import contextlib
+
+    fake_portal_broken = AsyncMock()
+    fake_portal_broken.council_name = "Broken Council"
+    fake_portal_broken.db_council_id = 99
+    fake_portal_broken.scrape = AsyncMock(return_value=[
+        {"reference": "26/00001", "postcode": "AB1 2CD", "status": "pending"}
+    ])
+
+    buf = io.StringIO()
+    with patch.object(mod, "_supa_patch_council", AsyncMock(return_value=None)), \
+         patch.object(mod, "_supa_increment_empty_runs", AsyncMock(return_value=None)), \
+         patch.object(mod, "geocode", AsyncMock(side_effect=RuntimeError("simulated failure"))):
+        with contextlib.redirect_stdout(buf):
+            result5 = await mod.process_council(fake_portal_broken, fake_browser, sem, budget_minutes=999)
+    out5 = buf.getvalue()
+
+    check5 = (result5 == 0
+              and "Broken Council" in out5
+              and "council_id=99" in out5
+              and "simulated failure" in out5)
+    checks.append(("post-scrape exception is caught, named, and returns 0 (not silently propagated)", check5))
     all_ok = True
     for label, ok in checks:
         print(f"  [{'PASS' if ok else 'FAIL'}] {label}")
