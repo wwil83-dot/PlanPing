@@ -38,11 +38,11 @@ body {
   z-index: 50;
   box-shadow: 0 2px 8px rgba(0,0,0,.06);
 }
-.nav-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+.nav-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; row-gap: .5rem; }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--blue-dark); font-weight: 700; font-size: 1.2rem; letter-spacing: -.3px; }
 .brand-icon { font-size: 1.4rem; }
-.nav-links { display: flex; gap: 1.5rem; }
-.nav-links a { color: var(--muted); text-decoration: none; font-size: .9rem; font-weight: 500; }
+.nav-links { display: flex; flex-wrap: wrap; column-gap: 1.1rem; row-gap: .4rem; }
+.nav-links a { color: var(--muted); text-decoration: none; font-size: .9rem; font-weight: 500; white-space: nowrap; }
 .nav-links a:hover { color: var(--blue); }
 
 /* ── Hero ── */
@@ -344,6 +344,7 @@ h1 em { font-style: italic; color: #7dd98a; }
   .steps { flex-direction: column; }
   .step-arrow { transform: rotate(90deg); }
   .step { max-width: 100%; }
+  .nav-links { column-gap: .8rem; font-size: .85rem; }
 }
 
 /* ── About page ── */
