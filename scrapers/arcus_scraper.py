@@ -505,13 +505,26 @@ class ArcusPortal:
 
     def __init__(self, council_name: str, base_url: str, mode: str,
                  config, db_council_id: int,
-                 pending_recheck: Optional[list[dict]] = None):
+                 pending_recheck: Optional[list[dict]] = None,
+                 register_url_override: Optional[str] = None):
         self.council_name = council_name
         self.base_url = base_url.rstrip("/")
         self.mode = mode
         self.config = config
         self.db_council_id = db_council_id
-        self.register_url = f"{self.base_url}/register-view?c__r=Arcus_BE_Public_Register"
+        # OVERRIDE FIX (2026-07-21): found via real evidence — Wiltshire
+        # Council's Salesforce site returns a genuine "Invalid Page"
+        # error for the standard "/register-view?c__r=Arcus_BE_Public_
+        # Register" suffix that every OTHER Arcus council in this file
+        # resolves correctly. A manual browser test confirmed the BARE
+        # base_url (no suffix at all) loads a real, working homepage with
+        # all three tabs visible. Rather than guess a different universal
+        # suffix (risking breaking the 8 councils where the standard one
+        # already works), this is a per-council override — only Wiltshire
+        # passes one, everyone else keeps the proven default.
+        self.register_url = register_url_override or (
+            f"{self.base_url}/register-view?c__r=Arcus_BE_Public_Register"
+        )
         # DECISION-CADENCE FIX (2026-07-21): only usable by
         # _scrape_advanced_search — that's the only one of Arcus's three
         # modes with an actual parameterized date range (weekly_list and
@@ -1120,6 +1133,15 @@ async def main():
 
     db_by_name = {r["name"].lower(): r["id"] for r in db_rows}
 
+    # REGISTER_URL_OVERRIDE (2026-07-21): councils whose Salesforce site
+    # returns a genuine error for the standard "/register-view?c__r=
+    # Arcus_BE_Public_Register" suffix — see the comment in
+    # ArcusPortal.__init__ for the real evidence behind Wiltshire's entry.
+    # Bare base_url (no suffix) confirmed working via manual browser test.
+    REGISTER_URL_OVERRIDES: dict[str, str] = {
+        "Wiltshire Council": "https://development.wiltshire.gov.uk/pr/s",
+    }
+
     to_scrape: list[ArcusPortal] = []
     missing: list[str] = []
 
@@ -1136,7 +1158,10 @@ async def main():
             id_source = "HARDCODED" if name in COUNCIL_DB_IDS else "db-lookup"
             if id_source == "HARDCODED":
                 print(f"  [HARDCODED] {name} → id={council_id}")
-            to_scrape.append(ArcusPortal(name, base_url, mode, config, council_id))
+            to_scrape.append(ArcusPortal(
+                name, base_url, mode, config, council_id,
+                register_url_override=REGISTER_URL_OVERRIDES.get(name),
+            ))
         else:
             missing.append(name)
 
