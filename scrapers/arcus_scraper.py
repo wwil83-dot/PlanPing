@@ -563,16 +563,16 @@ class ArcusPortal:
         # --- Step 3: try CSV first (the reliable, clean path) ---
         apps = await self._try_csv_download(page)
         if apps:
-            print(f"    ✓ '{link_text}': {len(apps)} via CSV")
+            print(f"    ✓ [{self.council_name}] '{link_text}': {len(apps)} via CSV")
             return apps
 
         # --- Step 4: fall back to HTML text parsing ---
         html = await page.content()
         apps = _parse_results_html_fallback(html, self.council_name)
         if apps:
-            print(f"    ✓ '{link_text}': {len(apps)} via HTML fallback (CSV unavailable)")
+            print(f"    ✓ [{self.council_name}] '{link_text}': {len(apps)} via HTML fallback (CSV unavailable)")
         else:
-            print(f"    ⚠ '{link_text}': no results found via CSV or HTML fallback")
+            print(f"    ⚠ [{self.council_name}] '{link_text}': no results found via CSV or HTML fallback")
         return apps
 
     async def _scrape_advanced_search(self, page: Page) -> list[dict]:
@@ -691,15 +691,15 @@ class ArcusPortal:
         # --- Try CSV first, HTML fallback second — same as weekly_list mode ---
         apps = await self._try_csv_download(page)
         if apps:
-            print(f"    ✓ Advanced Search: {len(apps)} via CSV")
+            print(f"    ✓ [{self.council_name}] Advanced Search: {len(apps)} via CSV")
             return apps
 
         html = await page.content()
         apps = _parse_results_html_fallback(html, self.council_name)
         if apps:
-            print(f"    ✓ Advanced Search: {len(apps)} via HTML fallback (CSV unavailable)")
+            print(f"    ✓ [{self.council_name}] Advanced Search: {len(apps)} via HTML fallback (CSV unavailable)")
         else:
-            print("    ⚠ Advanced Search: no results found via CSV or HTML fallback")
+            print(f"    ⚠ [{self.council_name}] Advanced Search: no results found via CSV or HTML fallback")
         return apps
 
     async def _scrape_tabbed_weekly_list(self, page: Page, category_hint: Optional[str]) -> list[dict]:
@@ -839,15 +839,15 @@ class ArcusPortal:
         # --- Try CSV first, HTML fallback second ---
         apps = await self._try_csv_download(page)
         if apps:
-            print(f"    ✓ Weekly List tab: {len(apps)} via CSV")
+            print(f"    ✓ [{self.council_name}] Weekly List tab: {len(apps)} via CSV")
             return apps
 
         html = await page.content()
         apps = _parse_results_html_fallback(html, self.council_name)
         if apps:
-            print(f"    ✓ Weekly List tab: {len(apps)} via HTML fallback (CSV unavailable)")
+            print(f"    ✓ [{self.council_name}] Weekly List tab: {len(apps)} via HTML fallback (CSV unavailable)")
         else:
-            print("    ⚠ Weekly List tab: no results found via CSV or HTML fallback")
+            print(f"    ⚠ [{self.council_name}] Weekly List tab: no results found via CSV or HTML fallback")
         return apps
 
     async def _try_csv_download(self, page: Page) -> list[dict]:
