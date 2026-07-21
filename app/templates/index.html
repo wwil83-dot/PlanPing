@@ -85,7 +85,7 @@
     <div class="feature">
       <div class="feature-icon">📍</div>
       <h3>Growing coverage</h3>
-      <p>90+ councils across England, Scotland and Wales — from Cornwall to Shetland — with new councils added weekly.</p>
+      <p>{{ council_count|default(0) }}+ councils across England, Scotland and Wales — from Cornwall to Shetland — with new councils added weekly.</p>
     </div>
   </section>
 
@@ -114,7 +114,7 @@
 
   <div class="coverage-note">
     <strong>Coverage is growing.</strong>
-    We currently cover 90+ councils across England, Scotland and Wales — including major cities, coastal towns and rural districts — with more being added weekly.
+    We currently cover {{ council_count|default(0) }}+ councils across England, Scotland and Wales — including major cities, coastal towns and rural districts — with more being added weekly.
     <a href="/councils">See full coverage →</a>
   </div>
 </main>
