@@ -87,6 +87,42 @@ async def main():
         await asyncio.sleep(5)
 
         homepage_html = await page.content()
+
+        # AUTO-FALLBACK (2026-07-21): found via a real case (Wiltshire
+        # Council) — the standard "/register-view?c__r=Arcus_BE_Public_
+        # Register" suffix produced a genuine "Invalid Page" error, while
+        # a manual browser test confirmed the BARE base URL (no suffix)
+        # loads a real, working homepage. Rather than let recon report a
+        # misleading failure for the next council this happens to,
+        # automatically retry with the bare URL and clearly report which
+        # one actually worked — this is exactly the evidence a human
+        # would need to write the right arcus_councils.py entry.
+        if "Invalid Page" in homepage_html:
+            print(f"⚠ '{register_url}' returned an Invalid Page error — "
+                  f"retrying with the bare URL (no suffix)...")
+            bare_url = TARGET_URL.rstrip("/")
+            try:
+                await page.goto(bare_url, wait_until="domcontentloaded", timeout=45_000)
+                await asyncio.sleep(2)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=20_000)
+                except PlaywrightTimeout:
+                    pass
+                await asyncio.sleep(5)
+                bare_html = await page.content()
+                if "Invalid Page" not in bare_html and len(bare_html) > len(homepage_html):
+                    print(f"✓ Bare URL '{bare_url}' worked — use this as "
+                          f"register_url_override in arcus_scraper.py's "
+                          f"REGISTER_URL_OVERRIDES dict for this council.")
+                    register_url = bare_url
+                    homepage_html = bare_html
+                else:
+                    print("⚠ Bare URL also failed or returned less content — "
+                          "this council needs manual investigation, not a "
+                          "simple suffix swap.")
+            except Exception as e:
+                print(f"⚠ Bare URL retry failed: {e}")
+
         print(f"Homepage HTML length: {len(homepage_html)} chars")
         print(f"Contains 'Weekly lists' heading: {'Weekly lists' in homepage_html}")
         print(f"Contains 'Advanced search' link: {'Advanced search' in homepage_html}")
