@@ -861,10 +861,22 @@ class ArcusPortal:
             with open(download_path, encoding="utf-8", errors="replace") as f:
                 csv_text = f.read()
             return _parse_csv(csv_text, self.council_name)
-        except Exception:
+        except PlaywrightTimeout:
             # CSV genuinely not offered on this view for this council —
             # confirmed to happen (round 12: 2 of 3 councils). Not an
             # error worth logging loudly, the HTML fallback handles it.
+            return []
+        except Exception as e:
+            # VISIBILITY FIX (2026-07-21): this used to be a bare
+            # `except Exception: pass`, treating EVERY failure as the
+            # same expected "button not there" case above — including
+            # genuinely different failures (a corrupted download, a
+            # network drop mid-transfer, a real Playwright error) that
+            # deserve to be visible rather than silently identical to
+            # the known-benign case. Only the specific, already-confirmed
+            # timeout case stays silent; anything else now prints.
+            print(f"    ⚠ [{self.council_name}] CSV download failed unexpectedly "
+                  f"(not the usual 'button not present' case): {e}")
             return []
 
 
