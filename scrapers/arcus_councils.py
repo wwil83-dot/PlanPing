@@ -179,6 +179,47 @@ ARCUS_COUNCILS = [
      "https://service.powys.gov.uk/pr/s",
      "advanced_search", None),
 
+    # Added 2026-07-21, confirmed via real screenshots (not guessed):
+    # homepage shows THREE tabs (Quick search / Weekly list / Advanced
+    # search) on the SAME page — genuinely different shape from Bromley/
+    # Bracknell/Milton Keynes/Powys above (separate "Advanced search"
+    # link/page) but our _scrape_advanced_search just looks for visible
+    # text "Advanced search" via get_by_text() and clicks it — doesn't
+    # care whether that's a link or a tab, so this is directly compatible
+    # with zero code changes. Category dropdown on the Advanced Search
+    # tab already defaults to "Planning Applications" (unlike Powys/
+    # Reading, which default to "Building Control Applications") — one
+    # less thing that can go wrong. Brand new to this codebase entirely
+    # (not previously in Idox or Arcus) — needs a fresh councils-table
+    # row created (see PENDING_INSERT_SQL below) before this will
+    # resolve to a real council_id.
+    ("Wiltshire Council",
+     "https://development.wiltshire.gov.uk/pr/s",
+     "advanced_search", None),
+
+    # Added 2026-07-21, confirmed via real screenshot: homepage shows
+    # genuine Quick Links — "Planning Applications Decided in the Last
+    # Week" and "Planning Applications Validated in the Last Week" (plus
+    # "Weekly Served TPO's", not used here — Tree Preservation Orders,
+    # not planning applications). Real weekly_list-mode quick-links,
+    # same shape as Ashford/Epping Forest, so using that mode rather
+    # than advanced_search despite Advanced Search also being available —
+    # simpler and more direct when a real quick-link exists.
+    # ALSO a genuine, real parallel to an existing WORKING Idox entry
+    # (idox_councils.py, "Reading Borough Council") — but that Idox feed
+    # has returned "502 Bad Gateway" on every single attempt this entire
+    # session (never once succeeded), a real server-side error, not a
+    # WAF/timeout ambiguity — a much stronger signal than Powys's case
+    # that the old backend may be genuinely dead rather than a
+    # deliberate parallel-run. Worth confirming directly (does
+    # planning.reading.gov.uk even load for a human right now?) before
+    # deciding whether to retire it — not assumed here either way.
+    ("Reading Borough Council",
+     "https://publicregister.reading.gov.uk/pr/s",
+     "weekly_list",
+     ["Planning Applications Decided in the Last Week",
+      "Planning Applications Validated in the Last Week"]),
+
     # -------------------------------------------------------------------
     # mode="tabbed_weekly_list" — activated 2026-07-16. Same first-live-run
     # caveat as above.
@@ -211,7 +252,8 @@ VALUES
   ('Bracknell Forest Council','bracknell-forest-council','arcus','england','https://publicaccess.bracknell-forest.gov.uk/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
   ('Milton Keynes City Council','milton-keynes-city-council','arcus','england','https://www.be.milton-keynes.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
   ('Eastleigh Borough Council','eastleigh-borough-council','arcus','england','https://planning.eastleigh.gov.uk/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
-  ('Isle of Anglesey County Council','isle-of-anglesey-county-council','arcus','wales','https://ioacc.my.site.com/s/pr-english/register-view?c__r=Arcus_BE_Public_Register','pending',true)
+  ('Isle of Anglesey County Council','isle-of-anglesey-county-council','arcus','wales','https://ioacc.my.site.com/s/pr-english/register-view?c__r=Arcus_BE_Public_Register','pending',true),
+  ('Wiltshire Council','wiltshire-council','arcus','england','https://development.wiltshire.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true)
 ON CONFLICT (name) DO UPDATE SET
   system = 'arcus',
   active = true,
