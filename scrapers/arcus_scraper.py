@@ -222,8 +222,21 @@ async def geocode(postcodes: list[str]) -> dict:
                             item["result"]["latitude"],
                             item["result"]["longitude"],
                         )
-            except Exception:
-                pass
+            except Exception as e:
+                # VISIBILITY FIX (2026-07-21): this used to be a bare
+                # `except Exception: pass` — a genuinely silent failure
+                # point with zero trace. Found while investigating a real
+                # case (Eastleigh Borough Council, 2026-07-21) where a
+                # council's own log output stopped cleanly right after
+                # "Geocoding N postcodes…" with no upsert line, no save,
+                # no error, and its consecutive_empty_runs counter frozen
+                # (neither reset by success nor incremented by the
+                # genuine-empty path) — meaning whatever happened here
+                # left no evidence at all. This doesn't change behavior
+                # (still continues to the next batch either way), it just
+                # means a future occurrence gets logged instead of
+                # vanishing without a trace.
+                print(f"    ⚠ Geocoding batch failed ({len(unique[i:i + 100])} postcodes): {e}")
             await asyncio.sleep(0.3)
     return results
 
@@ -905,89 +918,110 @@ async def process_council(
             await _supa_increment_empty_runs(cid)
             return 0
 
-        # Geocode missing coordinates
-        need = [a["postcode"] for a in apps if not a.get("lat") and a.get("postcode")]
-        if need:
-            print(f"    Geocoding {len(set(need))} postcodes…")
-            coords = await geocode(need)
-            for app in apps:
-                if not app.get("lat") and app.get("postcode"):
-                    pc = app["postcode"].strip().upper().replace(" ", "")
-                    if pc in coords:
-                        app["lat"], app["lng"] = coords[pc]
+        # SAFETY NET (2026-07-21): everything from here to the final
+        # upsert used to have NO exception handling at all — only the
+        # scrape() call above was protected. Any failure here (geocoding,
+        # dedup, upsert) would silently become an anonymous Exception
+        # object in asyncio.gather's results, contributing only to a
+        # generic "Errors: N" count in the final summary with zero
+        # indication of WHICH council or WHY. Found via a real case
+        # (Eastleigh Borough Council, 2026-07-21) whose own log trail
+        # stopped cleanly right after "Geocoding N postcodes…" with no
+        # further trace at all, and whose consecutive_empty_runs counter
+        # was left frozen — neither reset by success nor incremented by
+        # the genuine-empty path above, meaning execution left this
+        # function some other way entirely. This doesn't change the
+        # return-0-on-failure semantics already used elsewhere in this
+        # function, it just makes sure a council name and real error
+        # message get printed if it happens again, instead of vanishing.
+        try:
+            # Geocode missing coordinates
+            need = [a["postcode"] for a in apps if not a.get("lat") and a.get("postcode")]
+            if need:
+                print(f"    Geocoding {len(set(need))} postcodes…")
+                coords = await geocode(need)
+                for app in apps:
+                    if not app.get("lat") and app.get("postcode"):
+                        pc = app["postcode"].strip().upper().replace(" ", "")
+                        if pc in coords:
+                            app["lat"], app["lng"] = coords[pc]
 
-        # Council centroid fallback — same pattern as Idox
-        geocoded = [(a["lat"], a["lng"]) for a in apps if a.get("lat") and a.get("lng")]
-        if geocoded:
-            import statistics
-            centroid_lat = statistics.median(a[0] for a in geocoded)
-            centroid_lng = statistics.median(a[1] for a in geocoded)
-            fallback_count = 0
-            for app in apps:
-                if not app.get("lat"):
-                    app["lat"] = centroid_lat
-                    app["lng"] = centroid_lng
-                    app["geocode_quality"] = "centroid"
-                    fallback_count += 1
-            if fallback_count:
-                print(f"    Council centroid fallback for {fallback_count} apps")
+            # Council centroid fallback — same pattern as Idox
+            geocoded = [(a["lat"], a["lng"]) for a in apps if a.get("lat") and a.get("lng")]
+            if geocoded:
+                import statistics
+                centroid_lat = statistics.median(a[0] for a in geocoded)
+                centroid_lng = statistics.median(a[1] for a in geocoded)
+                fallback_count = 0
+                for app in apps:
+                    if not app.get("lat"):
+                        app["lat"] = centroid_lat
+                        app["lng"] = centroid_lng
+                        app["geocode_quality"] = "centroid"
+                        fallback_count += 1
+                if fallback_count:
+                    print(f"    Council centroid fallback for {fallback_count} apps")
 
-        records = [{
-            "council_id":       cid,
-            "reference":        a["reference"],
-            "address":          a.get("address"),
-            "postcode":         a.get("postcode"),
-            "lat":              a.get("lat"),
-            "lng":              a.get("lng"),
-            "description":      a.get("description"),
-            "application_type": a.get("application_type"),
-            "status":           a.get("status", "pending"),
-            "submitted_date":   a.get("submitted_date"),
-            "decision_date":    a.get("decision_date"),
-            "council_url":      a.get("council_url"),
-            "source":           "arcus_scraper",
-        } for a in apps]
+            records = [{
+                "council_id":       cid,
+                "reference":        a["reference"],
+                "address":          a.get("address"),
+                "postcode":         a.get("postcode"),
+                "lat":              a.get("lat"),
+                "lng":              a.get("lng"),
+                "description":      a.get("description"),
+                "application_type": a.get("application_type"),
+                "status":           a.get("status", "pending"),
+                "submitted_date":   a.get("submitted_date"),
+                "decision_date":    a.get("decision_date"),
+                "council_url":      a.get("council_url"),
+                "source":           "arcus_scraper",
+            } for a in apps]
 
-        # Deduplicate by reference — the two-list councils (Epping Forest,
-        # Manchester) can legitimately return the same application from
-        # both their weekly-list views (e.g. one newly valid, one decided
-        # this week for a fast-moving application).
-        seen: set[str] = set()
-        unique_records = []
-        for r in records:
-            if r["reference"] not in seen:
-                seen.add(r["reference"])
-                unique_records.append(r)
-        records = unique_records
+            # Deduplicate by reference — the two-list councils (Epping Forest,
+            # Manchester) can legitimately return the same application from
+            # both their weekly-list views (e.g. one newly valid, one decided
+            # this week for a fast-moving application).
+            seen: set[str] = set()
+            unique_records = []
+            for r in records:
+                if r["reference"] not in seen:
+                    seen.add(r["reference"])
+                    unique_records.append(r)
+            records = unique_records
 
-        print(f"    Upserting {len(records)} records with council_id={cid}")
+            print(f"    Upserting {len(records)} records with council_id={cid}")
 
-        BATCH = 20
-        saved = 0
-        ok = True
-        for i in range(0, len(records), BATCH):
-            if await _supa_upsert(records[i:i + BATCH]):
-                saved += len(records[i:i + BATCH])
-            else:
-                ok = False
+            BATCH = 20
+            saved = 0
+            ok = True
+            for i in range(0, len(records), BATCH):
+                if await _supa_upsert(records[i:i + BATCH]):
+                    saved += len(records[i:i + BATCH])
+                else:
+                    ok = False
 
-        if ok:
-            await _supa_patch_council(cid, {
-                "coverage_source": "arcus_scraper",
-                "last_scraped_at": datetime.now(timezone.utc).isoformat(),
-                "last_saved_at": datetime.now(timezone.utc).isoformat(),
-                "consecutive_empty_runs": 0,
-                "active": True,
-            })
-            print(f"    ✓ Saved {saved}")
-        else:
-            print(f"    ⚠ Partial save: {saved} of {len(apps)} (see upsert errors above)")
-            if saved > 0:
+            if ok:
                 await _supa_patch_council(cid, {
+                    "coverage_source": "arcus_scraper",
+                    "last_scraped_at": datetime.now(timezone.utc).isoformat(),
                     "last_saved_at": datetime.now(timezone.utc).isoformat(),
                     "consecutive_empty_runs": 0,
+                    "active": True,
                 })
-        return saved
+                print(f"    ✓ Saved {saved}")
+            else:
+                print(f"    ⚠ Partial save: {saved} of {len(apps)} (see upsert errors above)")
+                if saved > 0:
+                    await _supa_patch_council(cid, {
+                        "last_saved_at": datetime.now(timezone.utc).isoformat(),
+                        "consecutive_empty_runs": 0,
+                    })
+            return saved
+        except Exception as e:
+            print(f"    ✗ Error after finding {len(apps)} application(s) for "
+                  f"[{portal.council_name}] (council_id={cid}) — nothing saved: {e}")
+            return 0
 
 
 # ---------------------------------------------------------------------------
