@@ -14,32 +14,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css">
   {% block head_extra %}{% endblock %}
-  <style>
-    /* NAV FIX (2026-07-20): added directly here rather than in
-       style.css, since that file wasn't available to edit — the nav
-       grew from 6 links to 9 (Large Sites/Farm Diversification/
-       Commercial Conversion added for Tier 3) and started wrapping
-       mid-phrase ("Today's / Activity", "Farm / Diversification")
-       instead of wrapping as whole links. This keeps each link label
-       intact and lets the row wrap cleanly onto a second line as a
-       whole if the viewport is too narrow, rather than breaking
-       individual words. If style.css already defines .nav/.nav-links
-       rules, these are deliberately scoped narrowly enough to layer on
-       top without a redesign — worth folding into style.css properly
-       next time that file's available. */
-    .nav-inner { flex-wrap: wrap; row-gap: .5rem; }
-    .nav-links {
-      flex-wrap: wrap;
-      row-gap: .4rem;
-      column-gap: 1.1rem;
-    }
-    .nav-links a {
-      white-space: nowrap;
-    }
-    @media (max-width: 1100px) {
-      .nav-links { column-gap: .85rem; font-size: .92rem; }
-    }
-  </style>
 </head>
 <body>
   <nav class="nav">
