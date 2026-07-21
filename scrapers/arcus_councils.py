@@ -76,6 +76,11 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "London Borough of Bromley":             230,
     "Eastleigh Borough Council":              301,
     "Isle of Anglesey County Council":       430,
+    # Same DB row as idox_councils.py's Powys entry (id 323) — explicit
+    # here rather than relying on name-matching fallback, since this is
+    # the same council row now scraped by TWO scrapers in parallel
+    # (deliberately — see the comment on the tuple entry below).
+    "Powys County Council":                  323,
 }
 
 ARCUS_COUNCILS = [
@@ -153,6 +158,25 @@ ARCUS_COUNCILS = [
      "advanced_search", None),
     ("Milton Keynes City Council",
      "https://www.be.milton-keynes.gov.uk/pr/s",
+     "advanced_search", None),
+
+    # Added 2026-07-21, confirmed via arcus_recon.py real evidence:
+    # homepage has no "Weekly lists" heading (same shape as Bromley/
+    # Bracknell/Milton Keynes above), Category combobox correctly
+    # selected "Planning Applications", and the Advanced Search sanity
+    # check reported real results rendered — Playwright got through
+    # cleanly with no Cloudflare challenge blocking it, despite
+    # en.powys.gov.uk (the SEPARATE general council site, not this one)
+    # showing a Cloudflare "Verify you are human" check on an uncached
+    # first visit. This IS a genuine live parallel to an existing WORKING
+    # Idox entry (council_id 323, "Powys County Council" in
+    # idox_councils.py) — deliberately kept running alongside this one
+    # rather than retired, per the council's own confirmation that
+    # applications submitted before 20 April 2026 remain on the old
+    # (Idox) system permanently, while this Arcus register covers
+    # everything submitted from 20 April 2026 onwards.
+    ("Powys County Council",
+     "https://service.powys.gov.uk/pr/s",
      "advanced_search", None),
 
     # -------------------------------------------------------------------
