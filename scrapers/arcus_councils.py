@@ -179,23 +179,28 @@ ARCUS_COUNCILS = [
      "https://service.powys.gov.uk/pr/s",
      "advanced_search", None),
 
-    # Added 2026-07-21, confirmed via real screenshots (not guessed):
-    # homepage shows THREE tabs (Quick search / Weekly list / Advanced
-    # search) on the SAME page — genuinely different shape from Bromley/
-    # Bracknell/Milton Keynes/Powys above (separate "Advanced search"
-    # link/page) but our _scrape_advanced_search just looks for visible
-    # text "Advanced search" via get_by_text() and clicks it — doesn't
-    # care whether that's a link or a tab, so this is directly compatible
-    # with zero code changes. Category dropdown on the Advanced Search
-    # tab already defaults to "Planning Applications" (unlike Powys/
-    # Reading, which default to "Building Control Applications") — one
-    # less thing that can go wrong. Brand new to this codebase entirely
-    # (not previously in Idox or Arcus) — needs a fresh councils-table
-    # row created (see PENDING_INSERT_SQL below) before this will
-    # resolve to a real council_id.
+    # Added 2026-07-21, corrected same day after first live run: originally
+    # configured as advanced_search, but that failed with zero results —
+    # root cause confirmed via screenshot: Wiltshire's date fields are
+    # labeled "Date Valid From"/"Date Valid To" (adjective-before-noun),
+    # not matching any of our "Valid date from"/"Date from"/"Received
+    # date from" candidates (all noun-before-adjective), so the date
+    # range silently never got filled. Rather than just patch that label
+    # mismatch, switching to tabbed_weekly_list instead — Wiltshire's
+    # homepage genuinely has 3 tabs (Quick search/Weekly list/Advanced
+    # search, confirmed via screenshot), same shape as Eastleigh/Anglesey,
+    # and its "Weekly list" tab has two real categories using the EXACT
+    # same wording Epping Forest already uses in weekly_list mode:
+    # "Planning Applications Validated this week" / "...Decided this
+    # week". Needed extending _scrape_tabbed_weekly_list's dispatch to
+    # loop over BOTH categories (see scrape()'s dispatch block) rather
+    # than just one, since the original Eastleigh/Anglesey design only
+    # ever needed a single category per council.
     ("Wiltshire Council",
      "https://development.wiltshire.gov.uk/pr/s",
-     "advanced_search", None),
+     "tabbed_weekly_list",
+     ["Planning Applications Validated this week",
+      "Planning Applications Decided this week"]),
 
     # Added 2026-07-21, confirmed via real screenshot: homepage shows
     # genuine Quick Links — "Planning Applications Decided in the Last
