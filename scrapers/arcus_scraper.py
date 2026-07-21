@@ -306,6 +306,27 @@ def _parse_csv(csv_text: str, council_name: str) -> list[dict]:
 
         status_raw = row_lower.get("status") or row_lower.get("application status") or ""
         decision_raw = row_lower.get("decision") or ""
+        status = _normalise_status(status_raw, decision_raw)
+
+        # Column name NOT yet confirmed via a real captured CSV sample
+        # (the docstring above only confirms Ashford's non-decision-date
+        # columns) — candidates listed defensively, same pattern as every
+        # other field in this function, harmless if the column doesn't
+        # exist (.get() just returns empty).
+        decision_date_raw = (
+            row_lower.get("decision notice sent date") or
+            row_lower.get("decision notice sent") or
+            row_lower.get("decision date") or
+            row_lower.get("decided date") or
+            ""
+        )
+        decision_date = _parse_date(decision_date_raw)
+
+        if status in ("approved", "refused") and not decision_date and council_name not in _DECISION_DATE_DIAGNOSED:
+            _DECISION_DATE_DIAGNOSED.add(council_name)
+            print(f"    ⚠ DECISION DATE DIAGNOSTIC [{council_name}] (CSV): status is "
+                  f"'{status}' but no decision date matched any known column. "
+                  f"Columns seen: {list(row_lower.keys())}")
 
         apps.append({
             "reference":        ref,
@@ -313,9 +334,9 @@ def _parse_csv(csv_text: str, council_name: str) -> list[dict]:
             "postcode":         _extract_postcode(address),
             "description":      proposal,
             "application_type": app_type,
-            "status":           _normalise_status(status_raw, decision_raw),
+            "status":           status,
             "submitted_date":   _parse_date(date_raw),
-            "decision_date":    None,
+            "decision_date":    decision_date,
             "council_name":     council_name,
             "council_url":      None,  # filled in by caller with base_url fallback
             "source":           "arcus_scraper",
@@ -332,6 +353,16 @@ def _parse_csv(csv_text: str, council_name: str) -> list[dict]:
 # counts stayed at 0 even after real content rendered). Operating on the
 # flattened VISIBLE TEXT is more robust to unknown/varying component
 # nesting than trying to target specific tag names.
+# 2026-07-21: tracks councils where a genuinely decided application had
+# no decision_date matched by any known label — same rate-limited
+# diagnostic pattern as idox_scraper.py's equivalent. Unlike Idox's case
+# (where the official decision date was confirmed genuinely absent from
+# the source data), Arcus's data model does carry a real decision date
+# (confirmed via Wiltshire screenshot evidence) — a miss here more likely
+# means an unrecognised label wording for a given council, worth
+# investigating with real evidence rather than assumed benign.
+_DECISION_DATE_DIAGNOSED: set[str] = set()
+
 _LABEL_PATTERNS = {
     "reference": r"Application Reference|Reference",
     "address":   r"Site Address|Site address|Address",
@@ -340,6 +371,15 @@ _LABEL_PATTERNS = {
     "type":      r"Application [Tt]ype|Record [Tt]ype",
     "status":    r"Application Status|Status",
     "decision":  r"Decision",
+    # Added 2026-07-21, confirmed via real Wiltshire screenshot evidence
+    # (detail page label "Decision Notice Sent Date", real value populated
+    # for a genuinely closed application: 21/07/2026) — this ISN'T the
+    # same gap Idox had (where the council's official decision date
+    # genuinely doesn't exist in the source data at all); Arcus's data
+    # model does carry a real decision date, our parser just never looked
+    # for it. Listed separately from "date" above (which matches the
+    # SUBMITTED date) so the two never collide in _field_for_label.
+    "decision_date": r"Decision Notice Sent(?:\s+Date)?|Decision Date|Decided Date",
 }
 _ALL_LABELS_RE = re.compile(
     r"^(" + "|".join(_LABEL_PATTERNS.values()) + r")$"
@@ -396,15 +436,26 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
         if not ref or len(ref) < 3 or not re.search(r"\d", ref) or not re.search(r"[/-]", ref):
             continue
         address = r.get("address", "")
+        status = _normalise_status(r.get("status", ""), r.get("decision", ""))
+        decision_date = _parse_date(r.get("decision_date", ""))
+
+        # DECISION DATE DIAGNOSTIC (2026-07-21) — see _DECISION_DATE_DIAGNOSED
+        # comment above for why this differs from Idox's equivalent.
+        if status in ("approved", "refused") and not decision_date and council_name not in _DECISION_DATE_DIAGNOSED:
+            _DECISION_DATE_DIAGNOSED.add(council_name)
+            print(f"    ⚠ DECISION DATE DIAGNOSTIC [{council_name}]: status is "
+                  f"'{status}' but no decision date matched any known label. "
+                  f"Full fields: {r}")
+
         apps.append({
             "reference":        ref,
             "address":          address,
             "postcode":         _extract_postcode(address),
             "description":      r.get("proposal", ""),
             "application_type": r.get("type", ""),
-            "status":           _normalise_status(r.get("status", ""), r.get("decision", "")),
+            "status":           status,
             "submitted_date":   _parse_date(r.get("date", "")),
-            "decision_date":    None,
+            "decision_date":    decision_date,
             "council_name":     council_name,
             "council_url":      None,
             "source":           "arcus_scraper",
