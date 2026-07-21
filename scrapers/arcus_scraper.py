@@ -863,10 +863,32 @@ async def process_council(
     portal: ArcusPortal,
     browser: Browser,
     sem: asyncio.Semaphore,
-) -> int:
+    budget_minutes: int = MAX_MINUTES,
+) -> int | str:
     cid = portal.db_council_id
 
     async with sem:
+        # TIME-BUDGET FIX (2026-07-20): this check used to live ONLY in
+        # main()'s pre-loop, in a synchronous for-loop that just builds
+        # process_council(...) coroutine objects without awaiting them —
+        # that happens in microseconds, before any real async time has
+        # passed, so elapsed_minutes() was always ~0 there regardless of
+        # how long the run had actually been going. This is the exact
+        # same root cause idox_scraper.py had before its own Round 4 fix
+        # (see that file's history) — Arcus never received the
+        # equivalent fix. Checking here, fresh, at the moment this
+        # council's turn genuinely arrives (after acquiring the
+        # semaphore) reflects real elapsed async time correctly.
+        if elapsed_minutes() >= budget_minutes - 3:
+            print(f"\n[{portal.council_name}] — skipping, time budget reached "
+                  f"({elapsed_minutes():.1f} min elapsed)")
+            # Distinct sentinel, not 0 — so main()'s summary can tell a
+            # genuine time-skip apart from every other zero-result cause
+            # (empty results, errors), instead of conflating them under
+            # one misleading "Skipped (time)" label the way this file
+            # used to (same fix as idox_scraper.py's equivalent).
+            return "TIME_BUDGET_SKIP"
+
         print(f"\n[{portal.council_name}] (council_id={cid})")
         await asyncio.sleep(1)  # stagger requests
 
@@ -1031,28 +1053,41 @@ async def main():
         print(f"Chromium launched: {browser.version}\n")
 
         sem = asyncio.Semaphore(CONCURRENCY)
-        skipped = 0
-        tasks = []
-
-        for portal in to_scrape:
-            if elapsed_minutes() >= MAX_MINUTES - 3:
-                skipped += 1
-                continue
-            tasks.append(process_council(portal, browser, sem))
+        # FIX (2026-07-20): previously pre-filtered here in a synchronous
+        # loop before any council had actually run — see the comment in
+        # process_council() for why that check was structurally
+        # meaningless. Every portal now gets a task; process_council()
+        # itself decides, correctly, whether the real budget has been
+        # reached by the time its own turn genuinely arrives.
+        tasks = [process_council(portal, browser, sem) for portal in to_scrape]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
         await browser.close()
 
-    total  = sum(r for r in results if isinstance(r, int))
-    errors = sum(1 for r in results if isinstance(r, Exception))
+    total        = sum(r for r in results if isinstance(r, int))
+    errors       = sum(1 for r in results if isinstance(r, Exception))
+    # LOGGING FIX (2026-07-20): same fix as idox_scraper.py — these were
+    # previously conflated. time_skipped is councils that genuinely never
+    # got attempted because the real budget was reached; zero_result is
+    # everything else that saved nothing (empty results, scrape errors
+    # caught inside process_council, etc.) — a much larger and more
+    # actionable bucket that was hidden inside a misleading "Skipped
+    # (time)" label before, and which the old code couldn't even count
+    # correctly since `skipped` was computed in a loop that no longer
+    # exists.
+    time_skipped = sum(1 for r in results if r == "TIME_BUDGET_SKIP")
+    zero_result  = sum(1 for r in results if r == 0)
 
     print(f"\n{'=' * 50}")
     print(f"Finished in {elapsed_minutes():.1f} minutes")
     print(f"Applications saved: {total}")
     if errors:
         print(f"Errors:             {errors}")
-    if skipped:
-        print(f"Skipped (time):     {skipped} councils")
+    if time_skipped:
+        print(f"Skipped (time budget):     {time_skipped} councils")
+    if zero_result:
+        print(f"Saved 0 (other reason — see per-council log lines above for "
+              f"timeout/block/error details): {zero_result} councils")
 
 
 if __name__ == "__main__":
