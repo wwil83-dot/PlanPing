@@ -559,8 +559,26 @@ class ArcusPortal:
                 all_apps.extend(apps)
 
             elif self.mode == "tabbed_weekly_list":
-                apps = await self._scrape_tabbed_weekly_list(page, self.config)
-                all_apps.extend(apps)
+                # MULTI-CATEGORY FIX (2026-07-21): originally built only
+                # for Eastleigh/Anglesey, which each need at most ONE
+                # category (or none at all). Wiltshire's tabbed template
+                # has TWO real weekly categories ("...Validated this
+                # week" / "...Decided this week" — confirmed via
+                # screenshot, same wording Epping Forest already uses in
+                # weekly_list mode). Rather than restructure
+                # _scrape_tabbed_weekly_list itself, config can now be a
+                # list of category hints — loop with a fresh navigation
+                # per category, exactly matching how weekly_list mode
+                # already loops over multiple link texts in this same
+                # dispatch block below. A single string or None still
+                # works exactly as before for Eastleigh/Anglesey.
+                if isinstance(self.config, list):
+                    for category_hint in self.config:
+                        apps = await self._scrape_tabbed_weekly_list(page, category_hint)
+                        all_apps.extend(apps)
+                else:
+                    apps = await self._scrape_tabbed_weekly_list(page, self.config)
+                    all_apps.extend(apps)
 
             else:
                 print(f"    ✗ Unknown mode '{self.mode}' — skipping")
@@ -713,7 +731,7 @@ class ArcusPortal:
         # logic is directly testable without a browser. ---
         today = date.today()
         date_from = _compute_recheck_date_from(self.pending_recheck, today)
-        for label in ["Valid date from", "Date from", "Received date from"]:
+        for label in ["Valid date from", "Date Valid From", "Date from", "Received date from"]:
             try:
                 field = page.get_by_label(label, exact=False)
                 if await field.count() > 0:
@@ -722,7 +740,7 @@ class ArcusPortal:
                     break
             except Exception:
                 continue
-        for label in ["Valid date to", "Date to", "Received date to"]:
+        for label in ["Valid date to", "Date Valid To", "Date to", "Received date to"]:
             try:
                 field = page.get_by_label(label, exact=False)
                 if await field.count() > 0:
