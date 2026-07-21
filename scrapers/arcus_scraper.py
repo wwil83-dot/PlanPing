@@ -437,6 +437,35 @@ CONTEXT_OPTIONS = {
 }
 
 
+def _compute_recheck_date_from(pending_recheck: list[dict], today: date,
+                                normal_days_back: int = 14,
+                                floor_days_back: int = 120) -> date:
+    """Given a pending-recheck list, returns the date-from value
+    _scrape_advanced_search should use: the normal 14-day window, unless
+    a pending application's submitted_date is older than that AND within
+    the 120-day floor — in which case widen back to cover it. Pulled out
+    as a standalone function (not inline in the Playwright method) so
+    this logic can be tested directly without a browser."""
+    normal_cutoff = today - timedelta(days=normal_days_back)
+    floor_date = today - timedelta(days=floor_days_back)
+
+    earliest_recheck = None
+    for p in pending_recheck:
+        d = p.get("submitted_date")
+        if not d:
+            continue
+        try:
+            parsed = date.fromisoformat(d)
+        except ValueError:
+            continue
+        if earliest_recheck is None or parsed < earliest_recheck:
+            earliest_recheck = parsed
+
+    if earliest_recheck is None:
+        return normal_cutoff
+    return min(normal_cutoff, max(earliest_recheck, floor_date))
+
+
 class ArcusPortal:
     """Scrapes one Arcus planning portal via Playwright.
 
@@ -475,13 +504,31 @@ class ArcusPortal:
     """
 
     def __init__(self, council_name: str, base_url: str, mode: str,
-                 config, db_council_id: int):
+                 config, db_council_id: int,
+                 pending_recheck: Optional[list[dict]] = None):
         self.council_name = council_name
         self.base_url = base_url.rstrip("/")
         self.mode = mode
         self.config = config
         self.db_council_id = db_council_id
         self.register_url = f"{self.base_url}/register-view?c__r=Arcus_BE_Public_Register"
+        # DECISION-CADENCE FIX (2026-07-21): only usable by
+        # _scrape_advanced_search — that's the only one of Arcus's three
+        # modes with an actual parameterized date range (weekly_list and
+        # tabbed_weekly_list just click a fixed "last 7 days" link with
+        # no date field to widen at all). For the 3 councils using
+        # advanced_search (Bromley, Bracknell Forest, Milton Keynes),
+        # this lets the date-from field reach back far enough to
+        # re-observe already-tracked pending applications outside the
+        # normal 14-day window, so a genuine transition to
+        # approved/refused can actually be caught by the
+        # decision_detected_at trigger — same problem, same fix shape as
+        # idox_scraper.py's pending_recheck, just via an explicit date
+        # field instead of a month index. The other 9 councils (weekly_list/
+        # tabbed_weekly_list modes) get NO benefit from this — their
+        # decision-cadence gap remains open until/unless a genuinely
+        # different site-interaction mechanism is found for them.
+        self.pending_recheck = pending_recheck or []
 
     async def scrape(self, browser: Browser) -> list[dict]:
         all_apps: list[dict] = []
@@ -646,14 +693,18 @@ class ArcusPortal:
             print("    ⚠ Category selection not confirmed — continuing anyway, "
                   "some councils' Advanced Search may not require it")
 
-        # --- Fill a 14-day date range, matching DAYS_BACK used elsewhere ---
+        # --- Fill the date range: normally 14 days back, widened to
+        # reach the oldest pending-recheck date when present (bounded to
+        # 120 days back, matching Idox's equivalent window) — computed
+        # by the standalone _compute_recheck_date_from() so this exact
+        # logic is directly testable without a browser. ---
         today = date.today()
-        two_weeks_ago = today - timedelta(days=14)
+        date_from = _compute_recheck_date_from(self.pending_recheck, today)
         for label in ["Valid date from", "Date from", "Received date from"]:
             try:
                 field = page.get_by_label(label, exact=False)
                 if await field.count() > 0:
-                    await field.first.fill(two_weeks_ago.strftime("%d/%m/%Y"), timeout=5_000)
+                    await field.first.fill(date_from.strftime("%d/%m/%Y"), timeout=5_000)
                     await field.first.press("Tab")
                     break
             except Exception:
@@ -1091,6 +1142,49 @@ async def main():
 
     if missing:
         print(f"Not in DB (skipping): {', '.join(missing)}\n")
+
+    # DECISION-CADENCE FIX (2026-07-21): fetch pending backlog scoped to
+    # this run's councils, same pattern as idox_scraper.py — submitted
+    # 15-120 days ago (old enough to be outside the normal window, young
+    # enough that still checking is realistic), paginated past
+    # Supabase's default 1000-row cap, ordered oldest-first. Only
+    # attached to advanced_search-mode portals below, since that's the
+    # only mode with an actual date field to widen — see the comment in
+    # ArcusPortal.__init__ for why the other two modes get nothing from
+    # this.
+    pending_by_council: dict[int, list[dict]] = {}
+    recheck_lo = (date.today() - timedelta(days=120)).isoformat()
+    recheck_hi = (date.today() - timedelta(days=15)).isoformat()
+    council_ids_this_run = sorted({portal.db_council_id for portal in to_scrape})
+    try:
+        if council_ids_this_run:
+            ids_csv = ",".join(str(i) for i in council_ids_this_run)
+            pending_rows = []
+            page_size = 1000
+            for page_num in range(10):  # safety cap: 10,000 rows max
+                page_rows = await _supa_get(
+                    "planning_applications",
+                    **{
+                        "select": "council_id,reference,submitted_date",
+                        "status": "eq.pending",
+                        "council_id": f"in.({ids_csv})",
+                        "and": f"(submitted_date.gte.{recheck_lo},submitted_date.lte.{recheck_hi})",
+                        "order": "submitted_date.asc",
+                        "limit": str(page_size),
+                        "offset": str(page_num * page_size),
+                    },
+                )
+                pending_rows.extend(page_rows)
+                if len(page_rows) < page_size:
+                    break
+            for row in pending_rows:
+                pending_by_council.setdefault(row["council_id"], []).append(row)
+            print(f"Pending recheck: {len(pending_rows)} applications across "
+                  f"{len(pending_by_council)} councils ({recheck_lo} to {recheck_hi})\n")
+        for portal in to_scrape:
+            portal.pending_recheck = pending_by_council.get(portal.db_council_id, [])
+    except Exception as e:
+        print(f"⚠ Failed to fetch pending recheck list (continuing without it): {e}\n")
 
     print(f"Scraping {len(to_scrape)} councils with Playwright…\n")
 
