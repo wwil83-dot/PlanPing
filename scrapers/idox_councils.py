@@ -354,8 +354,19 @@ IDOX_COUNCILS = [
     # ("Dudley Metropolitan Borough Council",
     #  "https://www.dudley.gov.uk/online-applications"),
 
-    ("Solihull Metropolitan Borough Council",
-     "https://publicaccess.solihull.gov.uk/online-applications"),
+    # BROKEN — Solihull confirmed persistently unreachable (2026-07-23).
+    # net::ERR_CONNECTION_REFUSED on every single attempt — not a WAF
+    # challenge page, not a timeout, an active TCP-level connection
+    # refusal — consistent across many independent observations this
+    # entire session (every nightly Idox batch run it appeared in, plus
+    # a dedicated isolated recon run with zero concurrency pressure from
+    # other councils). council_health_check.py showed 9 consecutive
+    # empty runs before this was investigated. Same evidence tier as
+    # Tonbridge and Malling above — a real, persistent block, not
+    # something worth continuing to retry. coverage_source manually set
+    # to 'manual_link' in Supabase to match.
+    # ("Solihull Metropolitan Borough Council",
+    #  "https://publicaccess.solihull.gov.uk/online-applications"),
 
     ("South Staffordshire District Council",
      "https://planning.sstaffs.gov.uk/online-applications"),
