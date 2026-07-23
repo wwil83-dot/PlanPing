@@ -14,19 +14,30 @@ or a traditional server-rendered form (which the "Search/BackToSearch"-
 style URLs found so far suggest is more likely — classic ASP.NET-style
 naming, not a JS framework).
 
-CONFIRMED REAL TARGETS (from web research, not yet directly inspected):
-  - Wrexham County Borough Council: planningtest.wrexham.gov.uk/planning/search-applications
-  - Northampton (was Northampton Borough Council):
-    planning.northamptonboroughcouncil.com/planning/search-applications
-    (SAME URL PATH STRUCTURE as Wrexham — "Civica Town" product)
+CONFIRMED REAL TARGETS (updated 2026-07-23 after first recon run):
+  - Wrexham County Borough Council: planning.wrexham.gov.uk/planning/search-applications
+    (FIXED — the original "planningtest." subdomain genuinely doesn't
+    resolve at all (ERR_NAME_NOT_RESOLVED on first recon run) — it was a
+    staging/preview URL, not the real production one. Confirmed via two
+    independent search hits that the real production URL uses
+    "planning." not "planningtest.", same "© Civica 2025" footer.)
+  - West Northamptonshire Council: wnc.planning-register.co.uk
+    (REPLACED — the original "northamptonboroughcouncil.com" domain also
+    failed to resolve on the first recon run, and for a very plausible
+    reason: Northampton Borough Council was legally abolished in the
+    2021 local government reorganization, replaced by this unitary
+    authority. Its real, live register explicitly confirms it's the
+    consolidation of the 3 legacy councils (South Northants, Daventry,
+    Northampton Borough). Vendor NOT yet confirmed as Civica from this
+    URL alone — the domain doesn't say so the way Wrexham's does — this
+    recon run is what will confirm or refute that.)
   - Erewash Borough Council: register.civicacx.co.uk/erewash/planning
     (DIFFERENT URL pattern — "Civica CX" product, likely a different
-    codebase entirely despite the shared "Civica" branding)
-
-Usage: just run it — no env var config needed yet, since we're
-comparing all 3 known examples in one pass rather than onboarding a
-single new council (that's the NEXT tool, once we understand Civica's
-real structure from this one).
+    codebase entirely despite the shared "Civica" branding. CONFIRMED
+    real WAF block on the first recon run — genuine Cloudflare
+    "Attention Required!" / "Sorry, you have been blocked" page, 4269
+    chars, not a DNS/timeout issue. Matches an earlier web_fetch attempt
+    at this same URL also being blocked — two independent confirmations.)
 """
 import asyncio
 from datetime import datetime, timezone
@@ -47,9 +58,9 @@ CONTEXT_OPTIONS = {
 
 TARGETS = [
     ("Wrexham County Borough Council",
-     "https://planningtest.wrexham.gov.uk/planning/search-applications", "civica_town"),
-    ("Northampton",
-     "https://planning.northamptonboroughcouncil.com/planning/search-applications", "civica_town"),
+     "https://planning.wrexham.gov.uk/planning/search-applications", "civica_town"),
+    ("West Northamptonshire Council",
+     "https://wnc.planning-register.co.uk/", "unknown_vendor"),
     ("Erewash Borough Council",
      "https://register.civicacx.co.uk/erewash/planning", "civica_cx"),
 ]
