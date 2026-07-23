@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 """
-PlanFind — multi-council Idox recon (2026-07-20).
+PlanFind — multi-council Idox recon (round 2, 2026-07-23).
 
-PURPOSE: council_health_check.py flagged 4 councils failing PERSISTENTLY
-(not just on a noisy timeout night) with a distinct, stable signature each
-— Renfrewshire, Brighton and Hove, Tonbridge and Malling, London Borough
-of Brent. Rather than guess a fix for any of them, this captures direct
-HTML evidence from each one's real page, the same "get real evidence
-before fixing" principle that cracked the month-dropdown mystery earlier.
+PURPOSE: council_health_check.py's original 4 flagged councils
+(Renfrewshire, Brighton, Tonbridge, Brent) have since resolved to
+different states — Renfrewshire genuinely fixed (mode switch held for
+good), Tonbridge correctly reclassified as manual_link (excluded from
+future alerts by design), but Brighton and Brent are STILL climbing with
+zero successful runs since first flagged, and the latest health check
+surfaced 5 NEW persistent failures on top: Gosport, Pendle, Exeter,
+Bolsover, North East Derbyshire, plus a fresh case (Solihull, lower
+count but worth catching early). Same "get real evidence before
+guessing a fix" principle as round 1.
 
-IMPORTANT: Renfrewshire is configured as a "weekly" council in
-idox_councils.py (use_weekly_list=True) — it goes through a completely
-different code path (_scrape_week, hitting weeklyListResults.do) than the
-other three, which use the standard monthly-list flow. Probing it with a
-monthly-list URL would test the wrong code entirely, so this script uses
-the correct URL/flow for each council individually rather than one
-shared template.
+All 8 current targets use standard monthly mode (no "weekly" tag in
+idox_councils.py this time — Renfrewshire's special case doesn't apply
+to this round), but the mode-aware structure is kept intact in case a
+future round needs it again.
 
 For each target, prints:
   - Real page title (confirms/refutes what production logs already showed)
@@ -25,9 +26,8 @@ For each target, prints:
   - First 500 chars of visible body text (catches WAF/error pages)
 Also saves full HTML per council to /tmp/ as a backup artifact.
 
-Run via GitHub Actions workflow_dispatch (see scrape.yml) — add a new
-manual-trigger job the same way idox_month_test/idox_form_recon are set
-up, or run locally with Playwright installed.
+Run via GitHub Actions workflow_dispatch (see scrape.yml) — same
+idox_multi_recon job as round 1, just re-run with this updated file.
 """
 import asyncio
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
@@ -48,10 +48,14 @@ CONTEXT_OPTIONS = {
 # each one in production, so we're testing the code path that's actually
 # failing, not a generic default.
 TARGETS = [
-    ("Renfrewshire Council", "https://pl-bs.renfrewshire.gov.uk/online-applications", "weekly"),
+    ("Gosport Borough Council", "https://publicaccess.gosport.gov.uk/online-applications", "monthly"),
+    ("Pendle Borough Council", "https://publicaccess.pendle.gov.uk/online-applications", "monthly"),
+    ("Exeter City Council", "https://publicaccess.exeter.gov.uk/online-applications", "monthly"),
     ("Brighton and Hove City Council", "https://planningapps.brighton-hove.gov.uk/online-applications", "monthly"),
-    ("Tonbridge and Malling Borough Council", "https://publicaccess.tmbc.gov.uk/online-applications", "monthly"),
+    ("Bolsover District Council", "https://publicaccess.bolsover.gov.uk/online-applications", "monthly"),
+    ("North East Derbyshire District Council", "https://planapps-online.ne-derbyshire.gov.uk/online-applications", "monthly"),
     ("London Borough of Brent", "https://pa.brent.gov.uk/online-applications", "monthly"),
+    ("Solihull Metropolitan Borough Council", "https://publicaccess.solihull.gov.uk/online-applications", "monthly"),
 ]
 
 RESULTS_CONTAINER_SELECTOR = (
