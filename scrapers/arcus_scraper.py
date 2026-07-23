@@ -67,6 +67,13 @@ MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "30"))
 CONCURRENCY  = int(os.environ.get("CONCURRENCY", "2"))  # lower than Idox —
                                                           # each page is a
                                                           # heavier JS render
+# BULK_DAYS_BACK (2026-07-23): only read when --bulk is passed on the
+# command line (see main()). Only meaningfully affects advanced_search-
+# mode councils (Bromley, Bracknell, Milton Keynes, Powys, Erewash,
+# Wrexham) — see the comment on ArcusPortal.bulk_days_back for why the
+# other 11 councils (weekly_list/tabbed_weekly_list modes) are
+# unaffected either way.
+BULK_DAYS_BACK = int(os.environ.get("BULK_DAYS_BACK", "180"))
 
 START_TIME = time.monotonic()
 
@@ -557,7 +564,8 @@ class ArcusPortal:
     def __init__(self, council_name: str, base_url: str, mode: str,
                  config, db_council_id: int,
                  pending_recheck: Optional[list[dict]] = None,
-                 register_url_override: Optional[str] = None):
+                 register_url_override: Optional[str] = None,
+                 bulk_days_back: Optional[int] = None):
         self.council_name = council_name
         self.base_url = base_url.rstrip("/")
         self.mode = mode
@@ -593,6 +601,14 @@ class ArcusPortal:
         # decision-cadence gap remains open until/unless a genuinely
         # different site-interaction mechanism is found for them.
         self.pending_recheck = pending_recheck or []
+        # BULK MODE (2026-07-23): only meaningfully used by
+        # _scrape_advanced_search, which has a genuine date-range field
+        # to widen. weekly_list/tabbed_weekly_list modes click a
+        # pre-built "last 7 days" link with no date parameter at all —
+        # bulk mode has NO effect for those 11 councils, same behavior as
+        # a normal run. Honest about this rather than pretending bulk
+        # mode reaches further back for every council.
+        self.bulk_days_back = bulk_days_back
 
     async def scrape(self, browser: Browser) -> list[dict]:
         all_apps: list[dict] = []
@@ -781,7 +797,10 @@ class ArcusPortal:
         # by the standalone _compute_recheck_date_from() so this exact
         # logic is directly testable without a browser. ---
         today = date.today()
-        date_from = _compute_recheck_date_from(self.pending_recheck, today)
+        date_from = _compute_recheck_date_from(
+            self.pending_recheck, today,
+            normal_days_back=self.bulk_days_back or 14,
+        )
         for label in ["Valid date from", "Date Valid From", "Date from", "Received date from"]:
             try:
                 field = page.get_by_label(label, exact=False)
@@ -1173,6 +1192,11 @@ async def process_council(
 # Main
 # ---------------------------------------------------------------------------
 async def main():
+    bulk = "--bulk" in sys.argv
+    if bulk:
+        print(f"Mode: BULK ({BULK_DAYS_BACK} days back for advanced_search-mode "
+              f"councils; weekly_list/tabbed_weekly_list councils unaffected)")
+
     try:
         from arcus_councils import ARCUS_COUNCILS, COUNCIL_DB_IDS
     except ImportError:
@@ -1229,6 +1253,7 @@ async def main():
                 print(f"  [HARDCODED] {name} → id={council_id}")
             to_scrape.append(ArcusPortal(
                 name, base_url, mode, config, council_id,
+                bulk_days_back=BULK_DAYS_BACK if bulk else None,
                 register_url_override=REGISTER_URL_OVERRIDES.get(name),
             ))
         else:
