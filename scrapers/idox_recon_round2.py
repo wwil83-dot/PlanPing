@@ -1,26 +1,35 @@
 #!/usr/bin/env python3
 """
-PlanFind — Idox recon round 2 (2026-07-20).
+PlanFind — Idox recon round 3 (2026-07-23).
 
-Follow-up to idox_multi_recon.py. That first pass caught its own mistake:
-it only did page.goto() and checked for a results container immediately —
-but production's real _scrape_month() flow selects the month dropdown,
-clicks a "date received" radio, clicks Submit, THEN waits up to 25s for
-results. Brighton and Brent's "no results container" finding was an
-artifact of skipping that interaction, not a real bug — this script
-replicates the ACTUAL production flow (same selectors, same order,
-same waits, copied directly from idox_scraper.py) so results container
-match/timeout evidence is real this time.
+Follow-up to idox_multi_recon.py's second run, which repeated round 1's
+original mistake — my own error, worth being upfront about: it only did
+page.goto() and checked for a results container immediately, the same
+false-alarm pattern round 2 (this file) already fixed for Brighton/Brent
+back on 2026-07-20. That earlier fix never got carried forward when
+idox_multi_recon.py was updated with a new target list, so Brighton,
+Bolsover District, and North East Derbyshire District all came back with
+the same "no results container" non-finding — real page loads, working
+month/parish/ward dropdowns, just never actually submitted.
 
-Also adds a monthly-list fallback probe for Renfrewshire, since its
-'weekly' tag in idox_councils.py was never itself investigated — the
-recon-round-1 error page doesn't explain WHY weekly was chosen, so this
-checks whether the standard monthly flow works fine instead.
+This round replicates the ACTUAL production flow (same selectors, same
+order, same waits, copied directly from idox_scraper.py) for all 4
+councils still showing this pattern: Brighton and Hove, Bolsover
+District, North East Derbyshire District, and London Borough of Brent
+(re-tested since its earlier "too many results" diagnosis should still
+hold, but worth confirming it's still the real cause rather than
+assuming).
 
-Tonbridge and Malling is NOT re-tested here — ERR_CONNECTION_RESET has
-now reproduced identically across 3 independent contexts (2 nightly
-batch runs + the round-1 recon), which is strong enough evidence on its
-own without spending another run confirming a 4th time.
+Renfrewshire is NOT re-tested here — its mode-switch fix (weekly →
+monthly) has held for good across multiple real production runs, and
+it's no longer on the health-check's flagged list.
+
+Gosport, Pendle, Exeter (genuine page-load timeouts in isolation) and
+Solihull (ERR_CONNECTION_REFUSED, consistent across many independent
+observations all session) are NOT covered by this script — those are a
+different failure category (network-level, not results-container) with
+strong enough evidence already to treat as settled without further
+recon.
 """
 import asyncio
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
@@ -156,45 +165,33 @@ async def full_monthly_flow(page, base_url: str, label: str):
     print(f"  Full HTML saved: {path} ({len(html)} chars)")
 
 
-async def renfrewshire_monthly_probe(page, base_url: str):
-    """Renfrewshire is tagged 'weekly' in idox_councils.py, but round-1
-    recon's error page didn't explain why. Test whether the STANDARD
-    monthly flow works fine instead — if it does, the weekly tag itself
-    is the bug, not the weekly endpoint."""
-    print("Testing whether Renfrewshire's standard MONTHLY flow works "
-          "(its 'weekly' tag has never itself been verified)...")
-    await full_monthly_flow(page, base_url, "renfrewshire_monthly_probe")
-
-
 async def main():
-    print("PlanFind Idox recon — round 2 (real form-submit flow)\n")
+    print("PlanFind Idox recon — round 3 (real form-submit flow)\n")
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
 
-        for name, base_url, extra in [
-            ("Brighton and Hove City Council", "https://planningapps.brighton-hove.gov.uk/online-applications", None),
-            ("London Borough of Brent", "https://pa.brent.gov.uk/online-applications", None),
-            ("Renfrewshire Council", "https://pl-bs.renfrewshire.gov.uk/online-applications", "monthly_probe"),
+        for name, base_url in [
+            ("Brighton and Hove City Council", "https://planningapps.brighton-hove.gov.uk/online-applications"),
+            ("Bolsover District Council", "https://publicaccess.bolsover.gov.uk/online-applications"),
+            ("North East Derbyshire District Council", "https://planapps-online.ne-derbyshire.gov.uk/online-applications"),
+            ("London Borough of Brent", "https://pa.brent.gov.uk/online-applications"),
         ]:
             print(f"\n{'=' * 70}")
-            print(f"RECON ROUND 2: {name}")
+            print(f"RECON ROUND 3: {name}")
             print("=" * 70)
             context = await browser.new_context(**CONTEXT_OPTIONS)
             page = await context.new_page()
 
-            if extra == "monthly_probe":
-                await renfrewshire_monthly_probe(page, base_url)
-            else:
-                label = name.lower().replace(" ", "_")
-                await full_monthly_flow(page, base_url, label)
+            label = name.lower().replace(" ", "_")
+            await full_monthly_flow(page, base_url, label)
 
             await context.close()
 
         await browser.close()
 
     print(f"\n{'=' * 70}")
-    print("Round 2 recon complete.")
+    print("Round 3 recon complete.")
 
 
 if __name__ == "__main__":
