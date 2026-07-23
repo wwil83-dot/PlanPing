@@ -15,7 +15,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -194,6 +194,48 @@ jobs:
           MAX_MINUTES: "30"
           CONCURRENCY: "2"
         run: cd scrapers && python arcus_scraper.py
+
+  # ---------------------------------------------------------------------
+  # Arcus bulk scrape — manual trigger only, no schedule.
+  #
+  # Built 2026-07-23 given genuinely low per-run application counts on
+  # the nightly scrape (17 councils, low double-digit total most nights)
+  # — same rationale as scrape_idox_bulk: widen the lookback window for
+  # a deeper one-off (or occasional) backfill.
+  #
+  # HONEST LIMITATION: only meaningfully widens the window for the 6
+  # advanced_search-mode councils (Bromley, Bracknell Forest, Milton
+  # Keynes, Powys, Erewash, Wrexham), which have a genuine date-range
+  # field to widen. The other 11 councils (weekly_list/tabbed_weekly_list
+  # modes) click a pre-built "last 7 days" link with no date parameter at
+  # all — bulk mode has NO effect for those, identical to a normal run.
+  # See BULK_DAYS_BACK / ArcusPortal.bulk_days_back in arcus_scraper.py
+  # for the full mechanism.
+  # ---------------------------------------------------------------------
+  scrape_arcus_bulk:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_arcus_bulk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright beautifulsoup4 httpx
+      - run: playwright install --with-deps chromium
+      - name: Run Arcus scraper — bulk (180 days back for advanced_search councils)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_MINUTES: "80"
+          CONCURRENCY: "2"
+          BULK_DAYS_BACK: "180"
+        run: cd scrapers && python arcus_scraper.py --bulk
 
   # ---------------------------------------------------------------------
   # Idox month-selection diagnostic — manual trigger only, no schedule.
