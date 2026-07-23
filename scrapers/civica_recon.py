@@ -94,6 +94,34 @@ async def recon_one(pw, name: str, url: str, product: str):
         pass
     await asyncio.sleep(2)
 
+    # DISCLAIMER CLICK-THROUGH (2026-07-23): found via real evidence on
+    # West Northamptonshire's real register — the first recon run landed
+    # on a "Copyright & Disclaimer" interstitial page (confirmed via its
+    # real page title), not the actual search form, which explained why
+    # only 2 generic inputs and zero weekly-list matches were found. Many
+    # traditional (non-SPA) council planning registers gate the real
+    # search form behind a one-time terms acceptance click. Try common
+    # phrasings; harmless no-op if this council doesn't have one.
+    clicked_through = False
+    for accept_text in ["I agree", "I Agree", "Accept", "Continue", "I understand",
+                         "I Understand", "Agree", "OK", "Proceed"]:
+        try:
+            btn = page.get_by_text(accept_text, exact=False)
+            if await btn.count() > 0:
+                await btn.first.click(timeout=5_000, force=True)
+                clicked_through = True
+                print(f"  Clicked through disclaimer via text: {accept_text!r}")
+                await asyncio.sleep(2)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=10_000)
+                except PlaywrightTimeout:
+                    pass
+                break
+        except Exception:
+            continue
+    if not clicked_through:
+        print("  (no disclaimer click-through found or needed — continuing with page as-is)")
+
     title = await page.title()
     html = await page.content()
     print(f"  Real page title: {title!r}")
