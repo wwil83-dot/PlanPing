@@ -950,11 +950,25 @@ IDOX_COUNCILS = [
     # system. Erewash, High Peak, South Derbyshire not otherwise checked.
     # Chesterfield already covered (see COUNCIL_DB_IDS, id=317).
     # -------------------------------------------------------------------------
-    ("North East Derbyshire District Council",
-     "https://planapps-online.ne-derbyshire.gov.uk/online-applications"),
+    # BROKEN — North East Derbyshire confirmed real Cloudflare WAF block
+    # (2026-07-23). Confirmed via idox_recon_round2.py replicating the
+    # REAL production form-submit flow (not just an initial page load) —
+    # a genuine "Performing security verification... Ray ID... Performance
+    # and Security by Cloudflare" challenge page, not a recon-script
+    # artifact or a generic timeout. 19 consecutive empty runs before
+    # investigation. coverage_source manually set to 'manual_link' in
+    # Supabase to match.
+    # ("North East Derbyshire District Council",
+    #  "https://planapps-online.ne-derbyshire.gov.uk/online-applications"),
 
-    ("Bolsover District Council",
-     "https://publicaccess.bolsover.gov.uk/online-applications"),
+    # BROKEN — Bolsover confirmed real Cloudflare WAF block (2026-07-23).
+    # Same evidence tier as North East Derbyshire above — identical
+    # "Performing security verification... Cloudflare" challenge,
+    # confirmed via the real form-submit flow, not just a page load.
+    # 19 consecutive empty runs before investigation. coverage_source
+    # manually set to 'manual_link' in Supabase to match.
+    # ("Bolsover District Council",
+    #  "https://publicaccess.bolsover.gov.uk/online-applications"),
 
     ("Derbyshire Dales District Council",
      "https://planning.derbyshiredales.gov.uk/online-applications"),
