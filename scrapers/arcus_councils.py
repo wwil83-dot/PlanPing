@@ -202,6 +202,34 @@ ARCUS_COUNCILS = [
      ["Planning Applications Validated this week",
       "Planning Applications Decided this week"]),
 
+    # Added 2026-07-23 — CORRECTING an earlier mistake this same session:
+    # both were initially investigated as candidates for a THIRD scraper
+    # platform (Civica), based on real search-indexed evidence of a
+    # "© Civica" footer at a different domain for each
+    # (planningtest.wrexham.gov.uk, register.civicacx.co.uk/erewash).
+    # Both of those domains turned out to be either stale/wrong
+    # (Wrexham — genuine DNS failure on repeated attempts) or a real,
+    # persistent Cloudflare block (Erewash — confirmed 4 times). The
+    # actual conclusion drawn at the time — "these are Civica, not
+    # Arcus, don't add them" — was WRONG. Both councils genuinely run
+    # BOTH systems in parallel (a Civica-branded one, probably Building
+    # Control specifically, and a real, live, working Arcus register on
+    # a DIFFERENT domain neither web search nor the Civica investigation
+    # ever surfaced). Found via direct manual browsing, confirmed via
+    # arcus_recon.py (real "Advanced Search sanity check: real results
+    # rendered" on both, same as every other advanced_search council).
+    # This also matches what the original 2026 Arcus Global press
+    # releases said all along ("...gone live with our Built Environment
+    # Solution, covering Planning, Building Control and Land Charges")
+    # — the press releases were right; the earlier domain-finding was
+    # wrong, not the underlying claim.
+    ("Erewash Borough Council",
+     "https://planning.erewash.gov.uk/pr/s",
+     "advanced_search", None),
+    ("Wrexham County Borough Council",
+     "https://register.wrexham.gov.uk/pr/s",
+     "advanced_search", None),
+
     # Added 2026-07-21, confirmed via real screenshot: homepage shows
     # genuine Quick Links — "Planning Applications Decided in the Last
     # Week" and "Planning Applications Validated in the Last Week" (plus
@@ -258,7 +286,9 @@ VALUES
   ('Milton Keynes City Council','milton-keynes-city-council','arcus','england','https://www.be.milton-keynes.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
   ('Eastleigh Borough Council','eastleigh-borough-council','arcus','england','https://planning.eastleigh.gov.uk/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
   ('Isle of Anglesey County Council','isle-of-anglesey-county-council','arcus','wales','https://ioacc.my.site.com/s/pr-english/register-view?c__r=Arcus_BE_Public_Register','pending',true),
-  ('Wiltshire Council','wiltshire-council','arcus','england','https://development.wiltshire.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true)
+  ('Wiltshire Council','wiltshire-council','arcus','england','https://development.wiltshire.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
+  ('Erewash Borough Council','erewash-borough-council','arcus','england','https://planning.erewash.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
+  ('Wrexham County Borough Council','wrexham-county-borough-council','arcus','wales','https://register.wrexham.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true)
 ON CONFLICT (name) DO UPDATE SET
   system = 'arcus',
   active = true,
