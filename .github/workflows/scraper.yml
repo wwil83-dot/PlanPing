@@ -15,7 +15,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -440,4 +440,43 @@ jobs:
         with:
           name: arcus-recon-output
           path: /tmp/arcus_recon_*
+          retention-days: 7
+
+  # ---------------------------------------------------------------------
+  # Civica recon — manual trigger only, no schedule.
+  #
+  # Built 2026-07-21, first pass at investigating Civica as a potential
+  # third scraper platform (after Idox and Arcus). Runs against all 3
+  # known-real Civica councils found via research (not yet directly
+  # inspected): Wrexham and Northampton (same URL path structure —
+  # suspected "Civica Town" product) and Erewash (different URL pattern
+  # entirely — suspected "Civica CX" product, likely a different
+  # codebase despite shared branding). Generic/exploratory evidence
+  # gathering, same discipline as idox_form_recon.py/arcus_recon.py
+  # before writing any scraper code.
+  # ---------------------------------------------------------------------
+  civica_recon:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'civica_recon'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright
+      - run: playwright install --with-deps chromium
+      - name: Run Civica recon (Wrexham, Northampton, Erewash)
+        run: cd scrapers && python civica_recon.py
+      - name: Upload recon output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: civica-recon-output
+          path: /tmp/civica_recon_*
           retention-days: 7
