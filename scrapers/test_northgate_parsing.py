@@ -18,7 +18,11 @@ REAL_TABLE_HTML = """
   </tr>
   <tr class="Row1">
     <td title="View Application Details" class="TableData">
-      <a class="data_text" href="StdDetails.aspx?PT=Planning Applications On-Line&amp;TYPE=PL/PlanningPK.xml&amp;PARAM0=383460">RU.26/0984</a>
+      <a class="data_text" href="StdDetails.aspx?PT=Planning Applications On-Line&amp;TYPE=PL/PlanningPK.xml&amp;PARAM0=
+					383460&amp;XSLT=
+					/Northgate/PlanningExplorer/SiteFiles/Skins/Runnymede_AA/xslt/PL/PLDetails.xslt&amp;FT=Planning Application Details&amp;PUBLIC=
+					Y&amp;XMLSIDE=/Northgate/PlanningExplorer/SiteFiles/Skins/Runnymede_AA/Menus/PL.xml&amp;DAURI=PLANNING
+					">RU.26/0984</a>
     </td>
     <td class="data_text" title="Site Address">TPO 473 at Squires Garden Centre
 Holloway Hill
@@ -72,6 +76,19 @@ def run():
         checks.append(("no decision_date when Decision is empty", pending_app["decision_date"] is None))
         checks.append(("real detail URL constructed correctly",
                         "StdDetails.aspx" in pending_app["council_url"] and "PARAM0=383460" in pending_app["council_url"]))
+
+        # Real bug found via a user report (2026-07-24): the raw href
+        # has literal embedded newlines/tabs as HTML source line-wrap
+        # artifacts (reproduced above, verbatim from the real page),
+        # which a real browser strips automatically but raw extraction
+        # doesn't — producing a broken URL that 404s when actually
+        # opened. Must be fixed WITHOUT also stripping genuine spaces
+        # within real values (confirmed working in the actual browser
+        # URL, encoded as %20, not removed).
+        checks.append(("PARAM0 value has no embedded newline/tab corruption",
+                        "\n" not in pending_app["council_url"] and "\t" not in pending_app["council_url"]))
+        checks.append(("genuine spaces within real values are preserved (not over-stripped)",
+                        "Planning Applications On-Line" in pending_app["council_url"]))
 
         checks.append(("real 'Approve' decision -> approved status", decided_app["status"] == "approved"))
         checks.append(("decision_date set when Decision is present", decided_app["decision_date"] == "2026-07-23"))
