@@ -27,12 +27,12 @@ CONTEXT_OPTIONS = {
     "ignore_https_errors": True,
 }
 
-TARGET_URL = "https://planningsearch.harrow.gov.uk/planning/index.html?fa=getReceivedWeeklyList"
+BASE_URL = "https://planningsearch.harrow.gov.uk/planning/index.html"
 
 
 async def main():
-    print("Harrow weekly-list recon\n")
-    print(f"URL: {TARGET_URL}\n")
+    print("Harrow weekly-list recon (click-through navigation)\n")
+    print(f"Base URL: {BASE_URL}\n")
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
@@ -40,10 +40,10 @@ async def main():
         page = await context.new_page()
 
         try:
-            await page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=45_000)
+            await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=45_000)
             await asyncio.sleep(2)
         except Exception as e:
-            print(f"⚠ Navigation error: {e}")
+            print(f"⚠ Navigation error on base URL: {e}")
             await browser.close()
             return
 
@@ -53,9 +53,34 @@ async def main():
             pass
         await asyncio.sleep(2)
 
+        print(f"Base page title: {(await page.title())!r}\n")
+
+        # SAME SYMPTOM AS BEFORE (2026-07-24): a direct hit to the deep-
+        # linked weekly-list URL gives an identical "IDX002" error for
+        # our automated session on every attempt, despite a real browser
+        # showing genuine data at that exact URL. Click through the real
+        # nav path instead (Planning > Search > Weekly Lists > Weekly
+        # Received, per the real screenshot's sidebar), in case the
+        # server expects session/referrer state established that way.
+        for link_text in ["Planning", "Search", "Weekly Lists", "Weekly Received"]:
+            try:
+                link = page.get_by_text(link_text, exact=False)
+                if await link.count() > 0:
+                    await link.first.click(timeout=5_000)
+                    print(f"Clicked: {link_text!r}")
+                    await asyncio.sleep(2)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=10_000)
+                    except PlaywrightTimeout:
+                        pass
+                else:
+                    print(f"⚠ Link not found: {link_text!r}")
+            except Exception as e:
+                print(f"⚠ Click failed for {link_text!r}: {e}")
+
         title = await page.title()
         html = await page.content()
-        print(f"Real page title: {title!r}")
+        print(f"\nFinal page title: {title!r}")
         print(f"HTML length: {len(html)} chars\n")
 
         tables = page.locator("table")
