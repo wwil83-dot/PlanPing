@@ -15,7 +15,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -593,4 +593,40 @@ jobs:
         with:
           name: civica-stalbans-results-recon-output
           path: /tmp/civica_stalbans_results.*
+          retention-days: 7
+
+  # ---------------------------------------------------------------------
+  # Harrow weekly-list recon — manual trigger only, no schedule.
+  #
+  # Built 2026-07-24 after civica_recon.py's Harrow attempt hit a wrong
+  # path (genuine Idox "IDX002" error page) but a user manually found the
+  # REAL, working weekly-list page. Doesn't obviously match Idox's
+  # classic conventions or Civica Portal360's structure — this captures
+  # real evidence to identify what it actually is before writing any
+  # scraper code.
+  # ---------------------------------------------------------------------
+  harrow_weekly_recon:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'harrow_weekly_recon'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright
+      - run: playwright install --with-deps chromium
+      - name: Run Harrow weekly-list recon
+        run: cd scrapers && python harrow_weekly_recon.py
+      - name: Upload recon output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harrow-weekly-recon-output
+          path: /tmp/harrow_weekly_recon.*
           retention-days: 7
