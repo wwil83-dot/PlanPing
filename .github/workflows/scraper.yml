@@ -15,7 +15,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -236,6 +236,42 @@ jobs:
           CONCURRENCY: "2"
           BULK_DAYS_BACK: "180"
         run: cd scrapers && python arcus_scraper.py --bulk
+
+  # ---------------------------------------------------------------------
+  # Civica Portal360 scrape — manual trigger only, no schedule yet.
+  #
+  # Built 2026-07-24 from real recon evidence against St Albans, the
+  # first confirmed-working Civica Portal360 council. See
+  # civica_scraper.py and civica_councils.py module docstrings for the
+  # full mechanism writeup and honest v1 limitations (status defaults to
+  # 'pending' for every record — decision outcome isn't visible in the
+  # results-list view at all). Manual-only deliberately, same maturation
+  # path as scrape_arcus before it — add a schedule once proven reliable
+  # over several real runs.
+  # ---------------------------------------------------------------------
+  scrape_civica:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_civica'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright httpx
+      - run: playwright install --with-deps chromium
+      - name: Run Civica scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_MINUTES: "15"
+          CONCURRENCY: "2"
+        run: cd scrapers && python civica_scraper.py
 
   # ---------------------------------------------------------------------
   # Idox month-selection diagnostic — manual trigger only, no schedule.
