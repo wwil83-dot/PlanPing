@@ -14,45 +14,19 @@ or a traditional server-rendered form (which the "Search/BackToSearch"-
 style URLs found so far suggest is more likely — classic ASP.NET-style
 naming, not a JS framework).
 
-CONFIRMED REAL TARGETS (updated 2026-07-23, round 2):
-  - Waverley Borough Council: planning360.waverley.gov.uk:4443/planning
-    (CONFIRMED "Portal360" — Civica's own case study names this exact
-    product for this exact council: "they simply click on the 'Planning'
-    tab... to access Civica's intuitive Portal360 - Planning portal."
-    Real, live, working — screenshot shows dated "Weekly list of
-    decisions" links (5 July to 11 July, 28 June to 4 July, etc.), a
-    "Weekly list of applications" link, and Advanced search. This
-    council was previously in manual_link (its OLD stored portal_url is
-    dead) — it has since migrated to this new, real, working portal we
-    never knew about until a user reported the manual_link not working
-    and investigated further.)
-  - St Albans: planningapplications.stalbans.gov.uk/planning
-    (Same Portal360 product — confirmed via matching page structure:
-    "Search applications · Advanced search · Planning Help · Do I Need
-    Planning Permission..." — identical menu shape to Waverley's real
-    page. HONEST CAVEAT: an earlier, vaguer piece of research today
-    mentioned St Albans alongside "Agile Applications" as a supplier —
-    not necessarily a contradiction, could easily be the same
-    two-systems-in-parallel pattern already confirmed today for Erewash/
-    Wrexham (a different vendor for a different service, e.g. Building
-    Control). Not yet confirmed as Idox or already covered — worth
-    checking against idox_councils.py before assuming it's new, which
-    this recon run's real evidence will settle either way.)
-  - West Northamptonshire Council: wnc.planning-register.co.uk
-    (STILL UNRESOLVED from round 1 — real, live register confirmed, but
-    every recon attempt has landed on a "Copyright & Disclaimer"
-    interstitial page, never the actual search form behind it. A generic
-    "Accept" click-through didn't move past it — the real HTML/screenshot
-    from round 1 needs a closer look to find the real way through, rather
-    than guessing another button label blind.)
+CONFIRMED REAL TARGETS (updated 2026-07-24, round 3):
+  - Harrow: planningsearch.harrow.gov.uk/planning/search-applications
+    (NEW candidate — a past session's idox_councils.py comment flagged
+    this as "a custom system", not identifying the vendor further. The
+    URL path shape (/planning/search-applications) matches Civica
+    Portal360 exactly — same shape as both Waverley and St Albans. Not
+    yet confirmed, this recon run is what settles it.)
 
-Erewash and Wrexham are DELIBERATELY REMOVED from this round — round 1
-found real Arcus registers for both on different domains entirely
-(planning.erewash.gov.uk, register.wrexham.gov.uk), already added to
-arcus_councils.py and confirmed working in production. Whatever Civica
-branding exists for them is evidently a different system (likely
-Building Control specifically), not relevant to a Civica planning
-investigation.
+Waverley and West Northamptonshire dropped from this round — Waverley
+is a settled, confirmed real Incapsula WAF block (no further recon
+needed), and West Northamptonshire is deprioritized after two stuck
+attempts at its disclaimer interstitial, now that Harrow is a more
+promising real lead.
 """
 import asyncio
 from datetime import datetime, timezone
@@ -72,12 +46,8 @@ CONTEXT_OPTIONS = {
 }
 
 TARGETS = [
-    ("Waverley Borough Council",
-     "https://planning360.waverley.gov.uk:4443/planning", "civica_portal360"),
-    ("St Albans",
-     "https://planningapplications.stalbans.gov.uk/planning", "civica_portal360"),
-    ("West Northamptonshire Council",
-     "https://wnc.planning-register.co.uk/", "unknown_vendor"),
+    ("London Borough of Harrow",
+     "https://planningsearch.harrow.gov.uk/planning/search-applications", "civica_portal360_suspected"),
 ]
 
 
