@@ -614,8 +614,16 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # SOUTH EAST
     # -------------------------------------------------------------------------
-    ("Brighton and Hove City Council",
-     "https://planningapps.brighton-hove.gov.uk/online-applications"),
+    # BROKEN — Brighton and Hove confirmed persistently broken (2026-07-23).
+    # Real form-submit flow (select month, click date-type radio, click
+    # Submit — not just an initial page load) consistently lands on a
+    # near-empty 809-char blank page, title '', body ''. Confirmed twice
+    # independently with the correct methodology (once during an earlier
+    # theorised Cloudflare-maintenance-window explanation that never
+    # actually held up, once again after). 22 consecutive empty runs.
+    # coverage_source manually set to 'manual_link' in Supabase to match.
+    # ("Brighton and Hove City Council",
+    #  "https://planningapps.brighton-hove.gov.uk/online-applications"),
 
     ("Southampton City Council",
      "https://planningpublicaccess.southampton.gov.uk/online-applications"),
