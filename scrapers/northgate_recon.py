@@ -38,13 +38,18 @@ CONTEXT_OPTIONS = {
 TARGETS = [
     ("Birmingham City Council",
      "https://eplanning.birmingham.gov.uk/Northgate/PlanningExplorer/GeneralSearch.aspx"),
-    ("London Borough of Islington",
-     "https://planning.islington.gov.uk/northgate/planningexplorer/generalsearch.aspx"),
-    ("Runnymede Borough Council",
-     "https://planning.runnymede.gov.uk/Northgate/PlanningExplorer/GeneralSearch.aspx"),
     ("Tamworth Borough Council",
      "http://planning.tamworth.gov.uk/northgate/planningexplorer/generalsearch.aspx"),
 ]
+# Islington DELIBERATELY DROPPED (2026-07-24) — its own website confirms
+# a system migration in April 2024: "In April 2024, we changed our
+# planning application system. If you have saved or bookmarked an old
+# link, use the button below and replace your bookmark with this link."
+# The DNS failure wasn't a fluke, it's a genuinely dead, deprecated URL.
+# Runnymede already confirmed working in the first round — not re-run
+# here, this retry is specifically for the two ambiguous failures
+# (Birmingham's 503, Tamworth's timeout) that showed no real block
+# signature, worth a clean isolated retry before writing them off.
 
 
 def slug(name: str) -> str:
