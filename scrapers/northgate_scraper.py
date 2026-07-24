@@ -162,6 +162,24 @@ def _parse_results_table(html: str, base_url: str, council_name: str) -> list[di
             continue
         reference = ref_link.get_text(strip=True)
         detail_href = ref_link.get("href", "")
+        # FIX (2026-07-24): confirmed real bug — the raw HTML has literal
+        # embedded newlines/tabs baked into the href as pure source-code
+        # line-wrap artifacts (e.g. "PARAM0=\n\t\t\t\t\t\t\t\t\t383460").
+        # A real browser silently strips this when rendering (standard
+        # HTML attribute whitespace normalization), so a human clicking
+        # the link on the council's own site gets a clean URL — but raw
+        # extraction preserves it, producing a broken URL that 404s when
+        # actually opened. Found via a real user report: opening an
+        # application from our site led to Runnymede's own genuine
+        # "Server Error... The resource cannot be found" page.
+        #
+        # IMPORTANT: only strip whitespace adjacent to a newline (the
+        # real line-wrap artifact) — an earlier version of this fix
+        # stripped ALL whitespace, which wrongly also removed genuine
+        # spaces within real values like "Planning Applications On-Line"
+        # (confirmed as genuinely part of the working URL — the real
+        # browser encodes these as %20, it doesn't remove them).
+        detail_href = re.sub(r"\s*[\r\n]+\s*", "", detail_href)
         detail_url = urljoin(base_url, detail_href) if detail_href else base_url
 
         def _cell_text(title: str) -> str:
