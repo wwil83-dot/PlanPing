@@ -130,6 +130,42 @@ async def main():
         except Exception as e:
             print(f"\nSaved HTML only (screenshot failed: {e})")
 
+        # FOLLOW-UP (2026-07-24): a user reported broken detail links for
+        # specific applications (RU.26/0920, 0919, etc.) that don't
+        # appear on page 1 of a fresh search — they're older/lower-
+        # numbered, so almost certainly only reachable via pagination.
+        # Page 1's raw href structure has already been confirmed/tested,
+        # but page 2+ hasn't been inspected directly — capturing it now
+        # rather than assume it's identical.
+        next_link = page.locator("a:has(img[alt='Go to next page '])")
+        if await next_link.count() > 0:
+            try:
+                await next_link.first.click(timeout=5_000)
+                await asyncio.sleep(1)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=10_000)
+                except PlaywrightTimeout:
+                    pass
+                await asyncio.sleep(2)
+
+                page2_title = await page.title()
+                page2_html = await page.content()
+                print(f"\nPage 2 title: {page2_title!r}")
+                print(f"Page 2 HTML length: {len(page2_html)} chars")
+
+                with open("/tmp/northgate_runnymede_results_page2.html", "w", encoding="utf-8") as f:
+                    f.write(page2_html)
+                try:
+                    await page.screenshot(path="/tmp/northgate_runnymede_results_page2.png", full_page=True)
+                    print("Saved: /tmp/northgate_runnymede_results_page2.html, "
+                          "/tmp/northgate_runnymede_results_page2.png")
+                except Exception as e:
+                    print(f"Saved page 2 HTML only (screenshot failed: {e})")
+            except Exception as e:
+                print(f"\n⚠ Couldn't navigate to page 2: {e}")
+        else:
+            print("\n⚠ No 'next page' link found — couldn't capture page 2")
+
         await browser.close()
 
     print("\nRecon complete. Download the workflow artifact and read both")
