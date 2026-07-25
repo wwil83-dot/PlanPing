@@ -162,6 +162,7 @@ def _parse_results_table(html: str, base_url: str, council_name: str) -> list[di
             continue
         reference = ref_link.get_text(strip=True)
         detail_href = ref_link.get("href", "")
+
         # FIX (2026-07-24): confirmed real bug — the raw HTML has literal
         # embedded newlines/tabs baked into the href as pure source-code
         # line-wrap artifacts (e.g. "PARAM0=\n\t\t\t\t\t\t\t\t\t383460").
@@ -180,6 +181,30 @@ def _parse_results_table(html: str, base_url: str, council_name: str) -> list[di
         # (confirmed as genuinely part of the working URL — the real
         # browser encodes these as %20, it doesn't remove them).
         detail_href = re.sub(r"\s*[\r\n]+\s*", "", detail_href)
+
+        # FIX (2026-07-24/25): confirmed real, separate bug on Runnymede's
+        # OWN server — page 1 of a search always includes a real,
+        # non-empty XMLSIDE value (e.g. ".../Skins/Runnymede_AA/Menus/
+        # PL.xml"), but page 2+ genuinely omits it (XMLSIDE=&DAURI=...),
+        # confirmed via direct comparison of real page-1 vs page-2 HTML.
+        # A missing XMLSIDE causes the detail page to 404 — confirmed via
+        # a real user report of pasting a stored URL directly and hitting
+        # Runnymede's own "Server Error... resource cannot be found"
+        # page. The XSLT parameter (reliably present on every page, both
+        # confirmed) follows the same "/Skins/{council-code}/" path
+        # prefix, just with a different, constant suffix (xslt/PL/
+        # PLDetails.xslt vs Menus/PL.xml) — deriving the missing value
+        # from XSLT rather than hardcoding Runnymede's specific skin
+        # folder name, so this also works correctly for future Northgate
+        # councils with a different skin path.
+        if "XMLSIDE=&" in detail_href:
+            xslt_match = re.search(r"XSLT=([^&]*)/xslt/", detail_href)
+            if xslt_match:
+                skin_prefix = xslt_match.group(1)
+                detail_href = detail_href.replace(
+                    "XMLSIDE=&", f"XMLSIDE={skin_prefix}/Menus/PL.xml&"
+                )
+
         detail_url = urljoin(base_url, detail_href) if detail_href else base_url
 
         def _cell_text(title: str) -> str:
