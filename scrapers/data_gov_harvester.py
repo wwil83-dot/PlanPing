@@ -365,6 +365,28 @@ async def supabase_upsert(apps, council_name):
     # Batch upsert
     batch_size = 100
     new = 0
+
+    # FIX (2026-07-25): confirmed real Postgres error on Wigan's feed —
+    # "ON CONFLICT DO UPDATE command cannot affect row a second time".
+    # This happens when the SAME (council_id, reference) appears more
+    # than once WITHIN a single batch — Postgres can't upsert the same
+    # row twice in one statement. Wigan's own source GeoJSON genuinely
+    # has duplicate references (plausibly multiple geometry features or
+    # revisions per application). Deduping by reference before batching,
+    # same pattern already used in every other scraper this session
+    # (Arcus/Civica/Northgate all dedupe for exactly this reason) — keeps
+    # the first occurrence, drops later duplicates.
+    seen_refs: set[str] = set()
+    deduped_apps = []
+    for app in apps:
+        if app["reference"] not in seen_refs:
+            seen_refs.add(app["reference"])
+            deduped_apps.append(app)
+    if len(deduped_apps) < len(apps):
+        print(f"  Deduped {len(apps) - len(deduped_apps)} duplicate reference(s) "
+              f"within this feed ({len(apps)} -> {len(deduped_apps)})")
+    apps = deduped_apps
+
     async with httpx.AsyncClient(timeout=30) as c:
         for i in range(0, len(apps), batch_size):
             batch = apps[i:i+batch_size]
