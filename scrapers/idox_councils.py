@@ -1105,18 +1105,37 @@ IDOX_COUNCILS = [
     ("North Somerset Council",
      "https://planning.n-somerset.gov.uk/online-applications"),
 
-    # NOTE: publicaccess.cheltenham.gov.uk redirects to Ipswich's Idox server.
-    ("Ipswich Borough Council",
-     "https://publicaccess.cheltenham.gov.uk/online-applications"),
-
-    # BROKEN — publicaccess.cheltenham.gov.uk redirects to Ipswich; Cheltenham needs research.
-    # ("Cheltenham Borough Council",
+    # CORRECTED 2026-07-25 — the old "redirects to Ipswich" finding is
+    # confirmed STALE. Real verification (idox_cheltenham_lewisham_
+    # verify.py) submitted the actual monthly-list form and found every
+    # single result address explicitly says "Cheltenham Gloucestershire"
+    # with real GL50/GL51 postcodes — this is genuinely Cheltenham's own
+    # data, not Ipswich's. This means the ACTIVE PRODUCTION Ipswich entry
+    # below has been WRONG — silently saving Cheltenham's real data
+    # mislabeled as Ipswich. Commenting Ipswich out here pending
+    # verification of its own real domain (www.ipswich.gov.uk, per seed
+    # data — was apparently substituted with this URL as a workaround at
+    # some point, worth checking if that's still necessary) — see
+    # idox_cheltenham_lewisham_verify.py's follow-up check.
+    # ("Ipswich Borough Council",
     #  "https://publicaccess.cheltenham.gov.uk/online-applications"),
+
+    # Added 2026-07-25 — confirmed via idox_gap_prober.py + a full real
+    # recon pass (round 4) + a dedicated redirect-verification pass:
+    # genuine "Monthly List" title, working month/parish/ward dropdowns,
+    # and — the DEFINITIVE evidence — every real result address in a
+    # submitted search explicitly says "Cheltenham Gloucestershire" with
+    # real GL50/GL51 postcodes. The OLD "redirects to Ipswich" finding
+    # was real at the time it was written but is now stale — plausibly
+    # fixed by the council since.
+    ("Cheltenham Borough Council",
+     "https://publicaccess.cheltenham.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # EAST OF ENGLAND
     # -------------------------------------------------------------------------
-    # Ipswich is now listed in SOUTH WEST section above (using Cheltenham's working URL)
+    # Ipswich needs its own real, separate URL re-verified — see the
+    # correction above. Not yet restored here pending that check.
 
     # Added 2026-07-25 — confirmed via idox_gap_prober.py + a full real
     # recon pass (round 4): genuine "Monthly List" title, working month/
@@ -1170,13 +1189,28 @@ IDOX_COUNCILS = [
     ("London Borough of Lambeth",
      "https://planning.lambeth.gov.uk/online-applications"),
 
-    # NOTE: planning.lewisham.gov.uk redirects to Waltham Forest's Idox server.
-    ("London Borough of Waltham Forest",
+    # CORRECTED 2026-07-25 — same real issue as Cheltenham/Ipswich above.
+    # Real verification submitted the actual monthly-list form and found
+    # every result address explicitly says "LONDON, SE..." with real SE6/
+    # SE12/SE23/SE26 postcodes (genuinely South London, Lewisham's own
+    # area) — nowhere near Waltham Forest (East London, E postcodes).
+    # The active production Waltham Forest entry below has been WRONG —
+    # silently saving Lewisham's real data mislabeled as Waltham Forest.
+    # Commenting it out pending verification of its own real domain
+    # (www.walthamforest.gov.uk, per seed data).
+    # ("London Borough of Waltham Forest",
+    #  "https://planning.lewisham.gov.uk/online-applications"),
+
+    # Added 2026-07-25 — same evidence chain as Cheltenham: confirmed via
+    # idox_gap_prober.py + round-4 recon + a dedicated redirect-
+    # verification pass showing real, genuine SE-postcode Lewisham
+    # addresses. The OLD "redirects to Waltham Forest" finding was real
+    # at the time but is now stale.
+    ("London Borough of Lewisham",
      "https://planning.lewisham.gov.uk/online-applications"),
 
-    # BROKEN — planning.lewisham.gov.uk redirects to WF; Lewisham needs research.
-    # ("London Borough of Lewisham",
-    #  "https://planning.lewisham.gov.uk/online-applications"),
+    # Waltham Forest needs its own real, separate URL re-verified — see
+    # the correction above. Not yet restored here pending that check.
 
     # NOTE: development.towerhamlets.gov.uk redirects to Newham's Idox server.
     ("London Borough of Newham",
