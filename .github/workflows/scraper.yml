@@ -15,7 +15,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -739,3 +739,29 @@ jobs:
           MAX_MINUTES: "15"
           CONCURRENCY: "2"
         run: cd scrapers && python northgate_scraper.py
+
+  # ---------------------------------------------------------------------
+  # Northgate stored-URL health check — manual trigger only, no schedule.
+  #
+  # Built 2026-07-25 after finding the XMLSIDE-derivation fix works for
+  # most but not all records (9 of 10 spot-checked). Rather than keep
+  # patching one broken record at a time from manual spot-checks, this
+  # actually requests every currently-stored Runnymede council_url and
+  # reports which ones genuinely succeed or fail — read-only, no
+  # Supabase writes.
+  # ---------------------------------------------------------------------
+  northgate_url_healthcheck:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_url_healthcheck'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install httpx
+      - name: Run Northgate stored-URL health check
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: cd scrapers && python northgate_url_healthcheck.py
