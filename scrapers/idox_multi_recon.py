@@ -1,33 +1,19 @@
 #!/usr/bin/env python3
 """
-PlanFind — multi-council Idox recon (round 2, 2026-07-23).
+PlanFind — multi-council Idox recon (round 4, 2026-07-25).
 
-PURPOSE: council_health_check.py's original 4 flagged councils
-(Renfrewshire, Brighton, Tonbridge, Brent) have since resolved to
-different states — Renfrewshire genuinely fixed (mode switch held for
-good), Tonbridge correctly reclassified as manual_link (excluded from
-future alerts by design), but Brighton and Brent are STILL climbing with
-zero successful runs since first flagged, and the latest health check
-surfaced 5 NEW persistent failures on top: Gosport, Pendle, Exeter,
-Bolsover, North East Derbyshire, plus a fresh case (Solihull, lower
-count but worth catching early). Same "get real evidence before
-guessing a fix" principle as round 1.
+PURPOSE: idox_gap_prober.py's batch HTTP scan found 7 real hits against
+121 gap-list candidates (councils with no confirmed vendor at all) —
+Brentwood, Cheltenham, Chesterfield, Hastings, Lewisham, Redbridge,
+Bridgend. That was a lightweight, unauthenticated HTTP check only
+(page loaded + contained Idox-flavoured text) — this does the REAL
+verification, same as every other round: actually navigate, check for
+a working month/date search form, confirm results actually render.
+Hits here are what's safe to add to idox_councils.py; anything that
+fails needs individual follow-up, not automatic trust either way.
 
-All 8 current targets use standard monthly mode (no "weekly" tag in
-idox_councils.py this time — Renfrewshire's special case doesn't apply
-to this round), but the mode-aware structure is kept intact in case a
-future round needs it again.
-
-For each target, prints:
-  - Real page title (confirms/refutes what production logs already showed)
-  - Every <select> element's id/name/options (in case it's a dropdown
-    mismatch, like Cheshire East's confirmed MONTH DROPDOWN DIAGNOSTIC)
-  - Whether any of the known results-container selectors match
-  - First 500 chars of visible body text (catches WAF/error pages)
-Also saves full HTML per council to /tmp/ as a backup artifact.
-
-Run via GitHub Actions workflow_dispatch (see scrape.yml) — same
-idox_multi_recon job as round 1, just re-run with this updated file.
+All 7 targets use standard monthly mode (no evidence yet of a "weekly"
+council among them).
 """
 import asyncio
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
@@ -44,19 +30,19 @@ CONTEXT_OPTIONS = {
     "ignore_https_errors": True,
 }
 
-# (name, base_url, mode) — mode matches how idox_councils.py configures
-# each one in production, so we're testing the code path that's actually
-# failing, not a generic default.
+# (name, base_url, mode)
 TARGETS = [
-    ("Gosport Borough Council", "https://publicaccess.gosport.gov.uk/online-applications", "monthly"),
-    ("Pendle Borough Council", "https://publicaccess.pendle.gov.uk/online-applications", "monthly"),
-    ("Exeter City Council", "https://publicaccess.exeter.gov.uk/online-applications", "monthly"),
-    ("Brighton and Hove City Council", "https://planningapps.brighton-hove.gov.uk/online-applications", "monthly"),
-    ("Bolsover District Council", "https://publicaccess.bolsover.gov.uk/online-applications", "monthly"),
-    ("North East Derbyshire District Council", "https://planapps-online.ne-derbyshire.gov.uk/online-applications", "monthly"),
-    ("London Borough of Brent", "https://pa.brent.gov.uk/online-applications", "monthly"),
-    ("Solihull Metropolitan Borough Council", "https://publicaccess.solihull.gov.uk/online-applications", "monthly"),
+    ("Brentwood Borough Council", "https://publicaccess.brentwood.gov.uk/online-applications", "monthly"),
+    ("Cheltenham Borough Council", "https://publicaccess.cheltenham.gov.uk/online-applications", "monthly"),
+    ("Hastings Borough Council", "https://hastings.gov.uk/online-applications", "monthly"),
+    ("London Borough of Lewisham", "https://planning.lewisham.gov.uk/online-applications", "monthly"),
+    ("London Borough of Redbridge", "https://planning.redbridge.gov.uk/online-applications", "monthly"),
+    ("Bridgend County Borough Council", "https://planning.bridgend.gov.uk/online-applications", "monthly"),
 ]
+# Chesterfield DELIBERATELY DROPPED (2026-07-25) — confirmed already
+# active in idox_councils.py (COUNCIL_DB_IDS id=317), a real error in
+# the gap-list build 2 sessions ago (a fuzzy name-match miss), not a
+# genuine new candidate.
 
 RESULTS_CONTAINER_SELECTOR = (
     "ul.searchresults, #searchresults, div.searchresults, #searchResultsContainer"
