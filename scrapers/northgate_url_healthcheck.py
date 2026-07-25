@@ -92,6 +92,56 @@ async def main():
             print(f"\n  {ref} ({status}):")
             print(f"  {url}")
 
+    # SESSION-DEPENDENCY TEST (2026-07-25): every stored URL failed above,
+    # including ones with a fully correct, cleanly-populated XMLSIDE —
+    # ruling out data corruption as the explanation. Real hypothesis:
+    # these detail pages might not be genuine standalone permalinks at
+    # all, only resolving within an active session established by first
+    # loading/submitting the real search form (cookies along the way),
+    # not a bare cold request. Testing directly rather than guessing
+    # further — visit the real search page first (establishing whatever
+    # session state a real browser would), THEN try a detail URL with
+    # that same session, compared against the cold request already
+    # confirmed failing above.
+    if failures:
+        print(f"\n{'=' * 50}")
+        print("SESSION-DEPENDENCY TEST")
+        test_ref, test_url, _ = failures[0]
+        print(f"Testing {test_ref} — with a session established first vs cold\n")
+
+        search_url = "https://planning.runnymede.gov.uk/Northgate/PlanningExplorer/GeneralSearch.aspx"
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as c:
+            try:
+                search_resp = await c.get(search_url)
+                print(f"Search page loaded: HTTP {search_resp.status_code}, "
+                      f"cookies received: {list(c.cookies.keys())}")
+            except Exception as e:
+                print(f"⚠ Couldn't load search page: {e}")
+                return
+
+            await asyncio.sleep(1)
+
+            try:
+                detail_resp = await c.get(test_url)
+                body = detail_resp.text
+                is_error = (
+                    "Server Error" in body
+                    or "resource cannot be found" in body
+                    or detail_resp.status_code >= 400
+                )
+                print(f"\nDetail page with session cookies: HTTP {detail_resp.status_code}")
+                print(f"Still shows error: {is_error}")
+                if not is_error:
+                    print("\n✓ SESSION-DEPENDENCY CONFIRMED — the same URL that failed cold "
+                          "succeeds once a session is established first. This means these "
+                          "detail links are NOT standalone permalinks — storing them for "
+                          "later use won't work regardless of how clean the URL is.")
+                else:
+                    print("\n✗ Still fails even with a session — session-dependency "
+                          "theory REFUTED, the real cause is something else entirely.")
+            except Exception as e:
+                print(f"⚠ Detail request with session failed: {e}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
