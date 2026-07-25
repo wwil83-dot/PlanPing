@@ -54,6 +54,38 @@ TW20 0YL</td>
 """
 
 
+# Real page-2 HTML structure, confirmed via direct comparison against
+# page 1 — genuinely omits XMLSIDE's value (Runnymede's own server
+# behavior, not our bug), while XSLT remains present and correct.
+REAL_PAGE2_HTML = """
+<table cellspacing="2" cellpadding="4" summary="Results of the Search" class="display_table">
+  <tbody><tr class="Row0">
+    <th class="data_header">Application Number</th>
+    <th class="data_header">Site Address</th>
+    <th class="data_header">Development Description</th>
+    <th class="data_header">Status</th>
+    <th class="data_header">Date Registered</th>
+    <th class="data_header">Decision</th>
+  </tr>
+  <tr class="Row1">
+    <td title="View Application Details" class="TableData">
+      <a class="data_text" href="StdDetails.aspx?PT=Planning Applications On-Line&amp;TYPE=PL/PlanningPK.xml&amp;PARAM0=
+					382992&amp;XSLT=
+					/Northgate/PlanningExplorer/SiteFiles/Skins/Runnymede_AA/xslt/PL/PLDetails.xslt&amp;FT=Planning Application Details&amp;PUBLIC=
+					Y&amp;XMLSIDE=&amp;DAURI=PLANNING
+					">RU.26/0930</a>
+    </td>
+    <td class="data_text" title="Site Address">1 Example Road</td>
+    <td class="data_text" title="Development Description">Test proposal</td>
+    <td class="data_text" title="Status">REGISTERED</td>
+    <td class="data_text" title="Date Registered">10-07-2026</td>
+    <td class="data_text" title="Decision"></td>
+  </tr>
+  </tbody>
+</table>
+"""
+
+
 def run():
     checks = []
 
@@ -101,6 +133,24 @@ def run():
                     _normalise_status("FINAL DECISION", "Withdrawn", "test") == "withdrawn"))
     checks.append(("date-only parsing handles dd-mm-yyyy (Northgate's real format)",
                     _parse_date("24-07-2026") == "2026-07-24"))
+
+    # Real bug found via a user report (2026-07-24/25): page 2+ of a
+    # search genuinely omits XMLSIDE's value on Runnymede's OWN server —
+    # confirmed via direct comparison of real page 1 vs page 2 HTML.
+    # Deriving the missing value from XSLT (reliably present on every
+    # page) rather than hardcoding Runnymede's specific skin folder name.
+    page2_apps = _parse_results_table(
+        REAL_PAGE2_HTML,
+        "https://planning.runnymede.gov.uk/Northgate/PlanningExplorer/GeneralSearch.aspx",
+        "Runnymede Borough Council",
+    )
+    checks.append(("page 2 parses successfully despite missing source XMLSIDE", len(page2_apps) == 1))
+    if page2_apps:
+        checks.append(("derived XMLSIDE value is correct, not left empty",
+                        "XMLSIDE=/Northgate/PlanningExplorer/SiteFiles/Skins/Runnymede_AA/Menus/PL.xml"
+                        in page2_apps[0]["council_url"]))
+        checks.append(("derived URL has no dangling empty XMLSIDE=&",
+                        "XMLSIDE=&" not in page2_apps[0]["council_url"]))
 
     all_ok = True
     for label, ok in checks:
