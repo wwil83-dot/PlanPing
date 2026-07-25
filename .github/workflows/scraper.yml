@@ -703,7 +703,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: northgate-runnymede-results-recon-output
-          path: /tmp/northgate_runnymede_results.*
+          path: /tmp/northgate_runnymede_results*
           retention-days: 7
 
   # ---------------------------------------------------------------------
