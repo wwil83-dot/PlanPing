@@ -37,19 +37,24 @@ CONTEXT_OPTIONS = {
 
 TARGETS = [
     ("Birmingham City Council",
-     "https://eplanning.birmingham.gov.uk/Northgate/PlanningExplorer/GeneralSearch.aspx"),
-    ("Tamworth Borough Council",
-     "http://planning.tamworth.gov.uk/northgate/planningexplorer/generalsearch.aspx"),
+     "https://planning.birmingham.gov.uk/NECSWS/ES/Presentation/Planning/OnlinePlanningSearch/"),
 ]
-# Islington DELIBERATELY DROPPED (2026-07-24) — its own website confirms
-# a system migration in April 2024: "In April 2024, we changed our
-# planning application system. If you have saved or bookmarked an old
-# link, use the button below and replace your bookmark with this link."
-# The DNS failure wasn't a fluke, it's a genuinely dead, deprecated URL.
-# Runnymede already confirmed working in the first round — not re-run
-# here, this retry is specifically for the two ambiguous failures
-# (Birmingham's 503, Tamworth's timeout) that showed no real block
-# signature, worth a clean isolated retry before writing them off.
+# REVISED 2026-07-25 — the OLD Birmingham URL (eplanning.birmingham.gov.uk/
+# Northgate/PlanningExplorer/GeneralSearch.aspx) gave a persistent 503 on
+# two separate isolated attempts. A user found the REAL, current URL is
+# completely different: planning.birmingham.gov.uk/NECSWS/ES/Presentation/
+# Planning/OnlinePlanningSearch/ — different subdomain, different path
+# convention (NECSWS/ES/Presentation, not the classic Northgate/
+# PlanningExplorer shape Runnymede uses). This explains the persistent
+# 503 (old subdomain genuinely dead/replaced, same pattern as Islington's
+# migration) but means this might be a DIFFERENT underlying NEC product,
+# not necessarily compatible with northgate_scraper.py's confirmed
+# Runnymede-based field IDs/structure — real recon needed before
+# assuming anything, same discipline as every other platform this
+# session. Runnymede/Islington/Tamworth not re-run here — Runnymede
+# already confirmed working, Islington confirmed dead, Tamworth
+# deprioritized (small scale, still just a timeout with no real
+# evidence of what it actually is).
 
 
 def slug(name: str) -> str:
