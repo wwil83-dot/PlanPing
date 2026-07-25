@@ -106,21 +106,9 @@ def run():
         checks.append(("real postcode extracted from address", pending_app["postcode"] == "KT16 0AE"))
         checks.append(("empty Decision + status REGISTERED -> pending", pending_app["status"] == "pending"))
         checks.append(("no decision_date when Decision is empty", pending_app["decision_date"] is None))
-        checks.append(("real detail URL constructed correctly",
-                        "StdDetails.aspx" in pending_app["council_url"] and "PARAM0=383460" in pending_app["council_url"]))
-
-        # Real bug found via a user report (2026-07-24): the raw href
-        # has literal embedded newlines/tabs as HTML source line-wrap
-        # artifacts (reproduced above, verbatim from the real page),
-        # which a real browser strips automatically but raw extraction
-        # doesn't — producing a broken URL that 404s when actually
-        # opened. Must be fixed WITHOUT also stripping genuine spaces
-        # within real values (confirmed working in the actual browser
-        # URL, encoded as %20, not removed).
-        checks.append(("PARAM0 value has no embedded newline/tab corruption",
-                        "\n" not in pending_app["council_url"] and "\t" not in pending_app["council_url"]))
-        checks.append(("genuine spaces within real values are preserved (not over-stripped)",
-                        "Planning Applications On-Line" in pending_app["council_url"]))
+        checks.append(("council_url falls back to the general search page (per-application "
+                        "detail links confirmed non-functional, see module docstring)",
+                        pending_app["council_url"] == "https://planning.runnymede.gov.uk/Northgate/PlanningExplorer/GeneralSearch.aspx"))
 
         checks.append(("real 'Approve' decision -> approved status", decided_app["status"] == "approved"))
         checks.append(("decision_date set when Decision is present", decided_app["decision_date"] == "2026-07-23"))
@@ -134,23 +122,23 @@ def run():
     checks.append(("date-only parsing handles dd-mm-yyyy (Northgate's real format)",
                     _parse_date("24-07-2026") == "2026-07-24"))
 
-    # Real bug found via a user report (2026-07-24/25): page 2+ of a
-    # search genuinely omits XMLSIDE's value on Runnymede's OWN server —
-    # confirmed via direct comparison of real page 1 vs page 2 HTML.
-    # Deriving the missing value from XSLT (reliably present on every
-    # page) rather than hardcoding Runnymede's specific skin folder name.
+    # REVERTED (2026-07-25): per-application detail links (and the
+    # XMLSIDE-derivation logic built to fix one of their bugs) were
+    # confirmed non-functional via real, thorough testing — see the
+    # module docstring. council_url now always falls back to the general
+    # search page, regardless of what page a result came from, so this
+    # just confirms page 2 still parses successfully (the actual
+    # applications/status/etc. are unaffected by any of this) and gets
+    # the same safe fallback URL as page 1.
     page2_apps = _parse_results_table(
         REAL_PAGE2_HTML,
         "https://planning.runnymede.gov.uk/Northgate/PlanningExplorer/GeneralSearch.aspx",
         "Runnymede Borough Council",
     )
-    checks.append(("page 2 parses successfully despite missing source XMLSIDE", len(page2_apps) == 1))
+    checks.append(("page 2 parses successfully despite the missing source XMLSIDE", len(page2_apps) == 1))
     if page2_apps:
-        checks.append(("derived XMLSIDE value is correct, not left empty",
-                        "XMLSIDE=/Northgate/PlanningExplorer/SiteFiles/Skins/Runnymede_AA/Menus/PL.xml"
-                        in page2_apps[0]["council_url"]))
-        checks.append(("derived URL has no dangling empty XMLSIDE=&",
-                        "XMLSIDE=&" not in page2_apps[0]["council_url"]))
+        checks.append(("page 2 council_url also falls back to the general search page",
+                        page2_apps[0]["council_url"] == "https://planning.runnymede.gov.uk/Northgate/PlanningExplorer/GeneralSearch.aspx"))
 
     all_ok = True
     for label, ok in checks:
