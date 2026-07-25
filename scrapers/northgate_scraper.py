@@ -35,6 +35,23 @@ rendered app than either Arcus or Civica:
     confirmed in real HTML) — a shared skin/template convention likely
     consistent across other Northgate councils too, not Runnymede-
     specific.
+  - council_url is the general search page, NOT a per-application detail
+    link — this was tried and reverted (2026-07-25) after real, thorough
+    testing: a per-application "StdDetails.aspx" link was built from
+    each row's own href, but ALL 28 stored links failed with HTTP 404 on
+    a genuine health check (northgate_url_healthcheck.py), including
+    ones with a fully correct, cleanly-populated query string — ruling
+    out data corruption. A follow-up test established real session
+    cookies (ASP.NET_SessionId, MVMSession) first and the SAME URL still
+    404'd, ruling out session-dependency too. The likely remaining
+    explanation: these detail links are tied to an ephemeral, session-
+    specific temporary result set (the same pattern already confirmed
+    for pagination links, which reference a session-specific temp XML
+    file) — genuinely valid only within the live browsing session that
+    generated them, not a stable, storable permalink. Real applications
+    still have a real, reliable reference (e.g. "RU.26/0984") users can
+    search with directly on the council's own site — just not a direct
+    deep-link from ours.
 
 HONEST LIMITATION: only ONE council (Runnymede) is confirmed working.
 Birmingham (persistent 503, confirmed twice independently) and Tamworth
@@ -52,7 +69,6 @@ import sys
 import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
-from urllib.parse import urljoin
 
 import httpx
 from bs4 import BeautifulSoup
@@ -161,51 +177,27 @@ def _parse_results_table(html: str, base_url: str, council_name: str) -> list[di
         if not ref_link:
             continue
         reference = ref_link.get_text(strip=True)
-        detail_href = ref_link.get("href", "")
 
-        # FIX (2026-07-24): confirmed real bug — the raw HTML has literal
-        # embedded newlines/tabs baked into the href as pure source-code
-        # line-wrap artifacts (e.g. "PARAM0=\n\t\t\t\t\t\t\t\t\t383460").
-        # A real browser silently strips this when rendering (standard
-        # HTML attribute whitespace normalization), so a human clicking
-        # the link on the council's own site gets a clean URL — but raw
-        # extraction preserves it, producing a broken URL that 404s when
-        # actually opened. Found via a real user report: opening an
-        # application from our site led to Runnymede's own genuine
-        # "Server Error... The resource cannot be found" page.
-        #
-        # IMPORTANT: only strip whitespace adjacent to a newline (the
-        # real line-wrap artifact) — an earlier version of this fix
-        # stripped ALL whitespace, which wrongly also removed genuine
-        # spaces within real values like "Planning Applications On-Line"
-        # (confirmed as genuinely part of the working URL — the real
-        # browser encodes these as %20, it doesn't remove them).
-        detail_href = re.sub(r"\s*[\r\n]+\s*", "", detail_href)
-
-        # FIX (2026-07-24/25): confirmed real, separate bug on Runnymede's
-        # OWN server — page 1 of a search always includes a real,
-        # non-empty XMLSIDE value (e.g. ".../Skins/Runnymede_AA/Menus/
-        # PL.xml"), but page 2+ genuinely omits it (XMLSIDE=&DAURI=...),
-        # confirmed via direct comparison of real page-1 vs page-2 HTML.
-        # A missing XMLSIDE causes the detail page to 404 — confirmed via
-        # a real user report of pasting a stored URL directly and hitting
-        # Runnymede's own "Server Error... resource cannot be found"
-        # page. The XSLT parameter (reliably present on every page, both
-        # confirmed) follows the same "/Skins/{council-code}/" path
-        # prefix, just with a different, constant suffix (xslt/PL/
-        # PLDetails.xslt vs Menus/PL.xml) — deriving the missing value
-        # from XSLT rather than hardcoding Runnymede's specific skin
-        # folder name, so this also works correctly for future Northgate
-        # councils with a different skin path.
-        if "XMLSIDE=&" in detail_href:
-            xslt_match = re.search(r"XSLT=([^&]*)/xslt/", detail_href)
-            if xslt_match:
-                skin_prefix = xslt_match.group(1)
-                detail_href = detail_href.replace(
-                    "XMLSIDE=&", f"XMLSIDE={skin_prefix}/Menus/PL.xml&"
-                )
-
-        detail_url = urljoin(base_url, detail_href) if detail_href else base_url
+        # REVERTED (2026-07-25): this used to construct a per-application
+        # detail_url from the row's own href. Confirmed via real,
+        # conclusive testing that this doesn't work — ALL 28 stored URLs
+        # failed with HTTP 404 (northgate_url_healthcheck.py), including
+        # ones with a fully correct, cleanly-populated XMLSIDE value,
+        # ruling out data corruption as the cause. A follow-up test
+        # established real session cookies first (ASP.NET_SessionId,
+        # MVMSession) and the SAME URL still 404'd, ruling out session-
+        # dependency too. The most likely remaining explanation: these
+        # detail links are tied to an ephemeral, session-specific
+        # temporary result set (the SAME pattern already confirmed for
+        # pagination links, which reference a session-specific temp XML
+        # file) — genuinely valid only within the live browsing session
+        # that generated them, not a stable, storable permalink. Rather
+        # than keep patching URL parameters against a structural platform
+        # limitation, falling back to the general search page — same
+        # honest treatment already used for manual_link councils. Users
+        # can still search using the real reference we DO reliably
+        # capture (e.g. "RU.26/0984"), just not via a direct deep-link.
+        detail_url = base_url
 
         def _cell_text(title: str) -> str:
             cell = tr.find("td", attrs={"title": title})
