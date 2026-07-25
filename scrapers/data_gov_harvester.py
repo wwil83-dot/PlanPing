@@ -387,12 +387,22 @@ async def supabase_upsert(apps, council_name):
                 })
             try:
                 r = await c.post(
-                    f"{SUPABASE_URL}/rest/v1/planning_applications",
+                    f"{SUPABASE_URL}/rest/v1/planning_applications"
+                    f"?on_conflict=council_id,reference",
                     json=records,
                     headers=headers
                 )
                 if r.status_code in (200,201):
                     new += len(batch)
+                else:
+                    # DIAGNOSTIC (2026-07-25): every feed was parsing
+                    # real data successfully but showing "0 new" with no
+                    # explanation — the old code only checked the status
+                    # code, never printed the real response. Printing it
+                    # now so a genuine cause (missing on_conflict target,
+                    # an RLS policy, a constraint mismatch, etc.) is
+                    # visible instead of a silent no-op.
+                    print(f"  ⚠ Batch upsert non-200/201: HTTP {r.status_code} — {r.text[:300]}")
             except Exception as e:
                 print(f"  Batch error: {e}")
 
