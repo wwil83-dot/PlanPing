@@ -1118,6 +1118,15 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # Ipswich is now listed in SOUTH WEST section above (using Cheltenham's working URL)
 
+    # Added 2026-07-25 — confirmed via idox_gap_prober.py + a full real
+    # recon pass (round 4): genuine "Monthly List" title, working month/
+    # parish/ward dropdowns matching our expected convention, real
+    # Brentwood-specific ward names (Blackmore, Herongate & Ingrave,
+    # etc.). No conflicting evidence (unlike Cheltenham/Lewisham below —
+    # see idox_cheltenham_lewisham_verify.py).
+    ("Brentwood Borough Council",
+     "https://publicaccess.brentwood.gov.uk/online-applications"),
+
     ("Peterborough City Council",
      "https://planpa.peterborough.gov.uk/online-applications"),
 
