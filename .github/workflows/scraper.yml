@@ -15,7 +15,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -765,3 +765,30 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: cd scrapers && python northgate_url_healthcheck.py
+
+  # ---------------------------------------------------------------------
+  # Idox gap-list batch prober — manual trigger only, no schedule.
+  #
+  # Built 2026-07-25. 121 councils from coverage_gap_list.md have no
+  # confirmed vendor at all — rather than search each individually, this
+  # tests the most common Idox URL conventions against all of them in
+  # one lightweight HTTP batch pass (not full Playwright browser
+  # automation), narrowing 121 candidates down to a real, manageable
+  # shortlist worth a proper recon pass. Does NOT touch Supabase — purely
+  # a discovery filter, see idox_gap_prober.py's module docstring for
+  # the full methodology and honest limitations (false positives/
+  # negatives both expected — hits need real verification, not automatic
+  # trust).
+  # ---------------------------------------------------------------------
+  idox_gap_prober:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_gap_prober'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install httpx
+      - name: Run Idox gap-list batch prober
+        run: cd scrapers && python idox_gap_prober.py
