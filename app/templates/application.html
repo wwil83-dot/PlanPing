@@ -22,7 +22,19 @@
     <p style="font-size:.9rem;color:var(--muted);margin-bottom:1rem">{{ app.description }}</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;font-size:.85rem">
       <div><span style="color:var(--muted)">Type</span><br><strong>{{ app.application_type or '—' }}</strong></div>
-      <div><span style="color:var(--muted)">Submitted</span><br><strong>{{ app.submitted_date.strftime('%-d %b %Y') if app.submitted_date else '—' }}</strong></div>
+      <div>
+        <span style="color:var(--muted)">Submitted</span><br>
+        {% if app.submitted_date %}
+        <strong>{{ app.submitted_date.strftime('%-d %b %Y') }}</strong>
+        {% elif app.date_unavailable_note %}
+        <strong style="font-weight:500;color:var(--muted);font-size:.8rem">
+          Not shown by this council —
+          {% if app.council_url %}<a href="{{ app.council_url }}" target="_blank" rel="noopener">check their portal</a>{% else %}check their portal{% endif %}
+        </strong>
+        {% else %}
+        <strong>—</strong>
+        {% endif %}
+      </div>
       {% if app.decision_date %}<div><span style="color:var(--muted)">Decision</span><br><strong>{{ app.decision_date.strftime('%-d %b %Y') }}</strong></div>{% endif %}
       {% if app.postcode %}<div><span style="color:var(--muted)">Postcode</span><br><strong>{{ app.postcode }}</strong></div>{% endif %}
     </div>
@@ -60,7 +72,7 @@
         </div>
         <span class="badge badge-status badge-{{ n.status_class }}" style="flex-shrink:0">{{ n.status | title }}</span>
       </div>
-      <div style="font-size:.72rem;color:var(--muted);margin-top:.4rem">{{ n.reference }} · {{ n.distance_miles }} mi away · {{ n.days_ago }}</div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:.4rem">{{ n.reference }} · {{ n.distance_miles }} mi away · {% if n.date_unavailable_note %}date not shown by council{% else %}{{ n.days_ago }}{% endif %}</div>
     </a>
     {% endfor %}
   </div>
