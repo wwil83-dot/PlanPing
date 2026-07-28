@@ -406,9 +406,20 @@ IDOX_COUNCILS = [
     # Note: Charnwood CONFIRMED Northgate PlanningExplorerAA (not Idox) —
     # portal.charnwood.gov.uk/Northgate/PlanningExplorerAA. Good candidate
     # for the future Northgate/OcellaWeb scraper, not this one.
-    # Melton Borough Council, Rutland (already covered, see id=249) not
-    # otherwise checked further. Leicester City, Oadby & Wigston not tried.
+    # Rutland already covered (see id=249). Leicester City, Oadby &
+    # Wigston not tried.
     # -------------------------------------------------------------------------
+    # Added 2026-07-28 — confirmed via idox_gap_prober.py (pa.{slug}
+    # convention, matching Brent's) + a real, direct screenshot showing
+    # the genuine "search.do" URL and classic Idox tab structure (Simple/
+    # Advanced/Weekly-Monthly Lists/Property/Map). Real page defaults to
+    # its Weekly List tab (Validated/Decided this week radios) — worth
+    # remembering if the standard monthly-mode scrape ever comes back
+    # empty, though the monthly action parameter should work regardless
+    # of which tab a human lands on by default.
+    ("Melton Borough Council",
+     "https://pa.melton.gov.uk/online-applications"),
+
     ("Harborough District Council",
      "https://pa2.harborough.gov.uk/online-applications"),
 
