@@ -37,6 +37,38 @@ Date Valid
 """
 
 
+# Real HTML structure using Folkestone's EXACT confirmed real label
+# text ("Date valid", lowercase v) — the real, direct cause found via
+# the raw-lines diagnostic on 2026-07-28: same label pattern as
+# Salford's working "Date Valid", just different capitalization, never
+# matched by the old case-sensitive regex.
+REAL_LOWERCASE_LABEL_HTML = """
+<html><body>
+Reference
+26/1195/FH
+Site address
+227 Dover Road, Folkestone, CT19 6NH
+Proposal
+Variation of condition 3 (Number of households) to allow for increase in number of households.
+Date valid
+27/7/2026
+Status
+Under Consultation
+Decision
+Reference
+26/1192/FH
+Site address
+Dingleden Cottage, Fairview Farm, Woodland Road, Lyminge, CT18 8DW
+Proposal
+Lawful Development Certificate (Existing) for the continued use as a residential dwelling.
+Date valid
+27/7/2026
+Status
+Valid
+</body></html>
+"""
+
+
 def run():
     checks = []
 
@@ -52,6 +84,24 @@ def run():
                         app.get("decision_date") != "Pagination navigation"))
         checks.append(("real status extracted correctly despite the fix",
                         app["status"] == "pending"))  # 'Under Consultation' -> pending default
+
+    # Real, direct fix confirmed via raw-lines diagnostic evidence
+    # (2026-07-28): Folkestone's real label is 'Date valid' (lowercase),
+    # same pattern as Salford's working 'Date Valid' (capital), just
+    # different capitalization — the old case-sensitive regex silently
+    # never matched it.
+    lowercase_apps = _parse_results_html_fallback(
+        REAL_LOWERCASE_LABEL_HTML, "Folkestone and Hythe District Council"
+    )
+    checks.append(("both real applications parse despite lowercase label", len(lowercase_apps) == 2))
+    if len(lowercase_apps) == 2:
+        checks.append(("lowercase 'Date valid' now correctly extracted",
+                        lowercase_apps[0]["submitted_date"] == "2026-07-27"))
+        checks.append(("second real application also gets its date",
+                        lowercase_apps[1]["submitted_date"] == "2026-07-27"))
+        checks.append(("real references extracted correctly for both",
+                        lowercase_apps[0]["reference"] == "26/1195/FH"
+                        and lowercase_apps[1]["reference"] == "26/1192/FH"))
 
     all_ok = True
     for label, ok in checks:
