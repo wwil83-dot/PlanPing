@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
 """
-PlanFind — Cheltenham/Lewisham redirect verification (2026-07-25).
+PlanFind — follow-up domain verification (round 2, 2026-07-28).
 
-CRITICAL CHECK before trusting idox_multi_recon.py's round-4 finding
-that Cheltenham and Lewisham are genuinely working. Existing, trusted
-production config has "Ipswich Borough Council" using Cheltenham's exact
-URL, and "London Borough of Waltham Forest" using Lewisham's exact URL —
-both with a comment explaining a real, previously-confirmed redirect.
-Ward-dropdown names alone (genuinely Cheltenham/Lewisham-specific) are
-suggestive but NOT conclusive — this submits the REAL monthly-list form
-and checks actual application addresses/references, which is
-definitive: if results show genuine Cheltenham (GL postcodes) or
-Lewisham (SE postcodes) addresses, the old redirect is stale and it's
-safe to add these as real, separate councils. If results show Ipswich
-(IP postcodes) or Waltham Forest (E postcodes) addresses instead, the
-old finding still holds and these URLs must NOT be added as separate
-councils — the existing Ipswich/Waltham Forest entries are correct as-is.
+Cheltenham and Lewisham are now RESOLVED and in production (confirmed
+2026-07-25 — real GL/SE postcode addresses, the old redirect findings
+were stale). This round checks the 3 real questions left open from that
+investigation:
+  - Ipswich and Waltham Forest's OWN real domains (per existing seed
+    data) — do these work now on their own, meaning the substituted
+    Cheltenham/Lewisham workaround URLs are no longer necessary?
+  - Redbridge — the gap-prober's guessed URL (planning.redbridge.gov.uk)
+    returned a blank 39-byte response; existing seed data has a
+    different, real subdomain (www.redbridge.gov.uk) worth checking
+    properly before writing Redbridge off as broken.
 """
 import asyncio
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
@@ -33,12 +30,16 @@ CONTEXT_OPTIONS = {
 }
 
 TARGETS = [
-    ("Cheltenham (claimed URL)", "https://publicaccess.cheltenham.gov.uk/online-applications",
-     "genuine Cheltenham addresses should show GL postcodes; if this is really Ipswich's "
-     "backend, expect IP postcodes instead"),
-    ("Lewisham (claimed URL)", "https://planning.lewisham.gov.uk/online-applications",
-     "genuine Lewisham addresses should show SE postcodes; if this is really Waltham "
-     "Forest's backend, expect E postcodes instead"),
+    ("Ipswich (own real domain, per seed data)", "https://www.ipswich.gov.uk/online-applications",
+     "if this now works on its own, real addresses should show IP postcodes — Ipswich's "
+     "URL was substituted with Cheltenham's as a workaround at some point, worth checking "
+     "if that's still necessary"),
+    ("Waltham Forest (own real domain, per seed data)", "https://www.walthamforest.gov.uk/online-applications",
+     "if this now works on its own, real addresses should show E postcodes — same "
+     "situation as Ipswich, substituted with Lewisham's URL as a workaround"),
+    ("Redbridge (corrected URL, per seed data)", "https://www.redbridge.gov.uk/online-applications",
+     "the gap-prober's guess (planning.redbridge.gov.uk) returned a blank 39-byte response — "
+     "this is the real URL from existing seed data, a different subdomain entirely"),
 ]
 
 
