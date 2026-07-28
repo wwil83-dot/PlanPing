@@ -78,6 +78,7 @@ async def _fetch_applications(db, lat: float, lng: float, radius: float, days: i
     if app_type:
         applications = [a for a in applications if a["type_badge"] == app_type]
 
+    _add_date_availability_flag(applications)
     return applications
 
 
@@ -126,12 +127,44 @@ async def _fetch_tagged_applications(db, tag: str, status: Optional[str] = None,
         a["status_class"] = _status_class(a.get("status", ""))
         a["days_ago"] = _days_ago(a.get("submitted_date"))
 
+    _add_date_availability_flag(applications)
     return applications
 
 
 STATUS_FILTER_OPTIONS = ["pending", "approved", "refused", "withdrawn"]
 TYPE_FILTER_OPTIONS = ["householder", "full", "outline", "listed", "tree",
                        "advert", "prior", "major", "other"]
+
+# Councils whose real, live results view genuinely never displays a
+# submission date at all — confirmed via direct raw-data evidence
+# (2026-07-28), not a scraper bug we're still chasing. Applications from
+# these councils will always show "Unknown date" here even though the
+# application itself obviously has a real date — the council's own
+# portal has it, our scraper's data source just doesn't expose it in
+# this particular view. See arcus_scraper.py's module comments for the
+# full investigation. Worth surfacing this honestly in the UI rather
+# than let it look like a generic missing-data gap.
+COUNCILS_WITHOUT_DATE_DATA = {
+    "Powys County Council",
+    "Erewash Borough Council",
+    "Reading Borough Council",
+    "Wrexham County Borough Council",
+}
+
+
+def _add_date_availability_flag(applications: list[dict]) -> None:
+    """Mutates each application dict in place, adding
+    'date_unavailable_note' — True only when we genuinely know the date
+    is missing for a structural reason (council in the list above), not
+    just because it hasn't been decided/scraped yet. Templates can use
+    this to show a clear "check the council's own portal for the exact
+    date" note instead of a bare, unexplained "Unknown date"."""
+    for a in applications:
+        a["date_unavailable_note"] = (
+            a.get("submitted_date") is None
+            and a.get("council_name") in COUNCILS_WITHOUT_DATE_DATA
+        )
+
 
 
 @app.get("/search", response_class=HTMLResponse)
@@ -373,6 +406,8 @@ async def street_history(request: Request, q: Optional[str] = None):
             a["status_class"] = _status_class(a.get("status", ""))
             a["days_ago"] = _days_ago(a.get("submitted_date"))
 
+        _add_date_availability_flag(applications)
+
     return render("street_history.html", {
         "request": request,
         "q": q_clean,
@@ -435,6 +470,12 @@ async def council_page(request: Request, slug: str):
         a["is_major"] = _is_major(a.get("application_type", ""))
         a["is_mapped"] = a.get("lat") is not None
         a["days_ago"] = _days_ago(a.get("submitted_date"))
+        # council_name isn't in the row SELECT above (the whole page is
+        # already scoped to one council) — added here just so the shared
+        # flag helper below can reuse the same logic everywhere else.
+        a["council_name"] = council["name"]
+
+    _add_date_availability_flag(apps)
 
     return render("council.html", {
         "request": request,
@@ -571,6 +612,14 @@ async def councils_list(request: Request):
             GROUP BY c.id, c.name, c.slug, c.region, c.system, c.coverage_source, c.portal_url
             ORDER BY c.name
         """)
+
+    # Converted to plain dicts (asyncpg Records are immutable) so the
+    # date-availability note can be added — same confirmed, real
+    # limitation as the search-results pages, see
+    # COUNCILS_WITHOUT_DATE_DATA above.
+    councils = [dict(c) for c in councils]
+    for c in councils:
+        c["date_unavailable_note"] = c["name"] in COUNCILS_WITHOUT_DATE_DATA
 
     covered = [
         c for c in councils
