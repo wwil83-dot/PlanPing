@@ -335,6 +335,14 @@ def _parse_csv(csv_text: str, council_name: str) -> list[dict]:
                   f"'{status}' but no decision date matched any known column. "
                   f"Columns seen: {list(row_lower.keys())}")
 
+        submitted_date = _parse_date(date_raw)
+
+        if not submitted_date and council_name not in _SUBMITTED_DATE_DIAGNOSED:
+            _SUBMITTED_DATE_DIAGNOSED.add(council_name)
+            print(f"    ⚠ SUBMITTED DATE DIAGNOSTIC [{council_name}] (CSV): "
+                  f"no submitted_date matched any known column. "
+                  f"Columns seen: {list(row_lower.keys())}, date_raw={date_raw!r}")
+
         apps.append({
             "reference":        ref,
             "address":          address,
@@ -342,7 +350,7 @@ def _parse_csv(csv_text: str, council_name: str) -> list[dict]:
             "description":      proposal,
             "application_type": app_type,
             "status":           status,
-            "submitted_date":   _parse_date(date_raw),
+            "submitted_date":   submitted_date,
             "decision_date":    decision_date,
             "council_name":     council_name,
             "council_url":      None,  # filled in by caller with base_url fallback
@@ -369,6 +377,18 @@ def _parse_csv(csv_text: str, council_name: str) -> list[dict]:
 # means an unrecognised label wording for a given council, worth
 # investigating with real evidence rather than assumed benign.
 _DECISION_DATE_DIAGNOSED: set[str] = set()
+
+# 2026-07-26: real evidence found via a SQL audit — 7 of the councils
+# using this HTML fallback path show 100% NULL submitted_date in the
+# database (Reading, Manchester, Erewash, Bracknell Forest, Powys,
+# Folkestone and Hythe, Wrexham), despite the decision-date diagnostic's
+# own printouts elsewhere in this file showing a real 'date' value WAS
+# present for at least decided applications. Never directly confirmed
+# whether pending (non-decided) applications — the vast majority —
+# extract a date correctly at all. Same rate-limited diagnostic pattern
+# as _DECISION_DATE_DIAGNOSED, so the next real run shows real evidence
+# instead of guessing further.
+_SUBMITTED_DATE_DIAGNOSED: set[str] = set()
 
 _LABEL_PATTERNS = {
     "reference": r"Application Reference|Reference",
@@ -454,6 +474,16 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
                   f"'{status}' but no decision date matched any known label. "
                   f"Full fields: {r}")
 
+        submitted_date = _parse_date(r.get("date", ""))
+
+        # DIAGNOSTIC (2026-07-26) — see _SUBMITTED_DATE_DIAGNOSED comment
+        # above. Rate-limited per council so this doesn't spam every
+        # single record, just confirms the pattern once per council.
+        if not submitted_date and council_name not in _SUBMITTED_DATE_DIAGNOSED:
+            _SUBMITTED_DATE_DIAGNOSED.add(council_name)
+            print(f"    ⚠ SUBMITTED DATE DIAGNOSTIC [{council_name}]: "
+                  f"no submitted_date matched any known label. Full fields: {r}")
+
         apps.append({
             "reference":        ref,
             "address":          address,
@@ -461,7 +491,7 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
             "description":      r.get("proposal", ""),
             "application_type": r.get("type", ""),
             "status":           status,
-            "submitted_date":   _parse_date(r.get("date", "")),
+            "submitted_date":   submitted_date,
             "decision_date":    decision_date,
             "council_name":     council_name,
             "council_url":      None,
