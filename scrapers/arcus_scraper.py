@@ -378,23 +378,42 @@ def _parse_csv(csv_text: str, council_name: str) -> list[dict]:
 # investigating with real evidence rather than assumed benign.
 _DECISION_DATE_DIAGNOSED: set[str] = set()
 
-# 2026-07-26: real evidence found via a SQL audit — 7 of the councils
-# using this HTML fallback path show 100% NULL submitted_date in the
-# database (Reading, Manchester, Erewash, Bracknell Forest, Powys,
-# Folkestone and Hythe, Wrexham), despite the decision-date diagnostic's
-# own printouts elsewhere in this file showing a real 'date' value WAS
-# present for at least decided applications. Never directly confirmed
-# whether pending (non-decided) applications — the vast majority —
-# extract a date correctly at all. Same rate-limited diagnostic pattern
-# as _DECISION_DATE_DIAGNOSED, so the next real run shows real evidence
-# instead of guessing further.
+# 2026-07-26/28: real evidence found via a SQL audit and 3 rounds of
+# direct diagnostic evidence. Three GENUINELY DIFFERENT root causes were
+# found and fixed in sequence (each only discovered because the
+# previous fix didn't fully resolve things, confirmed via real re-runs
+# rather than declared fixed prematurely):
+#   1. "Pagination navigation" text bleeding into the flattened stream
+#      (fixed — filtered out before parsing).
+#   2. A label with a genuinely empty value (e.g. "Decision" on an
+#      undecided application) wrongly consuming the NEXT field's own
+#      label as if it were this field's value (fixed — checks whether
+#      the "next line" is itself a recognised label first).
+#   3. Case sensitivity — "Date Valid" (worked) vs "Date valid" (silently
+#      never matched) (fixed — case-insensitive matching throughout).
+#      Confirmed this resolved Folkestone specifically.
+#   4. Bracknell Forest's real label is "Application Validated Date" — a
+#      genuinely different phrase, not a case variant (fixed — added as
+#      its own pattern).
+#
+# HONEST REMAINING LIMITATION, confirmed via direct raw-line evidence,
+# NOT a bug to keep chasing: Powys, Erewash, Reading, and Wrexham's
+# Advanced Search results view genuinely does not display any
+# date-labelled field at all in the summary (confirmed: their raw
+# records go straight from Description to Status/Decision, no date
+# text anywhere in between) — the same category of platform limitation
+# already accepted for Idox's missing decision dates. Getting a real
+# submitted_date for these 4 councils specifically would require
+# visiting each application's own detail page — a materially bigger,
+# more expensive change, not something to build without discussing
+# first given the extra page-load cost per application.
 _SUBMITTED_DATE_DIAGNOSED: set[str] = set()
 
 _LABEL_PATTERNS = {
     "reference": r"Application Reference|Reference",
     "address":   r"Site Address|Site address|Address",
     "proposal":  r"Proposal|Description(?:\s+of\s+works)?",
-    "date":      r"Date Valid|Valid Date|Received Date|Date Received",
+    "date":      r"Date Valid|Valid Date|Received Date|Date Received|Application Validated Date",
     "type":      r"Application [Tt]ype|Record [Tt]ype",
     "status":    r"Application Status|Status",
     "decision":  r"Decision",
