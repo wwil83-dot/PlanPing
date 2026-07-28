@@ -145,7 +145,14 @@
       <p class="app-description">{{ app.description or 'No description provided' }}</p>
 
       <div class="app-footer">
+        {% if app.date_unavailable_note %}
+        <span class="app-date" title="This council doesn't publish an application date in the data we can access">
+          Date not shown by council
+          {% if app.council_url %}· <a href="{{ app.council_url }}" target="_blank" rel="noopener">check portal</a>{% endif %}
+        </span>
+        {% else %}
         <span class="app-date">{{ app.days_ago }}</span>
+        {% endif %}
         <div class="app-actions">
           {% if app.council_url %}
           <a href="{{ app.council_url }}" target="_blank" rel="noopener" class="btn btn-sm">
