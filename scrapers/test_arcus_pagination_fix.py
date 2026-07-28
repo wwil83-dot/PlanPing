@@ -69,6 +69,29 @@ Valid
 """
 
 
+# Real HTML structure using Bracknell Forest's EXACT confirmed real
+# label text ("Application Validated Date") — found via the raw-lines
+# diagnostic on 2026-07-28, a genuinely different phrase from any
+# existing pattern, not a case variant.
+REAL_BRACKNELL_LABEL_HTML = """
+<html><body>
+Reference
+25/00730/FUL
+Application type
+Full planning permission
+Site address
+2 Coppice Green, Bracknell, Berkshire, RG42 1TL
+Description
+Proposed dropped kerb and hardstanding together with ramped access to property and part removal of existing hedge.
+Application Validated Date
+22/7/2026
+Status
+Under Consultation
+Decision
+</body></html>
+"""
+
+
 def run():
     checks = []
 
@@ -102,6 +125,20 @@ def run():
         checks.append(("real references extracted correctly for both",
                         lowercase_apps[0]["reference"] == "26/1195/FH"
                         and lowercase_apps[1]["reference"] == "26/1192/FH"))
+
+    # Real, direct fix confirmed via raw-record-lines diagnostic evidence
+    # (2026-07-28): Bracknell Forest's real label is "Application
+    # Validated Date" — a genuinely different phrase, not a case variant
+    # of anything else tested.
+    bracknell_apps = _parse_results_html_fallback(
+        REAL_BRACKNELL_LABEL_HTML, "Bracknell Forest Council"
+    )
+    checks.append(("Bracknell's real application parses", len(bracknell_apps) == 1))
+    if bracknell_apps:
+        checks.append(("'Application Validated Date' now correctly extracted",
+                        bracknell_apps[0]["submitted_date"] == "2026-07-22"))
+        checks.append(("real reference extracted correctly",
+                        bracknell_apps[0]["reference"] == "25/00730/FUL"))
 
     all_ok = True
     for label, ok in checks:
