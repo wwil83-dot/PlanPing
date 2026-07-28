@@ -1084,13 +1084,21 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # SOUTH WEST
     # -------------------------------------------------------------------------
-    # NOTE: planning.plymouth.gov.uk redirects to Gloucester's Idox server.
-    ("Gloucester City Council",
-     "https://planning.plymouth.gov.uk/online-applications"),
-
-    # BROKEN — planning.plymouth.gov.uk redirects to Gloucester; Plymouth needs research.
-    # ("Plymouth City Council",
+    # CORRECTED 2026-07-28 — the old "redirects to Gloucester" finding
+    # is confirmed STALE. Real verification submitted the actual
+    # monthly-list form and found every result address explicitly says
+    # "Plymouth" with real PL postcodes (e.g. "58 Fletemoor Road
+    # Plymouth PL5 1UQ") — genuinely Plymouth's own data, not
+    # Gloucester's. The ACTIVE PRODUCTION Gloucester entry below has
+    # been WRONG — silently saving Plymouth's real data mislabeled as
+    # Gloucester. Gloucester's own real domain (www.gloucester.gov.uk)
+    # confirmed genuinely dead — real 404 page ("404 | Gloucester City
+    # Council"), not ambiguous.
+    # ("Gloucester City Council",
     #  "https://planning.plymouth.gov.uk/online-applications"),
+
+    ("Plymouth City Council",
+     "https://planning.plymouth.gov.uk/online-applications"),
 
     ("Cotswold District Council",
      "https://publicaccess.cotswold.gov.uk/online-applications"),
@@ -1231,13 +1239,20 @@ IDOX_COUNCILS = [
     # Waltham Forest needs its own real, separate URL re-verified — see
     # the correction above. Not yet restored here pending that check.
 
-    # NOTE: development.towerhamlets.gov.uk redirects to Newham's Idox server.
-    ("London Borough of Newham",
-     "https://development.towerhamlets.gov.uk/online-applications"),
-
-    # BROKEN — development.towerhamlets.gov.uk redirects to Newham; Tower Hamlets needs research.
-    # ("London Borough of Tower Hamlets",
+    # CORRECTED 2026-07-28 — the old "redirects to Newham" finding is
+    # confirmed STALE. Real verification submitted the actual monthly-
+    # list form and found every result address explicitly in E3/E14
+    # (e.g. "92 Antill Road, London, E3 5BP", "34 Medway Road, London,
+    # E3 5BY") — genuinely Tower Hamlets' own data, not Newham's. The
+    # ACTIVE PRODUCTION Newham entry below has been WRONG — silently
+    # saving Tower Hamlets' real data mislabeled as Newham. Newham's own
+    # real domain (www.newham.gov.uk) confirmed genuinely dead — real
+    # 404 page ("Page not found – Newham Council"), not ambiguous.
+    # ("London Borough of Newham",
     #  "https://development.towerhamlets.gov.uk/online-applications"),
+
+    ("London Borough of Tower Hamlets",
+     "https://development.towerhamlets.gov.uk/online-applications"),
 
     # BROKEN — Redbridge uses Swift LG (planning.redbridge.gov.uk/swiftlg/apas), not Idox.
     # ("London Borough of Redbridge",
@@ -1250,13 +1265,21 @@ IDOX_COUNCILS = [
     ("London Borough of Bexley",
      "https://pa.bexley.gov.uk/online-applications"),
 
-    # NOTE: planning.royalgreenwich.gov.uk redirects to Richmond's Idox server.
-    ("London Borough of Richmond upon Thames",
-     "https://planning.royalgreenwich.gov.uk/online-applications"),
-
-    # BROKEN — planning.royalgreenwich.gov.uk redirects to Richmond; Greenwich needs research.
-    # ("London Borough of Greenwich",
+    # CORRECTED 2026-07-28 — the old "redirects to Richmond" finding is
+    # confirmed STALE. Real verification submitted the actual monthly-
+    # list form and found every result address explicitly says
+    # "GREENWICH" with real SE postcodes (e.g. "14 DIAMOND TERRACE,
+    # GREENWICH, LONDON, SE10 8QN") — genuinely Greenwich's own data,
+    # not Richmond's. The ACTIVE PRODUCTION Richmond entry below has
+    # been WRONG — silently saving Greenwich's real data mislabeled as
+    # Richmond. Richmond's own real domain (www.richmond.gov.uk)
+    # confirmed genuinely dead — real 404 page ("404 - London Borough of
+    # Richmond upon Thames"), not ambiguous.
+    # ("London Borough of Richmond upon Thames",
     #  "https://planning.royalgreenwich.gov.uk/online-applications"),
+
+    ("London Borough of Greenwich",
+     "https://planning.royalgreenwich.gov.uk/online-applications"),
 
     ("London Borough of Bromley",
      "https://searchapplications.bromley.gov.uk/online-applications"),
@@ -1274,10 +1297,19 @@ IDOX_COUNCILS = [
     ("London Borough of Kingston upon Thames",
      "https://publicaccess.kingston.gov.uk/online-applications"),
 
-    # Richmond now uses Greenwich's URL (see above); old www.richmond.gov.uk was broken.
-
-    # BROKEN — Hounslow uses a non-Idox system (planning.hounslow.gov.uk/Planning_Index.aspx).
-    # www.hounslow.gov.uk/online-applications redirects to Richmond's Idox server.
+    # CORRECTED 2026-07-28: Richmond no longer uses Greenwich's URL —
+    # that was itself the mislabeling bug, now fixed (see the Greenwich
+    # entry above). Richmond's own domain (www.richmond.gov.uk) is
+    # confirmed genuinely dead (real 404, not ambiguous) — Richmond has
+    # no known working URL at all right now, needs real research from
+    # scratch, not another substitute.
+    #
+    # Hounslow's claimed redirect target (Richmond) hasn't been directly
+    # re-verified against this new information — worth checking whether
+    # www.hounslow.gov.uk/online-applications is genuinely Hounslow's
+    # own data (same pattern as Tower Hamlets/Plymouth/Greenwich today)
+    # before assuming the old finding still holds, rather than trusting
+    # it by default.
     # ("London Borough of Hounslow",
     #  "https://www.hounslow.gov.uk/online-applications"),
 
