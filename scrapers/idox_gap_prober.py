@@ -1,19 +1,34 @@
 #!/usr/bin/env python3
 """
-PlanFind — Idox gap-list batch prober (2026-07-25).
+PlanFind — Idox gap-list batch prober (round 2, 2026-07-28).
 
-PURPOSE: 122 councils from coverage_gap_list.md have no confirmed
-vendor at all yet. Rather than search each one individually (138
-councils is too many for manual one-by-one research), this tests the
-most common Idox URL conventions against all of them in one batch pass
-— lightweight HTTP requests (httpx, not full Playwright browser
-automation), fast enough to check ~120 councils in a few minutes.
+PURPOSE: round 1 tested 121 candidates against 3 URL conventions and
+found 7 hits, but only 3 (Brentwood, Cheltenham, Lewisham) turned out
+to be genuinely real once verified with a full recon pass — the other
+4 were false positives (a stale test subdomain, a redirect to the
+council's general homepage, an explicit 404). Round 1's resolved
+councils (Brentwood/Cheltenham/Lewisham/Chesterfield added, Bristol/
+Camden already covered via data_gov_uk) are removed from this round's
+candidate list; Redbridge is being checked separately with its
+already-known real URL rather than re-guessed here. This round tests
+4 MORE real, confirmed-elsewhere URL conventions (not guessed blind —
+seen working for actual councils already added this session) against
+the remaining 114 candidates, on top of the original 3.
 
 CONVENTIONS TESTED (derived from the naming pattern of our existing 205
-confirmed-working Idox councils):
+confirmed-working Idox councils, plus round-2 additions):
   1. https://publicaccess.{slug}.gov.uk/online-applications/
   2. https://planning.{slug}.gov.uk/online-applications/
   3. https://{slug}.gov.uk/online-applications/
+  4. https://www.{slug}.gov.uk/online-applications/ (Redbridge, Ipswich,
+     Waltham Forest's real convention)
+  5. https://pa.{slug}.gov.uk/online-applications/ (Brent's real
+     convention)
+  6. https://publicaccess.{hyphenated-slug}.gov.uk/online-applications/
+  7. https://planning.{hyphenated-slug}.gov.uk/online-applications/
+     (North Somerset's real convention uses a hyphenated slug —
+     n-somerset, not northsomerset — worth testing for other
+     multi-word council names too)
 
 A "hit" is a response containing recognisable Idox markers (the exact
 page title/text patterns confirmed across many real Idox councils this
@@ -40,22 +55,22 @@ import httpx
 CANDIDATES = [
     "Amber Valley", "Arun", "Ashfield", "Barking and Dagenham", "Barnsley",
     "Bath and North East Somerset", "Birmingham", "Blackburn with Darwen",
-    "Boston", "Bournemouth Christchurch and Poole", "Brentwood",
-    "Bristol City of", "Broxbourne", "Burnley", "Camden", "Cannock Chase",
-    "Central Bedfordshire", "Charnwood", "Cheltenham", "Cherwell",
-    "Chesterfield", "Colchester", "County Durham", "Coventry", "Crawley",
+    "Boston", "Bournemouth Christchurch and Poole",
+    "Broxbourne", "Burnley", "Cannock Chase",
+    "Central Bedfordshire", "Charnwood", "Cherwell",
+    "Colchester", "County Durham", "Coventry", "Crawley",
     "Dacorum", "Doncaster", "Dorset", "Dudley", "East Hampshire",
     "East Riding of Yorkshire", "East Staffordshire", "Eastbourne",
     "Fareham", "Fenland", "Fylde", "Gedling", "Great Yarmouth", "Greenwich",
     "Hackney", "Harrow", "Hartlepool", "Hastings", "Havering",
     "Herefordshire County of", "High Peak", "Hillingdon", "Hounslow",
     "Hyndburn", "Isles of Scilly", "Islington", "Kensington and Chelsea",
-    "Kingston upon Hull City of", "Kirklees", "Lancaster", "Lewisham",
+    "Kingston upon Hull City of", "Kirklees", "Lancaster",
     "Lichfield", "Malvern Hills", "Melton", "Merton", "Mid Suffolk",
     "Mole Valley", "Newcastle upon Tyne", "Newcastle-under-Lyme",
     "North Devon", "North Kesteven", "North Lincolnshire",
     "North Warwickshire", "Nuneaton and Bedworth", "Oadby and Wigston",
-    "Oldham", "Plymouth", "Preston", "Redbridge", "Redcar and Cleveland",
+    "Oldham", "Plymouth", "Preston", "Redcar and Cleveland",
     "Ribble Valley", "Rochford", "Rotherham", "Rugby", "Slough",
     "South Derbyshire", "South Hams", "South Holland", "South Kesteven",
     "South Oxfordshire", "South Tyneside", "St. Helens",
@@ -91,12 +106,36 @@ def slugify(name: str) -> str:
     return s
 
 
+def slugify_hyphenated(name: str) -> str:
+    """Real, confirmed variant seen this session — some councils use a
+    hyphenated slug rather than a plain concatenation (e.g. North
+    Somerset's real URL is planning.n-somerset.gov.uk, not
+    northsomerset). Keeps hyphens between words, still strips the same
+    ONS suffix patterns."""
+    s = name
+    s = re.sub(r"\s+(City|County|Borough)\s+of$", "", s, flags=re.IGNORECASE)
+    s = s.lower()
+    s = re.sub(r"[^a-z\s]", "", s)
+    s = re.sub(r"\s+", "-", s.strip())
+    return s
+
+
 async def probe_one(client: httpx.AsyncClient, name: str) -> dict:
     slug = slugify(name)
+    hyphen_slug = slugify_hyphenated(name)
     patterns = [
         f"https://publicaccess.{slug}.gov.uk/online-applications/",
         f"https://planning.{slug}.gov.uk/online-applications/",
         f"https://{slug}.gov.uk/online-applications/",
+        # Added round 2 (2026-07-28) — real, confirmed conventions from
+        # councils already added this session, not guessed blind:
+        # www. (Redbridge, Ipswich, Waltham Forest), pa. (Brent),
+        # hyphenated slug (North Somerset's real URL is
+        # planning.n-somerset.gov.uk, not northsomerset).
+        f"https://www.{slug}.gov.uk/online-applications/",
+        f"https://pa.{slug}.gov.uk/online-applications/",
+        f"https://publicaccess.{hyphen_slug}.gov.uk/online-applications/",
+        f"https://planning.{hyphen_slug}.gov.uk/online-applications/",
     ]
 
     for url in patterns:
