@@ -459,6 +459,7 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
 
     records: list[dict] = []
     current: dict = {}
+    record_start_i = 0
     i = 0
     while i < len(lines):
         m = _ALL_LABELS_RE.match(lines[i])
@@ -483,8 +484,10 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
             if next_is_label:
                 if field == "reference":
                     if current.get("reference"):
+                        current["_raw_lines"] = lines[record_start_i:i]
                         records.append(current)
                     current = {"reference": ""}
+                    record_start_i = i
                 elif field:
                     current[field] = ""
                 i += 1
@@ -492,14 +495,17 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
             value = lines[i + 1]
             if field == "reference":
                 if current.get("reference"):
+                    current["_raw_lines"] = lines[record_start_i:i]
                     records.append(current)
                 current = {"reference": value}
+                record_start_i = i
             elif field:
                 current[field] = value
             i += 2
         else:
             i += 1
     if current.get("reference"):
+        current["_raw_lines"] = lines[record_start_i:i]
         records.append(current)
 
     apps = []
@@ -524,13 +530,22 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
 
         submitted_date = _parse_date(r.get("date", ""))
 
-        # DIAGNOSTIC (2026-07-26) — see _SUBMITTED_DATE_DIAGNOSED comment
-        # above. Rate-limited per council so this doesn't spam every
-        # single record, just confirms the pattern once per council.
+        # DIAGNOSTIC (2026-07-26, strengthened 2026-07-28) — see
+        # _SUBMITTED_DATE_DIAGNOSED comment above. The 2026-07-28 case-
+        # insensitivity fix resolved this for SOME councils (confirmed:
+        # Folkestone) but not others (Bracknell Forest, Powys, Erewash,
+        # Reading, Wrexham all still affected) — meaning the earlier
+        # inference that they'd share Folkestone's exact "Date valid"
+        # lowercase pattern was wrong. Printing this record's own raw
+        # line range (captured during parsing, not the whole page's
+        # chrome/form noise) so the real label text — whatever it
+        # actually is for these specific councils — is directly visible
+        # this time, rather than guessing a 3rd time.
         if not submitted_date and council_name not in _SUBMITTED_DATE_DIAGNOSED:
             _SUBMITTED_DATE_DIAGNOSED.add(council_name)
             print(f"    ⚠ SUBMITTED DATE DIAGNOSTIC [{council_name}]: "
                   f"no submitted_date matched any known label. Full fields: {r}")
+            print(f"    ⚠ RAW RECORD LINES [{council_name}]: {r.get('_raw_lines', [])!r}")
 
         apps.append({
             "reference":        ref,
