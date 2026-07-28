@@ -389,7 +389,6 @@ _DECISION_DATE_DIAGNOSED: set[str] = set()
 # as _DECISION_DATE_DIAGNOSED, so the next real run shows real evidence
 # instead of guessing further.
 _SUBMITTED_DATE_DIAGNOSED: set[str] = set()
-_RAW_LINES_DIAGNOSED: set[str] = set()
 
 _LABEL_PATTERNS = {
     "reference": r"Application Reference|Reference",
@@ -410,13 +409,22 @@ _LABEL_PATTERNS = {
     "decision_date": r"Decision Notice Sent(?:\s+Date)?|Decision Date|Decided Date",
 }
 _ALL_LABELS_RE = re.compile(
-    r"^(" + "|".join(_LABEL_PATTERNS.values()) + r")$"
+    r"^(" + "|".join(_LABEL_PATTERNS.values()) + r")$", re.IGNORECASE
 )
 
 
 def _field_for_label(label_text: str) -> Optional[str]:
+    # FIX (2026-07-28): confirmed real, direct evidence via the raw-lines
+    # diagnostic — Salford's real label is 'Date Valid' (capital V,
+    # matches our pattern, works fine), Folkestone's real label is 'Date
+    # valid' (lowercase v, same pattern, silently never matched). Every
+    # genuinely broken council's Advanced Search FORM consistently uses
+    # lowercase "Valid date from/to" too, strongly suggesting the same
+    # lowercase convention on their results pages. Case-insensitive
+    # matching throughout, rather than trying to enumerate every real
+    # capitalization variant across every council individually.
     for field, pattern in _LABEL_PATTERNS.items():
-        if re.match(rf"^(?:{pattern})$", label_text):
+        if re.match(rf"^(?:{pattern})$", label_text, re.IGNORECASE):
             return field
     return None
 
@@ -448,19 +456,6 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
     # make the scan itself robust to arbitrary interruptions.
     _UI_CHROME_LINES = {"pagination navigation", "pagination"}
     lines = [l for l in lines if l.strip().lower() not in _UI_CHROME_LINES]
-
-    # DIAGNOSTIC (2026-07-28): the previous two fixes (removing
-    # "Pagination navigation", handling genuinely-empty field values)
-    # were both real and confirmed working, but 'date' is STILL
-    # completely absent from every record on a re-run — not empty this
-    # time, genuinely never matched by any of our 4 known patterns
-    # (Date Valid|Valid Date|Received Date|Date Received). Rather than
-    # guess a 5th pattern blind, printing the raw, already-filtered lines
-    # directly — real evidence of what the actual label text says, once
-    # per council so this doesn't spam every page.
-    if council_name not in _RAW_LINES_DIAGNOSED:
-        _RAW_LINES_DIAGNOSED.add(council_name)
-        print(f"    ⚠ RAW LINES DIAGNOSTIC [{council_name}] (first 40 lines): {lines[:40]!r}")
 
     records: list[dict] = []
     current: dict = {}
