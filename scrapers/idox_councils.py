@@ -1113,6 +1113,14 @@ IDOX_COUNCILS = [
     ("South Gloucestershire Council",
      "https://developments.southglos.gov.uk/online-applications"),
 
+    # Added 2026-07-28 — confirmed via a real, direct screenshot showing
+    # the genuine Idox tab structure and a real submitted search-results
+    # page. Note the URL uses "/publicaccess" instead of the usual
+    # "/online-applications" suffix — a real, valid Idox path-naming
+    # variant confirmed for this council specifically, not a typo.
+    ("Swindon Borough Council",
+     "https://pa.swindon.gov.uk/publicaccess"),
+
     ("North Somerset Council",
      "https://planning.n-somerset.gov.uk/online-applications"),
 
