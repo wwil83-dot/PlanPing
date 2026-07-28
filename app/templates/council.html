@@ -26,6 +26,12 @@
         · <a href="{{ council.portal_url }}" target="_blank" rel="noopener">Visit council portal →</a>
         {% endif %}
       </p>
+      {% if council.date_unavailable_note %}
+      <p class="results-sub" style="margin-top:.3rem">
+        Note: this council doesn't publish exact application dates in the data we can access —
+        check individual application pages on their own portal for exact dates.
+      </p>
+      {% endif %}
     </div>
   </div>
 
@@ -55,7 +61,11 @@
       <h3 class="app-address">{{ app.address or 'Address not available' }}</h3>
       <p class="app-description">{{ app.description or 'No description provided' }}</p>
       <div class="app-footer">
+        {% if app.date_unavailable_note %}
+        <span class="app-date">Date not shown by council</span>
+        {% else %}
         <span class="app-date">{{ app.days_ago }}</span>
+        {% endif %}
         <a href="/application/{{ app.id }}" class="btn btn-sm">Details</a>
       </div>
     </article>
@@ -85,7 +95,11 @@
       <h3 class="app-address">{{ app.address or 'Address not available' }}</h3>
       <p class="app-description">{{ app.description or 'No description provided' }}</p>
       <div class="app-footer">
+        {% if app.date_unavailable_note %}
+        <span class="app-date">Date not shown by council</span>
+        {% else %}
         <span class="app-date">{{ app.days_ago }}</span>
+        {% endif %}
         <a href="/application/{{ app.id }}" class="btn btn-sm">Details</a>
       </div>
     </article>
