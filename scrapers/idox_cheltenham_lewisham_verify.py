@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """
-PlanFind — follow-up domain verification (round 2, 2026-07-28).
+PlanFind — follow-up domain verification (round 3, 2026-07-28).
 
-Cheltenham and Lewisham are now RESOLVED and in production (confirmed
-2026-07-25 — real GL/SE postcode addresses, the old redirect findings
-were stale). This round checks the 3 real questions left open from that
-investigation:
-  - Ipswich and Waltham Forest's OWN real domains (per existing seed
-    data) — do these work now on their own, meaning the substituted
-    Cheltenham/Lewisham workaround URLs are no longer necessary?
-  - Redbridge — the gap-prober's guessed URL (planning.redbridge.gov.uk)
-    returned a blank 39-byte response; existing seed data has a
-    different, real subdomain (www.redbridge.gov.uk) worth checking
-    properly before writing Redbridge off as broken.
+CRITICAL CHECK: user-provided screenshots show real, distinct branding
+(crests, council-specific nav, "Powered by idox"/"an idox solution"
+footers) for THREE councils whose exact URLs are currently used in
+production for DIFFERENT councils, based on real, previously-confirmed
+redirect findings:
+  - Tower Hamlets (development.towerhamlets.gov.uk) -> currently "Newham"
+  - Plymouth (planning.plymouth.gov.uk) -> currently "Gloucester"
+  - Greenwich (planning.royalgreenwich.gov.uk) -> currently "Richmond
+    upon Thames"
+Same exact pattern already found stale TWICE before this session
+(Cheltenham/Ipswich, Lewisham/Waltham Forest) — branding alone is
+suggestive but not as conclusive as real application addresses.
+Submits the real monthly-list form for all 6 URLs and checks actual
+addresses/postcodes, which settles each pair definitively.
 """
 import asyncio
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
@@ -30,16 +33,21 @@ CONTEXT_OPTIONS = {
 }
 
 TARGETS = [
-    ("Ipswich (own real domain, per seed data)", "https://www.ipswich.gov.uk/online-applications",
-     "if this now works on its own, real addresses should show IP postcodes — Ipswich's "
-     "URL was substituted with Cheltenham's as a workaround at some point, worth checking "
-     "if that's still necessary"),
-    ("Waltham Forest (own real domain, per seed data)", "https://www.walthamforest.gov.uk/online-applications",
-     "if this now works on its own, real addresses should show E postcodes — same "
-     "situation as Ipswich, substituted with Lewisham's URL as a workaround"),
-    ("Redbridge (corrected URL, per seed data)", "https://www.redbridge.gov.uk/online-applications",
-     "the gap-prober's guess (planning.redbridge.gov.uk) returned a blank 39-byte response — "
-     "this is the real URL from existing seed data, a different subdomain entirely"),
+    ("Tower Hamlets (claimed URL)", "https://development.towerhamlets.gov.uk/online-applications",
+     "genuine Tower Hamlets addresses should show E1/E2/E3/E14 postcodes; if this is really "
+     "Newham's backend, expect E6/E7/E12/E13/E15/E16 instead"),
+    ("Newham (own real domain, per seed data)", "https://www.newham.gov.uk/online-applications",
+     "if this now works on its own, real addresses should show E6/E7/E12/E13/E15/E16 postcodes"),
+    ("Plymouth (claimed URL)", "https://planning.plymouth.gov.uk/online-applications",
+     "genuine Plymouth addresses should show PL postcodes; if this is really Gloucester's "
+     "backend, expect GL postcodes instead"),
+    ("Gloucester (own real domain, per seed data)", "https://www.gloucester.gov.uk/online-applications",
+     "if this now works on its own, real addresses should show GL postcodes"),
+    ("Greenwich (claimed URL)", "https://planning.royalgreenwich.gov.uk/online-applications",
+     "genuine Greenwich addresses should show SE postcodes; if this is really Richmond's "
+     "backend, expect TW postcodes instead"),
+    ("Richmond upon Thames (own real domain, per seed data)", "https://www.richmond.gov.uk/online-applications",
+     "if this now works on its own, real addresses should show TW postcodes"),
 ]
 
 
@@ -61,7 +69,19 @@ async def full_monthly_flow(page, base_url: str, label: str):
     try:
         await page.select_option("#month", index=0, timeout=5_000)
     except Exception as e:
+        # DIAGNOSTIC (2026-07-28): a bare timeout here gave zero context
+        # on a real run (Ipswich/Waltham Forest both failed with no way
+        # to tell if it was a redirect, a wrong page, or something else)
+        # — printing real evidence now instead of an unexplained timeout.
+        title = await page.title()
+        body_snippet = ""
+        try:
+            body_text = await page.locator("body").inner_text()
+            body_snippet = " ".join(body_text.split())[:400]
+        except Exception:
+            pass
         print(f"  ⚠ Couldn't select month: {e}")
+        print(f"  ⚠ DIAGNOSTIC — real title: {title!r}, body: {body_snippet!r}")
         return
 
     for radio_id in ["#searchCriteria\\.dateReceived", "input[id*='Received'][type='radio']"]:
