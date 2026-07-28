@@ -1100,6 +1100,14 @@ IDOX_COUNCILS = [
     ("Plymouth City Council",
      "https://planning.plymouth.gov.uk/online-applications"),
 
+    # RESOLVED 2026-07-28 — Gloucester's real domain is
+    # publicaccess.gloucester.gov.uk (NOT www.gloucester.gov.uk,
+    # confirmed genuinely dead above), found via web search and
+    # confirmed via a real, direct screenshot showing genuine "Powered
+    # by idox" branding and a working weekly-list form.
+    ("Gloucester City Council",
+     "https://publicaccess.gloucester.gov.uk/online-applications"),
+
     ("Cotswold District Council",
      "https://publicaccess.cotswold.gov.uk/online-applications"),
 
@@ -1253,6 +1261,13 @@ IDOX_COUNCILS = [
 
     ("London Borough of Tower Hamlets",
      "https://development.towerhamlets.gov.uk/online-applications"),
+
+    # RESOLVED 2026-07-28 — Newham's real domain is pa.newham.gov.uk
+    # (NOT www.newham.gov.uk, confirmed genuinely dead above), found via
+    # web search and confirmed via a real, direct screenshot showing
+    # genuine "Powered by idox" branding and a working weekly-list form.
+    ("London Borough of Newham",
+     "https://pa.newham.gov.uk/online-applications"),
 
     # BROKEN — Redbridge uses Swift LG (planning.redbridge.gov.uk/swiftlg/apas), not Idox.
     # ("London Borough of Redbridge",
@@ -1544,7 +1559,7 @@ VALUES
   ('Plymouth City Council','plymouth-city-council','idox','england','https://planning.plymouth.gov.uk/online-applications','pending',true),
   ('Exeter City Council','exeter-city-council','idox','england','https://publicaccess.exeter.gov.uk/online-applications','pending',true),
   ('Cheltenham Borough Council','cheltenham-borough-council','idox','england','https://publicaccess.cheltenham.gov.uk/online-applications','pending',true),
-  ('Gloucester City Council','gloucester-city-council','idox','england','https://www.gloucester.gov.uk/online-applications','pending',true),
+  ('Gloucester City Council','gloucester-city-council','idox','england','https://publicaccess.gloucester.gov.uk/online-applications','pending',true),
   ('Ipswich Borough Council','ipswich-borough-council','idox','england','https://www.ipswich.gov.uk/online-applications','pending',true),
   ('Peterborough City Council','peterborough-city-council','idox','england','https://www.peterborough.gov.uk/online-applications','pending',true),
   ('Norwich City Council','norwich-city-council','idox','england','https://planning.norwich.gov.uk/online-applications','pending',true),
@@ -1553,7 +1568,7 @@ VALUES
   ('London Borough of Lambeth','london-borough-of-lambeth','idox','england','https://planning.lambeth.gov.uk/online-applications','pending',true),
   ('London Borough of Lewisham','london-borough-of-lewisham','idox','england','https://planning.lewisham.gov.uk/online-applications','pending',true),
   ('London Borough of Tower Hamlets','london-borough-of-tower-hamlets','idox','england','https://development.towerhamlets.gov.uk/online-applications','pending',true),
-  ('London Borough of Newham','london-borough-of-newham','idox','england','https://www.newham.gov.uk/online-applications','pending',true),
+  ('London Borough of Newham','london-borough-of-newham','idox','england','https://pa.newham.gov.uk/online-applications','pending',true),
   ('London Borough of Waltham Forest','london-borough-of-waltham-forest','idox','england','https://www.walthamforest.gov.uk/online-applications','pending',true),
   ('London Borough of Redbridge','london-borough-of-redbridge','idox','england','https://www.redbridge.gov.uk/online-applications','pending',true),
   ('London Borough of Barking and Dagenham','london-borough-of-barking-and-dagenham','idox','england','https://www.lbbd.gov.uk/online-applications','pending',true),
