@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 """
-PlanFind — multi-council Idox recon (round 4, 2026-07-25).
+PlanFind — multi-council Idox recon (round 5, 2026-07-28).
 
-PURPOSE: idox_gap_prober.py's batch HTTP scan found 7 real hits against
-121 gap-list candidates (councils with no confirmed vendor at all) —
-Brentwood, Cheltenham, Chesterfield, Hastings, Lewisham, Redbridge,
-Bridgend. That was a lightweight, unauthenticated HTTP check only
-(page loaded + contained Idox-flavoured text) — this does the REAL
-verification, same as every other round: actually navigate, check for
-a working month/date search form, confirm results actually render.
-Hits here are what's safe to add to idox_councils.py; anything that
-fails needs individual follow-up, not automatic trust either way.
-
-All 7 targets use standard monthly mode (no evidence yet of a "weekly"
-council among them).
+PURPOSE: round 4 confirmed 3 real hits (Brentwood, Cheltenham, Lewisham,
+now active) and 2 genuine false positives from the prober (Hastings —
+redirected to a homepage; Bridgend — a real 404). Redbridge was ALSO a
+false positive at the URL the prober guessed (planning.redbridge.gov.uk
+— blank/empty response), but existing seed SQL data (from a much
+earlier bulk-seed operation) has a different, real URL on record:
+www.redbridge.gov.uk/online-applications. Worth one clean, targeted
+check with the corrected URL before writing Redbridge off entirely —
+same "wrong subdomain guess, not a genuinely broken council" pattern
+already confirmed for Solihull/Waverley earlier this session.
 """
 import asyncio
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
@@ -32,18 +30,8 @@ CONTEXT_OPTIONS = {
 
 # (name, base_url, mode)
 TARGETS = [
-    ("Brentwood Borough Council", "https://publicaccess.brentwood.gov.uk/online-applications", "monthly"),
-    ("Cheltenham Borough Council", "https://publicaccess.cheltenham.gov.uk/online-applications", "monthly"),
-    ("Hastings Borough Council", "https://hastings.gov.uk/online-applications", "monthly"),
-    ("London Borough of Lewisham", "https://planning.lewisham.gov.uk/online-applications", "monthly"),
-    ("London Borough of Redbridge", "https://planning.redbridge.gov.uk/online-applications", "monthly"),
-    ("Bridgend County Borough Council", "https://planning.bridgend.gov.uk/online-applications", "monthly"),
+    ("London Borough of Redbridge", "https://www.redbridge.gov.uk/online-applications", "monthly"),
 ]
-# Chesterfield DELIBERATELY DROPPED (2026-07-25) — confirmed already
-# active in idox_councils.py (COUNCIL_DB_IDS id=317), a real error in
-# the gap-list build 2 sessions ago (a fuzzy name-match miss), not a
-# genuine new candidate.
-
 RESULTS_CONTAINER_SELECTOR = (
     "ul.searchresults, #searchresults, div.searchresults, #searchResultsContainer"
 )
