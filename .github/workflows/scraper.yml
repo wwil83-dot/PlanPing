@@ -3,9 +3,11 @@ name: PlanPing scraper
 on:
   schedule:
     - cron: '0 3 * * *'   # open data scrape
-    - cron: '0 4 * * *'   # idox nightly scrape — batch 1
-    - cron: '10 4 * * *'  # idox nightly scrape — batch 2
-    - cron: '20 4 * * *'  # arcus nightly scrape
+    - cron: '0 4 * * *'   # idox nightly scrape — batch 1 of 4
+    - cron: '50 4 * * *'  # idox nightly scrape — batch 2 of 4
+    - cron: '40 5 * * *'  # idox nightly scrape — batch 3 of 4
+    - cron: '30 6 * * *'  # idox nightly scrape — batch 4 of 4
+    - cron: '20 7 * * *'  # arcus nightly scrape
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
   workflow_dispatch:
@@ -15,7 +17,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -97,19 +99,19 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-v1
       - run: pip install playwright beautifulsoup4 httpx
       - run: playwright install --with-deps chromium
-      - name: Run Idox scraper — nightly batch 1 of 2 (last 14 days)
+      - name: Run Idox scraper — nightly batch 1 of 4 (last 14 days)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MAX_MINUTES: "55"
           DAYS_BACK: "14"
-          CONCURRENCY: "3"
-        run: cd scrapers && python idox_scraper.py --batch=1
+          CONCURRENCY: "2"
+        run: cd scrapers && python idox_scraper.py --batch=1 --total-batches=4
 
   scrape_idox_b:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_b') ||
-      (github.event_name == 'schedule' && github.event.schedule == '10 4 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '50 4 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 65
     steps:
@@ -124,14 +126,78 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-v1
       - run: pip install playwright beautifulsoup4 httpx
       - run: playwright install --with-deps chromium
-      - name: Run Idox scraper — nightly batch 2 of 2 (last 14 days)
+      - name: Run Idox scraper — nightly batch 2 of 4 (last 14 days)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MAX_MINUTES: "55"
           DAYS_BACK: "14"
-          CONCURRENCY: "3"
-        run: cd scrapers && python idox_scraper.py --batch=2
+          CONCURRENCY: "2"
+        run: cd scrapers && python idox_scraper.py --batch=2 --total-batches=4
+
+  # ---------------------------------------------------------------------
+  # scrape_idox_c and scrape_idox_d — added 2026-07-28. Widened from 2
+  # batches to 4, each roughly half the size of before, and reduced
+  # CONCURRENCY from 3 to 2 — real evidence (widespread 429/WAF blocks
+  # across many unrelated council domains in a single run) suggested
+  # aggregate request volume was a real factor, not just per-domain
+  # load. Smaller batches spread further apart in the schedule (50+
+  # minutes, not 10) reduce how many councils get hit within any given
+  # tight time window.
+  # ---------------------------------------------------------------------
+  scrape_idox_c:
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_c') ||
+      (github.event_name == 'schedule' && github.event.schedule == '40 5 * * *')
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright beautifulsoup4 httpx
+      - run: playwright install --with-deps chromium
+      - name: Run Idox scraper — nightly batch 3 of 4 (last 14 days)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_MINUTES: "55"
+          DAYS_BACK: "14"
+          CONCURRENCY: "2"
+        run: cd scrapers && python idox_scraper.py --batch=3 --total-batches=4
+
+  scrape_idox_d:
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_d') ||
+      (github.event_name == 'schedule' && github.event.schedule == '30 6 * * *')
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright beautifulsoup4 httpx
+      - run: playwright install --with-deps chromium
+      - name: Run Idox scraper — nightly batch 4 of 4 (last 14 days)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_MINUTES: "55"
+          DAYS_BACK: "14"
+          CONCURRENCY: "2"
+        run: cd scrapers && python idox_scraper.py --batch=4 --total-batches=4
 
   scrape_idox_bulk:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_bulk'
@@ -824,3 +890,40 @@ jobs:
       - run: playwright install --with-deps chromium
       - name: Run Cheltenham/Lewisham redirect verification
         run: cd scrapers && python idox_cheltenham_lewisham_verify.py
+
+  # ---------------------------------------------------------------------
+  # Redbridge recon — manual trigger only, no schedule.
+  #
+  # Built 2026-07-28. Two guessed Idox URLs for Redbridge were both
+  # wrong — a web search surfaced a genuinely different real URL
+  # (my.redbridge.gov.uk/planning) instead, with real confirmed content
+  # in the search results directly. Deliberately generic/vendor-agnostic
+  # recon, NOT assumed to be Idox — the URL shape and wording don't
+  # obviously match Idox's convention, could be a different vendor
+  # entirely.
+  # ---------------------------------------------------------------------
+  redbridge_recon:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'redbridge_recon'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright
+      - run: playwright install --with-deps chromium
+      - name: Run Redbridge recon
+        run: cd scrapers && python redbridge_recon.py
+      - name: Upload recon output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redbridge-recon-output
+          path: /tmp/redbridge_recon.*
+          retention-days: 7
