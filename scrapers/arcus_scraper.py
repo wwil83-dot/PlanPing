@@ -389,6 +389,7 @@ _DECISION_DATE_DIAGNOSED: set[str] = set()
 # as _DECISION_DATE_DIAGNOSED, so the next real run shows real evidence
 # instead of guessing further.
 _SUBMITTED_DATE_DIAGNOSED: set[str] = set()
+_RAW_LINES_DIAGNOSED: set[str] = set()
 
 _LABEL_PATTERNS = {
     "reference": r"Application Reference|Reference",
@@ -447,6 +448,19 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
     # make the scan itself robust to arbitrary interruptions.
     _UI_CHROME_LINES = {"pagination navigation", "pagination"}
     lines = [l for l in lines if l.strip().lower() not in _UI_CHROME_LINES]
+
+    # DIAGNOSTIC (2026-07-28): the previous two fixes (removing
+    # "Pagination navigation", handling genuinely-empty field values)
+    # were both real and confirmed working, but 'date' is STILL
+    # completely absent from every record on a re-run — not empty this
+    # time, genuinely never matched by any of our 4 known patterns
+    # (Date Valid|Valid Date|Received Date|Date Received). Rather than
+    # guess a 5th pattern blind, printing the raw, already-filtered lines
+    # directly — real evidence of what the actual label text says, once
+    # per council so this doesn't spam every page.
+    if council_name not in _RAW_LINES_DIAGNOSED:
+        _RAW_LINES_DIAGNOSED.add(council_name)
+        print(f"    ⚠ RAW LINES DIAGNOSTIC [{council_name}] (first 40 lines): {lines[:40]!r}")
 
     records: list[dict] = []
     current: dict = {}
