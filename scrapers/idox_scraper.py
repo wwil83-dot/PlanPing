@@ -1456,19 +1456,35 @@ async def main():
     # --------------------------------------------------------------------
     # Batch splitting — as the council list grows, a single nightly run
     # risks exceeding GitHub Actions' hard job timeout (see scrape.yml).
-    # Pass --batch=1 or --batch=2 to run only half the council list.
-    # The split is computed dynamically from IDOX_COUNCILS' current length,
-    # so it auto-rebalances every time councils are added or removed —
-    # no manual reassignment of which council belongs to which batch.
-    # Omit --batch entirely to run the full list (e.g. for --bulk mode,
-    # or local testing).
+    # Pass --batch=N --total-batches=M to run only 1/M of the council
+    # list (the Nth slice). The split is computed dynamically from
+    # IDOX_COUNCILS' current length, so it auto-rebalances every time
+    # councils are added or removed — no manual reassignment of which
+    # council belongs to which batch. --total-batches defaults to 2 for
+    # backward compatibility with the original 2-batch setup. Omit
+    # --batch entirely to run the full list (e.g. for --bulk mode, or
+    # local testing).
+    #
+    # CHANGED 2026-07-28: widened from a hardcoded 2-way split to any N,
+    # after real evidence (widespread 429/WAF blocks across many
+    # unrelated council domains in a single run) suggested aggregate
+    # request volume across the whole batch was a real factor — more,
+    # smaller batches spread further apart in the schedule reduces how
+    # many councils get hit within any given tight time window.
     # --------------------------------------------------------------------
     batch = None
+    total_batches = 2
+    for arg in sys.argv:
+        if arg.startswith("--total-batches="):
+            total_batches = int(arg.split("=", 1)[1])
+            if total_batches < 1:
+                print(f"ERROR: --total-batches must be >= 1, got {total_batches}")
+                sys.exit(1)
     for arg in sys.argv:
         if arg.startswith("--batch="):
             batch = int(arg.split("=", 1)[1])
-            if batch not in (1, 2):
-                print(f"ERROR: --batch must be 1 or 2, got {batch}")
+            if not (1 <= batch <= total_batches):
+                print(f"ERROR: --batch must be between 1 and {total_batches}, got {batch}")
                 sys.exit(1)
 
     try:
@@ -1479,11 +1495,14 @@ async def main():
 
     full_count = len(IDOX_COUNCILS)
     if batch is not None:
-        midpoint = full_count // 2
-        if batch == 1:
-            IDOX_COUNCILS = IDOX_COUNCILS[:midpoint]
-        else:
-            IDOX_COUNCILS = IDOX_COUNCILS[midpoint:]
+        # Even split with any remainder distributed across the first
+        # few batches, so no batch is left disproportionately small/large
+        # (e.g. 208 councils / 4 batches = exactly 52 each; 210 / 4 =
+        # 53,53,52,52 rather than a lopsided split).
+        base_size, remainder = divmod(full_count, total_batches)
+        start = (batch - 1) * base_size + min(batch - 1, remainder)
+        size = base_size + (1 if batch <= remainder else 0)
+        IDOX_COUNCILS = IDOX_COUNCILS[start:start + size]
 
     bulk = "--bulk" in sys.argv
     # NOTE (2026-07-16): scrape.yml's scrape_idox_bulk job sets
@@ -1508,7 +1527,7 @@ async def main():
     print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Idox scraper (Playwright)")
     print(f"Mode:        {'BULK' if bulk else 'FAST'} ({days} days back)")
     if batch is not None:
-        print(f"Batch:       {batch} of 2 ({len(IDOX_COUNCILS)} of {full_count} councils)")
+        print(f"Batch:       {batch} of {total_batches} ({len(IDOX_COUNCILS)} of {full_count} councils)")
     print(f"Councils:    {len(IDOX_COUNCILS)}")
     print(f"Concurrency: {concurrency}")
     print(f"Budget:      {budget} minutes")
@@ -1610,10 +1629,10 @@ async def main():
         recheck_lo = (date.today() - timedelta(days=120)).isoformat()
         recheck_hi = (date.today() - timedelta(days=15)).isoformat()
         # Scoped to THIS batch's councils only (to_scrape is already the
-        # post-split list at this point) — batch A and batch B run as
-        # separate jobs with separate time budgets, so there's no reason
-        # for batch A's job to fetch/carry pending-recheck data for batch
-        # B's councils, or vice versa.
+        # post-split list at this point) — each batch runs as a separate
+        # job with its own time budget, so there's no reason for one
+        # batch's job to fetch/carry pending-recheck data for another
+        # batch's councils.
         batch_council_ids = sorted({council_id for _, council_id in to_scrape})
         try:
             if batch_council_ids:
