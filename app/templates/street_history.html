@@ -6,13 +6,11 @@
     <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Street History</h1>
     <p style="color:var(--muted)">Search by street or address to see everything we've recorded there — not a postcode radius, just that specific place.</p>
   </div>
-
   <form action="/street-history" method="get" style="display:flex;gap:.6rem;margin-bottom:1.5rem;flex-wrap:wrap">
     <input type="text" name="q" value="{{ q }}" placeholder="e.g. High Street, Leigh-on-Sea"
       class="search-input" style="flex:1;min-width:220px" autocomplete="off">
     <button type="submit" class="btn btn-primary">Search</button>
   </form>
-
   {% if searched %}
     {% if applications %}
     <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">
@@ -27,7 +25,10 @@
         </div>
         <span class="badge badge-status badge-{{ a.status_class }}" style="flex-shrink:0">{{ a.status | title }}</span>
       </div>
-      <div style="font-size:.72rem;color:var(--muted);margin-top:.4rem">{{ a.reference }} · {{ a.council_name }} · {{ a.days_ago }}</div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:.4rem">
+        {{ a.reference }} · {{ a.council_name }} ·
+        {% if a.date_unavailable_note %}date not shown by council{% else %}{{ a.days_ago }}{% endif %}
+      </div>
     </a>
     {% endfor %}
     {% else %}
