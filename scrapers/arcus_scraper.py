@@ -434,6 +434,20 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
     text = soup.get_text("\n", strip=True)
     lines = [l for l in text.split("\n") if l.strip()]
 
+    # FIX (2026-07-28): confirmed real root cause via direct diagnostic
+    # evidence — SUBMITTED DATE DIAGNOSTIC printouts across 6 different
+    # councils all showed 'decision': 'Pagination navigation' (even for
+    # records with no decision at all, e.g. status='Under Consultation')
+    # AND a completely missing 'date' key, every single time. This is a
+    # pagination control's accessibility label bleeding into the
+    # flattened text stream right where a real field value should be,
+    # shifting the simple "label, then next line is the value" alignment
+    # enough that the date field gets silently skipped. Filtering out
+    # known UI-chrome lines before the scan runs, rather than trying to
+    # make the scan itself robust to arbitrary interruptions.
+    _UI_CHROME_LINES = {"pagination navigation", "pagination"}
+    lines = [l for l in lines if l.strip().lower() not in _UI_CHROME_LINES]
+
     records: list[dict] = []
     current: dict = {}
     i = 0
@@ -441,6 +455,31 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
         m = _ALL_LABELS_RE.match(lines[i])
         if m and i + 1 < len(lines):
             field = _field_for_label(m.group(1))
+            # FIX (2026-07-28): the DEEPER real cause, found via a test
+            # reconstructing the confirmed bug — removing the pagination
+            # line alone wasn't enough. A label with a genuinely EMPTY
+            # value (e.g. "Decision" on an undecided application, which
+            # has no decision text to render at all) goes straight from
+            # one label to the NEXT label in the flattened text, with no
+            # value line in between. The old code blindly took
+            # lines[i+1] as the value regardless, wrongly consuming the
+            # next field's own LABEL as if it were this field's value —
+            # corrupting one field and causing the loop to skip past the
+            # next real label entirely (advancing by 2 when only 1 was
+            # genuinely consumed). Checking whether lines[i+1] is itself
+            # a recognized label first — if so, this field is empty, and
+            # we advance by 1 (not 2) so the next line gets correctly
+            # re-examined as its own label on the following iteration.
+            next_is_label = bool(_ALL_LABELS_RE.match(lines[i + 1]))
+            if next_is_label:
+                if field == "reference":
+                    if current.get("reference"):
+                        records.append(current)
+                    current = {"reference": ""}
+                elif field:
+                    current[field] = ""
+                i += 1
+                continue
             value = lines[i + 1]
             if field == "reference":
                 if current.get("reference"):
