@@ -430,6 +430,7 @@ async def application_detail(request: Request, app_id: int):
             raise HTTPException(404, "Application not found")
 
         app_data = dict(row)
+        _add_date_availability_flag([app_data])
 
         neighbours = []
         if app_data.get("lat") and app_data.get("lng"):
@@ -477,9 +478,12 @@ async def council_page(request: Request, slug: str):
 
     _add_date_availability_flag(apps)
 
+    council_dict = dict(council)
+    council_dict["date_unavailable_note"] = council["name"] in COUNCILS_WITHOUT_DATE_DATA
+
     return render("council.html", {
         "request": request,
-        "council": dict(council),
+        "council": council_dict,
         "recent": apps,
     })
 
@@ -643,6 +647,79 @@ async def councils_list(request: Request):
         "pending": pending,
         "total": len(councils),
         "covered_count": len(covered),
+    })
+
+
+# Real, confirmed reasons for specific councils that have gone quiet —
+# only councils we've actually manually diagnosed with real evidence
+# this session, not a guess. Anything not listed here still shows on
+# the coverage-gaps page (using last_saved_at, which we do have), just
+# without inventing a specific cause we haven't actually confirmed.
+KNOWN_GAP_REASONS = {
+    "Solihull Metropolitan Borough Council":
+        "The council's server is refusing connections from our automated "
+        "systems specifically (confirmed consistent, not a general outage).",
+    "Bolsover District Council":
+        "The council's website is blocking automated access with a security "
+        "check (confirmed via a real form-submission test).",
+    "North East Derbyshire District Council":
+        "The council's website is blocking automated access with a security "
+        "check (confirmed via a real form-submission test).",
+    "Brighton and Hove City Council":
+        "The council's planning search consistently returns a blank page to "
+        "our automated systems (confirmed via repeated, independent tests).",
+}
+
+# How many days without a successful save before we consider a
+# previously-working council to be a genuine gap, not just a quiet
+# night. Generous enough to avoid flagging a single bad run, tight
+# enough to catch a real, sustained problem quickly.
+GAP_THRESHOLD_DAYS = 10
+
+
+@app.get("/coverage-gaps", response_class=HTMLResponse)
+async def coverage_gaps(request: Request):
+    """Honest, specific transparency about councils that WERE working and
+    have since gone quiet — deliberately distinct from /councils' three
+    buckets, which are about whether a council has EVER been covered.
+    This page is about regressions: real data existed, collection has
+    since stopped. Inspired directly by a comparable competitor's
+    "Known Data Gaps" page, which names the exact councils, the exact
+    date, and what date the data is frozen at — the same standard we're
+    matching here.
+
+    HONEST LIMITATION: our diagnostics currently only print the specific
+    failure reason (timeout vs WAF vs 404 etc.) to console logs during a
+    scrape run — they aren't persisted anywhere in the database. This
+    page can reliably say a council has gone quiet and since when
+    (last_saved_at is real, stored data), but can only give a specific
+    root cause for the handful of councils in KNOWN_GAP_REASONS above,
+    which we've actually manually diagnosed with real evidence.
+    Everything else gets an honest "no new data since X" without
+    inventing a cause we haven't confirmed.
+    """
+    async with get_db() as db:
+        rows = await db.fetch("""
+            SELECT name, slug, system, coverage_source, portal_url,
+                   last_saved_at,
+                   (CURRENT_DATE - last_saved_at::date) AS days_since_save
+            FROM councils
+            WHERE active = true
+            AND coverage_source NOT IN ('pending', 'none', 'manual_link')
+            AND last_saved_at IS NOT NULL
+            AND last_saved_at < NOW() - (INTERVAL '1 day' * $1)
+            ORDER BY last_saved_at ASC
+        """, GAP_THRESHOLD_DAYS)
+
+    gaps = [dict(r) for r in rows]
+    for g in gaps:
+        g["known_reason"] = KNOWN_GAP_REASONS.get(g["name"])
+
+    return render("coverage_gaps.html", {
+        "request": request,
+        "gaps": gaps,
+        "total": len(gaps),
+        "threshold_days": GAP_THRESHOLD_DAYS,
     })
 
 
