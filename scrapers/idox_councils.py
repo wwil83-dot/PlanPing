@@ -260,16 +260,23 @@ IDOX_COUNCILS = [
     # ("Bury Metropolitan Borough Council",
     #  "https://planning.bury.gov.uk/online-applications"),
 
-    # NOTE: planningpa.oldham.gov.uk redirects to Rochdale's Idox server.
-    # Using it here so Rochdale (id=172) gets its own data correctly.
-    # Oldham's own correct URL needs research.
-    ("Rochdale Borough Council",
-     "https://planningpa.oldham.gov.uk/online-applications"),
-
-    # BROKEN — original URL redirects to Rochdale's server instead of Oldham's own data.
-    # Needs correct URL research before re-enabling.
-    # ("Oldham Metropolitan Borough Council",
+    # CORRECTED 2026-07-29 — the old "redirects to Rochdale" finding is
+    # confirmed STALE. Real verification submitted the actual monthly-
+    # list form and found every result address explicitly says "Oldham"
+    # with real OL postcodes (e.g. "31 Stuart Street Oldham OL8 1SD",
+    # "Jubilee Milnrow Road Shaw Oldham OL2 8BX") — genuinely Oldham's
+    # own data, not Rochdale's. The ACTIVE PRODUCTION Rochdale entry
+    # below has been WRONG — silently saving Oldham's real data
+    # mislabeled as Rochdale. Rochdale's claimed own real domain
+    # (planning.rochdale.gov.uk) is confirmed genuinely DEAD — a real
+    # DNS failure (ERR_NAME_NOT_RESOLVED), not even a valid domain, so
+    # Rochdale currently has NO known working URL at all — needs fresh
+    # research from scratch, not another substitute.
+    # ("Rochdale Borough Council",
     #  "https://planningpa.oldham.gov.uk/online-applications"),
+
+    ("Oldham Metropolitan Borough Council",
+     "https://planningpa.oldham.gov.uk/online-applications"),
 
     # NOTE: planning.bury.gov.uk redirects to Tameside's Idox server.
     ("Tameside Metropolitan Borough Council",
