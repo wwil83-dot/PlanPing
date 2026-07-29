@@ -630,6 +630,12 @@ async def councils_list(request: Request):
         if c["coverage_source"] not in ("pending", "none", "manual_link")
         and c["app_count"] > 0
     ]
+    for c in covered:
+        c["area_aliases"] = COUNCIL_AREA_ALIASES.get(c["name"], [])
+        # Lowercase combined name+aliases string for a simple client-side
+        # search match — so searching "Harrogate" finds the real North
+        # Yorkshire Council card, not just its own literal name.
+        c["search_haystack"] = " ".join([c["name"]] + c["area_aliases"]).lower()
 
     manual_link = [
         c for c in councils
@@ -675,6 +681,26 @@ KNOWN_GAP_REASONS = {
 # night. Generous enough to avoid flagging a single bad run, tight
 # enough to catch a real, sustained problem quickly.
 GAP_THRESHOLD_DAYS = 10
+
+# Real, confirmed areas covered by a single merged scraper entry — NOT
+# separate councils, and deliberately NOT counted separately in
+# covered_count. Some councils' modern unitary portal genuinely merges
+# several former district councils into one search (confirmed via real
+# evidence, e.g. North Yorkshire's own "Hello and welcome to Public
+# Access for Harrogate, Scarborough, Craven, Hambleton and Selby
+# Planning Areas" notice). Counting each historic name as its own
+# "covered" entry would inflate the headline number in a misleading way
+# — if the one real portal behind them goes down, all of them would go
+# dark from a single root cause, not independent problems. Shown as
+# searchable aliases instead, so someone looking for "Harrogate" or
+# "Craven" specifically can still find a clear answer, correctly
+# attributed to the real underlying council.
+COUNCIL_AREA_ALIASES = {
+    "North Yorkshire Council": [
+        "Harrogate", "Scarborough", "Craven", "Hambleton", "Selby",
+    ],
+}
+
 
 
 @app.get("/coverage-gaps", response_class=HTMLResponse)
