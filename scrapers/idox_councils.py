@@ -593,6 +593,14 @@ IDOX_COUNCILS = [
     ("Newcastle City Council",
      "https://publicaccessapplications.newcastle.gov.uk/online-applications"),
 
+    # Added 2026-07-29 — confirmed via a real, direct screenshot showing
+    # genuine "Powered by idox" branding. Genuinely distinct from
+    # Newcastle City Council above (Newcastle-upon-Tyne) — this is
+    # Newcastle-under-Lyme, Staffordshire, a completely different
+    # council with a similar name.
+    ("Newcastle-under-Lyme Borough Council",
+     "https://publicaccess.newcastle-staffs.gov.uk/online-applications"),
+
     ("Sunderland City Council",
      "https://online-applications.sunderland.gov.uk/online-applications"),
 
@@ -634,9 +642,14 @@ IDOX_COUNCILS = [
     ("Wakefield Metropolitan District Council",
      "https://planning.wakefield.gov.uk/online-applications"),
 
-    # BROKEN — Doncaster is blocked by Cloudflare ("Just a moment..." challenge).
-    # ("Doncaster Metropolitan Borough Council",
-    #  "https://planning.doncaster.gov.uk/online-applications"),
+    # RE-ENABLED 2026-07-29 — the earlier Cloudflare "Just a moment..."
+    # block was confirmed via a fresh, real screenshot showing genuine
+    # "Powered by idox" branding and a working weekly-list form, no
+    # challenge page at all. Worth treating the first re-run as the real
+    # test — matching the same "retry rather than assume it's permanent"
+    # precedent as other Cloudflare-flagged councils this session.
+    ("Doncaster Metropolitan Borough Council",
+     "https://planning.doncaster.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # SOUTH EAST
