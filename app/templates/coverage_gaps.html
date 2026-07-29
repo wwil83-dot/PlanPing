@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Known Coverage Gaps — PlanFind{% endblock %}
+{% block content %}
+<main class="main">
+  <div style="margin-bottom:1.75rem">
+    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Known Coverage Gaps</h1>
+    <p style="color:var(--muted);max-width:640px">
+      Councils listed below were previously being updated automatically and have since gone quiet —
+      we'd rather tell you directly than let you find a stale result on your own. This list doesn't
+      include councils we've never covered at all; see the <a href="/councils">full coverage page</a> for that.
+    </p>
+  </div>
+
+  {% if total == 0 %}
+  <div style="background:var(--blue-light);border:1px solid #c3d9f0;border-radius:12px;padding:1.5rem">
+    <p style="font-size:.9rem;color:var(--muted)">
+      No known gaps right now — every previously-covered council has updated within the last
+      {{ threshold_days }} days.
+    </p>
+  </div>
+  {% else %}
+  <p style="font-size:.85rem;color:var(--muted);margin-bottom:1.25rem">
+    {{ total }} council{{ 's' if total != 1 }} with no new data for {{ threshold_days }}+ days
+  </p>
+
+  <div style="display:flex;flex-direction:column;gap:.75rem">
+    {% for g in gaps %}
+    <div style="background:#fff;border:1px solid var(--border);border-left:4px solid #e0a030;border-radius:8px;padding:1.1rem 1.25rem">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+        <div>
+          <strong style="font-size:1rem">{{ g.name }}</strong>
+          <div style="font-size:.8rem;color:var(--muted);margin-top:.2rem">
+            Data current to {{ g.last_saved_at.strftime('%-d %B %Y') }} — no new applications collected since
+            ({{ g.days_since_save }} days)
+          </div>
+        </div>
+        {% if g.portal_url %}
+        <a href="{{ g.portal_url }}" target="_blank" rel="noopener" class="btn btn-sm">
+          Visit council portal →
+        </a>
+        {% endif %}
+      </div>
+
+      {% if g.known_reason %}
+      <p style="font-size:.85rem;color:var(--text);margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border)">
+        <strong>What we know:</strong> {{ g.known_reason }}
+      </p>
+      {% else %}
+      <p style="font-size:.8rem;color:var(--muted);margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border)">
+        We're aware collection has stopped and are investigating the cause. This notice will be
+        removed once collection resumes.
+      </p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</main>
+{% endblock %}
