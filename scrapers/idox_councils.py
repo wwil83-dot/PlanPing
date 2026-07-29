@@ -522,7 +522,20 @@ IDOX_COUNCILS = [
     # adding a separate Craven entry (publicaccess.cravendc.gov.uk) since it's
     # almost certainly the same underlying data, to avoid double-counting.
     # Richmondshire is a 6th former district still on its own unmerged portal.
-    # Ryedale not otherwise checked.
+    #
+    # RESOLVED 2026-07-29 — Ryedale is confirmed to ALSO be on its own,
+    # separate, unmerged portal (same situation as Richmondshire), not
+    # included in the main merged portal at all: a completely different
+    # domain and path (planningregister.ryedale.gov.uk/caonline-
+    # applications/, not publicaccess.northyorks.gov.uk/online-
+    # applications/). Added as its own entry below.
+    #
+    # REAL, SCHEDULED MAINTENANCE WINDOW (confirmed directly on the portal
+    # itself, 2026-07-29): "essential maintenance... disrupted between 5pm
+    # on Friday 31 July until 9am on Tuesday 4 August 2026." If this
+    # council's scrape fails or returns nothing during that specific
+    # window, that's expected, planned downtime — not a new WAF/timeout
+    # problem to investigate.
     #
     # IMPORTANT LIMITATION (found 2026-07-29, directly on the portal itself):
     # the Selby and Hambleton migration into this merged portal is ongoing
@@ -545,6 +558,17 @@ IDOX_COUNCILS = [
 
     ("North Yorkshire Council (Richmondshire)",
      "https://planning.richmondshire.gov.uk/online-applications"),
+
+    # Added 2026-07-29 — confirmed via a real, direct screenshot showing
+    # genuine "an idox solution" branding. Note the unusual path
+    # ("/caonline-applications/" not the usual "/online-applications/")
+    # — a real, confirmed variant for this specific council, not a typo.
+    # Has its own separate, real, scheduled maintenance window too
+    # (confirmed on the portal itself): disrupted 6pm Wed 29 July until
+    # 6pm Thu 30 July 2026 — a different window from the main North
+    # Yorkshire portal's own outage above, don't conflate the two.
+    ("North Yorkshire Council (Ryedale)",
+     "https://planningregister.ryedale.gov.uk/caonline-applications"),
 
     # -------------------------------------------------------------------------
     # CUMBRIA
