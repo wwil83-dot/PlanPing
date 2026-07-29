@@ -523,6 +523,22 @@ IDOX_COUNCILS = [
     # almost certainly the same underlying data, to avoid double-counting.
     # Richmondshire is a 6th former district still on its own unmerged portal.
     # Ryedale not otherwise checked.
+    #
+    # IMPORTANT LIMITATION (found 2026-07-29, directly on the portal itself):
+    # the Selby and Hambleton migration into this merged portal is ongoing
+    # and INCOMPLETE — the council's own notice states only applications
+    # received AFTER 8 June 2026 are displayed here for those two former
+    # districts; anything received on or before that date for Selby/
+    # Hambleton specifically only exists on their old, separate websites.
+    # Doesn't affect our own nightly 14-day scrape at all (everything in
+    # that window is necessarily after 8 June 2026), but matters for
+    # Street History and any future bulk/historical backfill for this
+    # council — a Selby/Hambleton address search here could look
+    # complete while genuinely missing everything before the cutoff,
+    # with no way to tell from our own data alone. Worth surfacing this
+    # specific caveat if Street History or a coverage-gaps page ever
+    # needs per-council historical-depth notes, not just a generic
+    # "roughly 6 months" disclaimer.
     # -------------------------------------------------------------------------
     ("North Yorkshire Council",
      "https://publicaccess.northyorks.gov.uk/online-applications"),
