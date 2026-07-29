@@ -68,6 +68,9 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Epping Forest District Council":       35,
     "Manchester City Council":              52,
     "Salford City Council":                 62,
+    "Rochdale Borough Council":             172,  # reused from Idox — genuinely
+                                                   # never was Idox, real Arcus council
+                                                   # misfiled the whole time
     "Folkestone and Hythe District Council": 423,
     "London Borough of Haringey":            243,
     "Cumberland Council":                    424,
@@ -158,6 +161,22 @@ ARCUS_COUNCILS = [
      "advanced_search", None),
     ("Milton Keynes City Council",
      "https://www.be.milton-keynes.gov.uk/pr/s",
+     "advanced_search", None),
+
+    # Added 2026-07-29 — confirmed via a real, direct screenshot showing
+    # the genuine Arcus register-view URL and Advanced Search form
+    # structure (Category/Location of works/Application Status/Valid
+    # date from-to/Decision notice was sent date from-to/Ward/Parish —
+    # identical shape to Bromley/Bracknell/Milton Keynes above). Found
+    # while investigating why Rochdale's claimed Idox URL
+    # (planning.rochdale.gov.uk) genuinely didn't resolve at all — turns
+    # out Rochdale was never Idox, it's a real Arcus council, previously
+    # misfiled the whole time. See idox_councils.py's Oldham/Rochdale
+    # correction for the full story (Rochdale's ACTIVE Idox entry had
+    # been silently using Oldham's real URL instead, based on a stale
+    # "redirect" finding).
+    ("Rochdale Borough Council",
+     "https://account.rochdale.gov.uk/pr/s",
      "advanced_search", None),
 
     # Added 2026-07-21, confirmed via arcus_recon.py real evidence:
