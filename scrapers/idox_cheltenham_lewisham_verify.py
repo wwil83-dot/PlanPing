@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
 """
-PlanFind — follow-up domain verification (round 3, 2026-07-28).
+PlanFind — follow-up domain verification (round 4, 2026-07-29).
 
-CRITICAL CHECK: user-provided screenshots show real, distinct branding
-(crests, council-specific nav, "Powered by idox"/"an idox solution"
-footers) for THREE councils whose exact URLs are currently used in
-production for DIFFERENT councils, based on real, previously-confirmed
-redirect findings:
-  - Tower Hamlets (development.towerhamlets.gov.uk) -> currently "Newham"
-  - Plymouth (planning.plymouth.gov.uk) -> currently "Gloucester"
-  - Greenwich (planning.royalgreenwich.gov.uk) -> currently "Richmond
-    upon Thames"
-Same exact pattern already found stale TWICE before this session
-(Cheltenham/Ipswich, Lewisham/Waltham Forest) — branding alone is
-suggestive but not as conclusive as real application addresses.
-Submits the real monthly-list form for all 6 URLs and checks actual
-addresses/postcodes, which settles each pair definitively.
+CRITICAL CHECK: a user-provided screenshot shows real, distinct Oldham
+branding ("Oldham Council — Working for a cooperative borough", "Powered
+by idox") at planningpa.oldham.gov.uk. But existing, trusted production
+config has "Rochdale Borough Council" using this EXACT URL, based on a
+real, previously-confirmed redirect finding. This is the 6th time this
+exact pattern has shown up this session (after Cheltenham/Ipswich,
+Lewisham/Waltham Forest, Tower Hamlets/Newham, Plymouth/Gloucester,
+Greenwich/Richmond) — branding alone is suggestive but not as conclusive
+as real application addresses. Submits the real monthly-list form for
+both URLs and checks actual addresses/postcodes, which settles it
+definitively.
 """
 import asyncio
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
@@ -33,21 +30,11 @@ CONTEXT_OPTIONS = {
 }
 
 TARGETS = [
-    ("Tower Hamlets (claimed URL)", "https://development.towerhamlets.gov.uk/online-applications",
-     "genuine Tower Hamlets addresses should show E1/E2/E3/E14 postcodes; if this is really "
-     "Newham's backend, expect E6/E7/E12/E13/E15/E16 instead"),
-    ("Newham (own real domain, per seed data)", "https://www.newham.gov.uk/online-applications",
-     "if this now works on its own, real addresses should show E6/E7/E12/E13/E15/E16 postcodes"),
-    ("Plymouth (claimed URL)", "https://planning.plymouth.gov.uk/online-applications",
-     "genuine Plymouth addresses should show PL postcodes; if this is really Gloucester's "
-     "backend, expect GL postcodes instead"),
-    ("Gloucester (own real domain, per seed data)", "https://www.gloucester.gov.uk/online-applications",
-     "if this now works on its own, real addresses should show GL postcodes"),
-    ("Greenwich (claimed URL)", "https://planning.royalgreenwich.gov.uk/online-applications",
-     "genuine Greenwich addresses should show SE postcodes; if this is really Richmond's "
-     "backend, expect TW postcodes instead"),
-    ("Richmond upon Thames (own real domain, per seed data)", "https://www.richmond.gov.uk/online-applications",
-     "if this now works on its own, real addresses should show TW postcodes"),
+    ("Oldham (claimed URL)", "https://planningpa.oldham.gov.uk/online-applications",
+     "genuine Oldham addresses should show OL postcodes; if this is really Rochdale's "
+     "backend, expect OL11-OL16 (Rochdale's own OL sub-range) or different place names"),
+    ("Rochdale (own real domain, per seed data)", "https://planning.rochdale.gov.uk/online-applications",
+     "if this now works on its own, real addresses should explicitly name Rochdale"),
 ]
 
 
