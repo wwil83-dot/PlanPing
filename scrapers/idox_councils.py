@@ -459,6 +459,15 @@ IDOX_COUNCILS = [
     ("Teignbridge District Council",
      "https://publicaccess.teignbridge.gov.uk/online-applications"),
 
+    # Added 2026-07-29 — confirmed via a real, direct screenshot showing
+    # genuine "Powered by idox" branding. Note the URL uses "/view"
+    # instead of the usual "/online-applications" or "/publicaccess"
+    # suffix — a real, valid path variant confirmed for this council
+    # specifically (third different suffix convention found this
+    # session, after Swindon and Watford's "/publicaccess").
+    ("Torbay Council",
+     "https://publicaccess.torbay.gov.uk/view"),
+
     ("East Devon District Council",
      "https://planning.eastdevon.gov.uk/online-applications"),
 
@@ -839,6 +848,13 @@ IDOX_COUNCILS = [
 
     ("Three Rivers District Council",
      "https://www3.threerivers.gov.uk/online-applications"),
+
+    # Added 2026-07-29 — confirmed via a real, direct screenshot showing
+    # genuine "Powered by idox" branding. Uses "/publicaccess" instead
+    # of "/online-applications", same real path variant confirmed for
+    # Swindon.
+    ("Watford Borough Council",
+     "https://pa.watford.gov.uk/publicaccess"),
 
     # NOTE: planning.welhat.gov.uk uses /publicaccess/ path not /online-applications/
     ("Welwyn Hatfield Borough Council",
