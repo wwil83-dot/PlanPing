@@ -9,12 +9,25 @@
   {% if covered %}
   <div style="margin-bottom:2rem">
     <h2 style="font-size:1rem;font-weight:600;color:var(--green);margin-bottom:.75rem">✓ Live data ({{ covered_count }})</h2>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.6rem">
+
+    <input type="text" id="coverage-search" placeholder="Search by council or area — e.g. Harrogate, Craven..."
+      style="width:100%;max-width:420px;padding:.6rem .9rem;border:1px solid var(--border);border-radius:8px;font-size:.85rem;margin-bottom:1rem"
+      oninput="filterCoverage(this.value)">
+    <p id="coverage-no-results" style="display:none;font-size:.85rem;color:var(--muted);margin-bottom:1rem">
+      No council matches that search.
+    </p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.6rem" id="coverage-grid">
       {% for c in covered %}
-      <a href="/council/{{ c.slug }}" style="background:#fff;border:1px solid var(--border);border-left:3px solid var(--green);border-radius:8px;padding:.8rem 1rem;text-decoration:none;color:var(--text);display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,.04)">
+      <a href="/council/{{ c.slug }}" data-search="{{ c.search_haystack }}" style="background:#fff;border:1px solid var(--border);border-left:3px solid var(--green);border-radius:8px;padding:.8rem 1rem;text-decoration:none;color:var(--text);display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,.04)">
         <div>
           <div style="font-size:.88rem;font-weight:600">{{ c.name }}</div>
           <div style="font-size:.75rem;color:var(--muted);margin-top:2px">{{ c.app_count }} applications</div>
+          {% if c.area_aliases %}
+          <div style="font-size:.72rem;color:var(--muted);margin-top:3px;font-style:italic">
+            Also covers: {{ c.area_aliases | join(', ') }}
+          </div>
+          {% endif %}
         </div>
         <span style="font-size:.7rem;color:var(--green);background:var(--green-light);padding:2px 8px;border-radius:10px;font-weight:500">Live</span>
       </a>
@@ -60,4 +73,20 @@
     </form>
   </div>
 </main>
+
+<script>
+  function filterCoverage(query) {
+    var q = query.trim().toLowerCase();
+    var cards = document.querySelectorAll('#coverage-grid a');
+    var visibleCount = 0;
+    cards.forEach(function (card) {
+      var haystack = card.getAttribute('data-search') || '';
+      var match = haystack.indexOf(q) !== -1;
+      card.style.display = match ? '' : 'none';
+      if (match) visibleCount++;
+    });
+    document.getElementById('coverage-no-results').style.display =
+      (q && visibleCount === 0) ? 'block' : 'none';
+  }
+</script>
 {% endblock %}
