@@ -1095,9 +1095,15 @@ IDOX_COUNCILS = [
     # ("Eryri National Park Authority",
     #  "https://pa.eryri.llyw.cymru/publicaccess"),
 
-    # NOTE: Caerphilly gives 404 on /online-applications in browser - try /publicaccess/
+    # CORRECTED 2026-07-29 — confirmed via a fresh, real screenshot
+    # showing this exact URL genuinely working (real Idox branding,
+    # clean Simple Search page). Different subdomain and path
+    # capitalization from what was previously configured
+    # (planningonline.caerphilly.gov.uk/publicaccess) — worth trusting
+    # the fresh, direct evidence over the old comment, same as every
+    # other correction this session.
     ("Caerphilly County Borough Council",
-     "https://planningonline.caerphilly.gov.uk/publicaccess"),
+     "https://publicaccess.caerphilly.gov.uk/PublicAccess"),
 
     ("Torfaen County Borough Council",
      "https://publicaccess.torfaen.gov.uk/online-applications"),
