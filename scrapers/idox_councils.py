@@ -443,6 +443,11 @@ IDOX_COUNCILS = [
     ("North West Leicestershire District Council",
      "https://plans.nwleics.gov.uk/public-access"),
 
+    # Added 2026-07-29 — confirmed via a real, direct screenshot showing
+    # genuine "Powered by idox" branding.
+    ("Oadby and Wigston Borough Council",
+     "https://pa.oadby-wigston.gov.uk/online-applications"),
+
     # -------------------------------------------------------------------------
     # SHROPSHIRE
     # Unitary authority, ~320k population — largest single population catch
