@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}{{ title }} — PlanFind{% endblock %}
-
 {% block content %}
 <header class="hero hero-compact">
   <div class="hero-inner">
@@ -8,9 +7,7 @@
     <p class="hero-sub" style="margin:0">{{ intro }}</p>
   </div>
 </header>
-
 <main class="main">
-
   <p style="font-size:.8rem;color:var(--muted);margin-bottom:1rem">
     Tagged automatically from each application's description using keyword
     matching — a reasonable first pass, not a guarantee. Some genuine
@@ -18,7 +15,6 @@
     occasional false positives are possible. Showing the {{ applications|length }}
     most recent matches nationally.
   </p>
-
   <div class="results-header">
     <div>
       <h2 class="results-title">
@@ -30,9 +26,11 @@
       </h2>
     </div>
   </div>
-
-  {# Filter bar — status refinement only; this is a national search, not
-     a postcode/radius one, so it deliberately doesn't carry those params. #}
+  {# Filter bar — status and council refinement; this is a national
+     search, not a postcode/radius one, so it deliberately doesn't
+     carry those params. Council options are pre-filtered server-side
+     to only councils that genuinely have at least one match for this
+     tag, so the dropdown never lists empty/useless options. #}
   <form method="get" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.25rem;padding:.85rem 1rem;background:#fff;border:1px solid var(--border);border-radius:8px">
     <label style="font-size:.8rem;color:var(--muted);font-weight:600">Filter:</label>
     <select name="status" class="form-input" style="max-width:150px" onchange="this.form.submit()">
@@ -42,16 +40,31 @@
       <option value="refused" {{ 'selected' if status == 'refused' }}>Refused</option>
       <option value="withdrawn" {{ 'selected' if status == 'withdrawn' }}>Withdrawn</option>
     </select>
+    <select name="council" class="form-input" style="max-width:230px" onchange="this.form.submit()">
+      <option value="">All councils ({{ council_options|length }})</option>
+      {% for c in council_options %}
+      <option value="{{ c.slug }}" {{ 'selected' if council == c.slug }}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+    {% if status or council %}
+    <a href="?" class="btn-link" style="font-size:.8rem">Clear filters</a>
+    {% endif %}
   </form>
-
   {% if total == 0 %}
   <div class="banner banner-amber">
+    {% if council %}
+    No applications currently match this category for the selected council.
+    This may mean genuinely none exist right now, or that the keyword
+    rules missed some real matches — worth checking back as more
+    applications are scraped, or clearing the council filter to see
+    matches nationally.
+    {% else %}
     No applications currently match this category. This may mean genuinely
     none exist right now, or that the keyword rules missed some real
     matches — worth checking back as more councils get scraped.
+    {% endif %}
   </div>
   {% else %}
-
   <div class="app-list">
     {% for app in applications %}
     <article class="app-card status-{{ app.status_class }}" id="app-card-{{ app.id }}">
@@ -65,10 +78,8 @@
           <span class="badge badge-status badge-{{ app.status_class }}">{{ app.status | title }}</span>
         </div>
       </div>
-
       <h3 class="app-address">{{ app.address or 'Address not available' }}</h3>
       <p class="app-description">{{ app.description or 'No description provided' }}</p>
-
       <div class="app-footer">
         <span class="app-date">{{ app.days_ago }}</span>
         <div class="app-actions">
@@ -83,8 +94,6 @@
     </article>
     {% endfor %}
   </div>
-
   {% endif %}
-
 </main>
 {% endblock %}
