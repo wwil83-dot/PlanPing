@@ -240,7 +240,7 @@ jobs:
   scrape_arcus:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_arcus') ||
-      (github.event_name == 'schedule' && github.event.schedule == '20 4 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '20 7 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
