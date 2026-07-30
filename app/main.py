@@ -51,6 +51,18 @@ async def index(request: Request):
 async def _fetch_applications(db, lat: float, lng: float, radius: float, days: int,
                                status: Optional[str] = None,
                                app_type: Optional[str] = None) -> list[dict]:
+    # FIX (2026-07-30) — same real bug found and fixed on the tag pages,
+    # applied here at the shared source so every caller (search,
+    # search_csv, bulk_search, application_detail's neighbours) is
+    # covered by one change rather than patching each route separately.
+    # A GET form with multiple dropdowns in one <form> submits every
+    # field, including untouched ones left at their blank default
+    # ("" from <option value="">Any status</option>") — an empty string
+    # isn't the same as an absent parameter, and the old SQL check only
+    # treated a genuinely missing value as "no filter".
+    status = status or None
+    app_type = app_type or None
+
     rows = await db.fetch("""
         SELECT
             a.id, a.reference, a.address, a.postcode,
@@ -591,6 +603,21 @@ async def trends(request: Request):
 
 async def _render_tag_page(request: Request, tag: str, status: Optional[str],
                             council: Optional[str]) -> HTMLResponse:
+    # FIX (2026-07-30) — a real bug, not a guess: both dropdowns live in
+    # the same <form>, so selecting one resubmits the other too. "Any
+    # status"/"All councils" are <option value=""> — a GET form always
+    # includes every field, so an untouched dropdown arrives as a
+    # literal empty string ("status=&council=..."), not an absent
+    # parameter. The SQL check only treated a genuinely MISSING value as
+    # "no filter" — an empty string matched neither NULL nor any real
+    # row, silently excluding everything regardless of the other
+    # filter's real value. Confirmed via a real report: West Oxfordshire
+    # visibly has a match, but selecting it still returned zero results,
+    # because status="" was travelling along unnoticed in the same
+    # request.
+    status = status or None
+    council = council or None
+
     meta = TAG_META[tag]
     async with get_db() as db:
         applications = await _fetch_tagged_applications(db, tag, status=status, council_slug=council)
