@@ -8,6 +8,8 @@ on:
     - cron: '40 5 * * *'  # idox nightly scrape — batch 3 of 4
     - cron: '30 6 * * *'  # idox nightly scrape — batch 4 of 4
     - cron: '20 7 * * *'  # arcus nightly scrape
+    - cron: '35 7 * * *'  # civica nightly scrape (St Albans)
+    - cron: '50 7 * * *'  # northgate nightly scrape (Runnymede)
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
   workflow_dispatch:
@@ -316,7 +318,9 @@ jobs:
   # over several real runs.
   # ---------------------------------------------------------------------
   scrape_civica:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_civica'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_civica') ||
+      (github.event_name == 'schedule' && github.event.schedule == '35 7 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -783,7 +787,9 @@ jobs:
   # maturation path as scrape_arcus/scrape_civica before it.
   # ---------------------------------------------------------------------
   scrape_northgate:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_northgate'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_northgate') ||
+      (github.event_name == 'schedule' && github.event.schedule == '50 7 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
