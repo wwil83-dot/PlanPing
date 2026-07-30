@@ -108,6 +108,7 @@ jobs:
           MAX_MINUTES: "55"
           DAYS_BACK: "14"
           CONCURRENCY: "2"
+          REQUEST_DELAY_SECONDS: "1.0"
         run: cd scrapers && python idox_scraper.py --batch=1 --total-batches=4
 
   scrape_idox_b:
@@ -135,6 +136,7 @@ jobs:
           MAX_MINUTES: "55"
           DAYS_BACK: "14"
           CONCURRENCY: "2"
+          REQUEST_DELAY_SECONDS: "1.0"
         run: cd scrapers && python idox_scraper.py --batch=2 --total-batches=4
 
   # ---------------------------------------------------------------------
@@ -172,6 +174,7 @@ jobs:
           MAX_MINUTES: "55"
           DAYS_BACK: "14"
           CONCURRENCY: "2"
+          REQUEST_DELAY_SECONDS: "1.0"
         run: cd scrapers && python idox_scraper.py --batch=3 --total-batches=4
 
   scrape_idox_d:
@@ -199,6 +202,7 @@ jobs:
           MAX_MINUTES: "55"
           DAYS_BACK: "14"
           CONCURRENCY: "2"
+          REQUEST_DELAY_SECONDS: "1.0"
         run: cd scrapers && python idox_scraper.py --batch=4 --total-batches=4
 
   scrape_idox_bulk:
