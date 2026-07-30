@@ -40,7 +40,28 @@ MAX_MINUTES  = 55  # hardcoded — was overridden by workflow env var
 DAYS_BACK    = 14  # hardcoded — was overridden by workflow env var
 CONCURRENCY  = int(os.environ.get("CONCURRENCY", "3"))
 
+# Added 2026-07-30 — a real, deliberate pause before EVERY page request
+# (not just the existing post-navigation render-wait), centralized in
+# one place so it can be tuned without touching the batch/schedule
+# structure at all. Real evidence from recent runs shows WAF/429 blocks
+# clustering across several DIFFERENT, unrelated councils within a
+# tight window of the same run, then clearing up for a long stretch —
+# consistent with something tracking AGGREGATE request volume (plausibly
+# a shared layer across Idox's own hosting for all its council
+# customers), not a strict per-council threshold. Slowing the actual
+# request RATE directly targets that, rather than just reshuffling how
+# many separate scheduled batches we split councils across.
+REQUEST_DELAY_SECONDS = float(os.environ.get("REQUEST_DELAY_SECONDS", "1.5"))
+
 START_TIME = time.monotonic()
+
+
+async def pace_request():
+    """Call this immediately before every page.goto — a real, deliberate
+    pause to slow the aggregate request rate, not just a post-navigation
+    render-wait (which already exists separately at some call sites)."""
+    if REQUEST_DELAY_SECONDS > 0:
+        await asyncio.sleep(REQUEST_DELAY_SECONDS)
 
 
 def elapsed_minutes() -> float:
@@ -861,6 +882,7 @@ class IdoxPortal:
 
         # — Step 1: Navigate to monthly list page —
         try:
+            await pace_request()
             await page.goto(monthly_url, wait_until="domcontentloaded", timeout=45_000)
         except PlaywrightTimeout:
             # FALLBACK: some portals (e.g. eaccess.dumgal.gov.uk) block/timeout
@@ -1085,6 +1107,7 @@ class IdoxPortal:
                 f"?action=page&searchCriteria.page={page_num}"
             )
             try:
+                await pace_request()
                 await page.goto(
                     next_url, wait_until="domcontentloaded", timeout=15_000
                 )
@@ -1109,6 +1132,7 @@ class IdoxPortal:
         fallback_url = f"{self.base_url}/monthlyListResults.do?action=firstPage"
 
         try:
+            await pace_request()
             await page.goto(fallback_url, wait_until="domcontentloaded", timeout=45_000)
         except PlaywrightTimeout:
             print(f"    ⚠ Fallback page load timeout")
@@ -1159,6 +1183,7 @@ class IdoxPortal:
                 f"?action=page&searchCriteria.page={page_num}"
             )
             try:
+                await pace_request()
                 await page.goto(next_url, wait_until="domcontentloaded", timeout=15_000)
                 await asyncio.sleep(2)
             except Exception as e:
@@ -1178,6 +1203,7 @@ class IdoxPortal:
         # some Idox installations (e.g. Midlothian) reject direct weekly list
         # access without a valid session.
         try:
+            await pace_request()
             await page.goto(
                 f"{self.base_url}/search.do?action=simple&searchType=Application",
                 wait_until="domcontentloaded",
@@ -1194,6 +1220,7 @@ class IdoxPortal:
             weekly_url += f"&searchCriteria.weekNum={week_offset}"
 
         try:
+            await pace_request()
             await page.goto(weekly_url, wait_until="domcontentloaded", timeout=45_000)
         except PlaywrightTimeout:
             print(f"    ⚠ Page load timeout (week -{week_offset})")
@@ -1246,6 +1273,7 @@ class IdoxPortal:
                 f"?action=page&searchCriteria.page={page_num}"
             )
             try:
+                await pace_request()
                 await page.goto(next_url, wait_until="domcontentloaded", timeout=15_000)
                 await asyncio.sleep(2)
             except Exception as e:
