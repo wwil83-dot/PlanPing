@@ -105,6 +105,7 @@ TAG_META = {
 
 
 async def _fetch_tagged_applications(db, tag: str, status: Optional[str] = None,
+                                      council_slug: Optional[str] = None,
                                       limit: int = 200) -> list[dict]:
     rows = await db.fetch("""
         SELECT
@@ -116,9 +117,10 @@ async def _fetch_tagged_applications(db, tag: str, status: Optional[str] = None,
         JOIN councils c ON c.id = a.council_id
         WHERE a.tags @> ARRAY[$1]::text[]
         AND ($2::text IS NULL OR a.status = $2)
+        AND ($3::text IS NULL OR c.slug = $3)
         ORDER BY a.submitted_date DESC NULLS LAST
-        LIMIT $3
-    """, tag, status, limit)
+        LIMIT $4
+    """, tag, status, council_slug, limit)
 
     applications = [dict(r) for r in rows]
     for a in applications:
@@ -129,6 +131,21 @@ async def _fetch_tagged_applications(db, tag: str, status: Optional[str] = None,
 
     _add_date_availability_flag(applications)
     return applications
+
+
+async def _fetch_tag_council_options(db, tag: str) -> list[dict]:
+    """Councils that genuinely have at least one application under this
+    tag — used to populate the filter dropdown, so it only ever lists
+    real, useful options rather than every council in the system
+    (including ones with zero matches for this particular tag)."""
+    rows = await db.fetch("""
+        SELECT DISTINCT c.name, c.slug
+        FROM planning_applications a
+        JOIN councils c ON c.id = a.council_id
+        WHERE a.tags @> ARRAY[$1]::text[]
+        ORDER BY c.name
+    """, tag)
+    return [dict(r) for r in rows]
 
 
 STATUS_FILTER_OPTIONS = ["pending", "approved", "refused", "withdrawn"]
@@ -572,10 +589,12 @@ async def trends(request: Request):
     })
 
 
-async def _render_tag_page(request: Request, tag: str, status: Optional[str]) -> HTMLResponse:
+async def _render_tag_page(request: Request, tag: str, status: Optional[str],
+                            council: Optional[str]) -> HTMLResponse:
     meta = TAG_META[tag]
     async with get_db() as db:
-        applications = await _fetch_tagged_applications(db, tag, status=status)
+        applications = await _fetch_tagged_applications(db, tag, status=status, council_slug=council)
+        council_options = await _fetch_tag_council_options(db, tag)
 
     return render("tag_search.html", {
         "request": request,
@@ -585,22 +604,24 @@ async def _render_tag_page(request: Request, tag: str, status: Optional[str]) ->
         "applications": applications,
         "total": len(applications),
         "status": status,
+        "council": council,
+        "council_options": council_options,
     })
 
 
 @app.get("/large-sites", response_class=HTMLResponse)
-async def large_sites(request: Request, status: Optional[str] = None):
-    return await _render_tag_page(request, "large_site", status)
+async def large_sites(request: Request, status: Optional[str] = None, council: Optional[str] = None):
+    return await _render_tag_page(request, "large_site", status, council)
 
 
 @app.get("/farm-diversification", response_class=HTMLResponse)
-async def farm_diversification(request: Request, status: Optional[str] = None):
-    return await _render_tag_page(request, "farm_diversification", status)
+async def farm_diversification(request: Request, status: Optional[str] = None, council: Optional[str] = None):
+    return await _render_tag_page(request, "farm_diversification", status, council)
 
 
 @app.get("/commercial-conversion", response_class=HTMLResponse)
-async def commercial_conversion(request: Request, status: Optional[str] = None):
-    return await _render_tag_page(request, "commercial_conversion", status)
+async def commercial_conversion(request: Request, status: Optional[str] = None, council: Optional[str] = None):
+    return await _render_tag_page(request, "commercial_conversion", status, council)
 
 
 @app.get("/councils", response_class=HTMLResponse)
