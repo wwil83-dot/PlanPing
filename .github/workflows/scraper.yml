@@ -10,6 +10,7 @@ on:
     - cron: '20 7 * * *'  # arcus nightly scrape
     - cron: '35 7 * * *'  # civica nightly scrape (St Albans)
     - cron: '50 7 * * *'  # northgate nightly scrape (Runnymede)
+    - cron: '5 8 * * *'   # idox targeted group (confirmed WAF/429 councils)
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
   workflow_dispatch:
@@ -19,7 +20,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -204,6 +205,49 @@ jobs:
           CONCURRENCY: "2"
           REQUEST_DELAY_SECONDS: "0"
         run: cd scrapers && python idox_scraper.py --batch=4 --total-batches=4
+
+  # ---------------------------------------------------------------------
+  # scrape_idox_targeted — added 2026-07-31. A small, isolated job for
+  # just the 13 councils that showed a real, explicit WAF/429 diagnostic
+  # on BOTH of the last two nights (not just any currently-failing
+  # council — Cloudflare challenges, IDX002 errors, and generic timeouts
+  # are different failure modes that a request delay likely can't fix,
+  # and bundling them in would muddy this test the same way the earlier
+  # blanket-delay attempt did).
+  #
+  # Deliberately heavier settings than the main batches can afford,
+  # since this group is small enough to have real time budget to spare:
+  # CONCURRENCY=1 (fully sequential, no overlap at all) and a 5-second
+  # per-request delay — a genuine test of whether heavier pacing helps
+  # this specific, isolated group, uncontaminated by diluting the delay
+  # across 216 councils the way the rolled-back attempt did.
+  scrape_idox_targeted:
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_targeted') ||
+      (github.event_name == 'schedule' && github.event.schedule == '5 8 * * *')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright beautifulsoup4 httpx
+      - run: playwright install --with-deps chromium
+      - name: Run Idox scraper — targeted group (confirmed WAF/429 councils)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_MINUTES: "30"
+          DAYS_BACK: "14"
+          CONCURRENCY: "1"
+          REQUEST_DELAY_SECONDS: "5"
+        run: cd scrapers && python idox_scraper.py --targeted
 
   scrape_idox_bulk:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_bulk'
