@@ -611,8 +611,13 @@ IDOX_COUNCILS = [
     # Ashfield CONFIRMED Civica (civica.query URL params) — not Idox, skip.
     # Gedling uses Idox's Uniform system but via an older ASP interface, not
     # the classic scrapable pattern — not added, uncertain fit.
+    # CORRECTED 2026-07-30 — was using plain HTTP, confirmed via a fresh
+    # real check that HTTPS works. Automated requests can behave
+    # differently over HTTP (extra redirect overhead, some environments
+    # handle it less reliably than a direct HTTPS connection) — worth
+    # treating this as a real potential fix, not just a cosmetic change.
     ("Bassetlaw District Council",
-     "http://publicaccess.bassetlaw.gov.uk/online-applications"),
+     "https://publicaccess.bassetlaw.gov.uk/online-applications"),
 
     ("Broxtowe Borough Council",
      "https://publicaccess.broxtowe.gov.uk/online-applications"),
