@@ -483,6 +483,13 @@ IDOX_COUNCILS = [
     ("East Devon District Council",
      "https://planning.eastdevon.gov.uk/online-applications"),
 
+    # REAL, DAILY maintenance window (confirmed directly on the portal
+    # itself, 2026-07-30): "unavailable daily between the hours of 00.00
+    # and 01.00 due to essential maintenance." Doesn't overlap our
+    # current nightly batch schedule (4am-9:50am UK), but worth
+    # remembering if the schedule ever shifts earlier (e.g. the 2am UK
+    # start discussed but not yet implemented) — that would then
+    # collide with this window every single night, not just once.
     ("Mid Devon District Council",
      "https://planning.middevon.gov.uk/online-applications"),
 
@@ -1124,8 +1131,13 @@ IDOX_COUNCILS = [
     ("Newport City Council",
      "https://planning.newport.gov.uk/online-applications"),
 
+    # CORRECTED 2026-07-30 — confirmed via a fresh, real screenshot
+    # showing this exact URL genuinely working. The old subdomain
+    # (planning.npt.gov.uk, no "online") had been hitting repeated
+    # "Page load timeout" failures — this may well be why, not just an
+    # intermittent load/WAF issue.
     ("Neath Port Talbot County Borough Council",
-     "https://planning.npt.gov.uk/online-applications"),
+     "https://planningonline.npt.gov.uk/online-applications"),
 
     ("Denbighshire County Council",
      "https://planning.denbighshire.gov.uk/online-applications"),
