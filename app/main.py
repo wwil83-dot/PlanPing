@@ -82,8 +82,8 @@ async def _fetch_applications(db, lat: float, lng: float, radius: float, days: i
     applications = [dict(r) for r in rows]
     for a in applications:
         a["distance_miles"] = round(a["distance_miles"], 1)
-        a["type_badge"] = _type_badge(a.get("application_type", ""))
-        a["is_major"] = _is_major(a.get("application_type", ""))
+        a["type_badge"] = _type_badge(a.get("application_type", ""), a.get("reference", ""))
+        a["is_major"] = _is_major(a.get("application_type", ""), a.get("reference", ""))
         a["status_class"] = _status_class(a.get("status", ""))
         a["days_ago"] = _days_ago(a.get("submitted_date"))
 
@@ -136,8 +136,8 @@ async def _fetch_tagged_applications(db, tag: str, status: Optional[str] = None,
 
     applications = [dict(r) for r in rows]
     for a in applications:
-        a["type_badge"] = _type_badge(a.get("application_type", ""))
-        a["is_major"] = _is_major(a.get("application_type", ""))
+        a["type_badge"] = _type_badge(a.get("application_type", ""), a.get("reference", ""))
+        a["is_major"] = _is_major(a.get("application_type", ""), a.get("reference", ""))
         a["status_class"] = _status_class(a.get("status", ""))
         a["days_ago"] = _days_ago(a.get("submitted_date"))
 
@@ -431,7 +431,7 @@ async def street_history(request: Request, q: Optional[str] = None):
 
         applications = [dict(r) for r in rows]
         for a in applications:
-            a["type_badge"] = _type_badge(a.get("application_type", ""))
+            a["type_badge"] = _type_badge(a.get("application_type", ""), a.get("reference", ""))
             a["status_class"] = _status_class(a.get("status", ""))
             a["days_ago"] = _days_ago(a.get("submitted_date"))
 
@@ -496,8 +496,8 @@ async def council_page(request: Request, slug: str):
 
     apps = [dict(r) for r in recent]
     for a in apps:
-        a["type_badge"] = _type_badge(a.get("application_type", ""))
-        a["is_major"] = _is_major(a.get("application_type", ""))
+        a["type_badge"] = _type_badge(a.get("application_type", ""), a.get("reference", ""))
+        a["is_major"] = _is_major(a.get("application_type", ""), a.get("reference", ""))
         a["is_mapped"] = a.get("lat") is not None
         a["days_ago"] = _days_ago(a.get("submitted_date"))
         # council_name isn't in the row SELECT above (the whole page is
@@ -556,7 +556,7 @@ async def activity(request: Request):
 
     highlights = [dict(r) for r in recent]
     for h in highlights:
-        h["type_badge"] = _type_badge(h.get("application_type", ""))
+        h["type_badge"] = _type_badge(h.get("application_type", ""), h.get("reference", ""))
         h["status_class"] = _status_class(h.get("status", ""))
 
     return render("activity.html", {
@@ -872,14 +872,36 @@ async def unsubscribe(request: Request, token: str):
     })
 
 
-def _is_major(app_type: str) -> bool:
+def _is_outline_reference(reference: str) -> bool:
+    """Checks the LAST slash-separated segment of a reference number for
+    a real outline suffix (e.g. '26/01234/OUT', '26/01234/OUT1' for
+    phased outlines, '26/01234/OUTEIA' for outline with EIA) — not just
+    any string ending in the letters "out", to avoid false-matching
+    something coincidental elsewhere in a longer reference."""
+    if not reference:
+        return False
+    last_segment = reference.strip().split("/")[-1].upper()
+    return last_segment.startswith("OUT")
+
+
+def _is_major(app_type: str, reference: str = "") -> bool:
     t = (app_type or "").upper()
     major_keywords = ["OUTLINE", "OUT", "MAJOR", "EIA", "HYBRID",
                       "PERMISSION IN PRINCIPLE", "PIP", "TECHNICAL DETAILS"]
-    return any(k in t for k in major_keywords)
+    if any(k in t for k in major_keywords):
+        return True
+    # FIX (2026-07-30) — real, confirmed gap: some councils' own
+    # application_type field comes back blank or unhelpful for a given
+    # record (the FIELD DIAGNOSTIC / DATE LABEL DIAGNOSTIC warnings seen
+    # scattered through recent scrape logs are exactly this situation).
+    # In those cases the only remaining signal is the reference number
+    # itself — an outline application with a blank type field was
+    # falling through to "other"/not-major entirely, missing real major
+    # developments.
+    return _is_outline_reference(reference)
 
 
-def _type_badge(app_type: str) -> str:
+def _type_badge(app_type: str, reference: str = "") -> str:
     t = (app_type or "").lower()
     if "outline" in t or "/out" in t or t.endswith("out"):
         return "outline"
@@ -897,6 +919,10 @@ def _type_badge(app_type: str) -> str:
         return "prior"
     if "major" in t or "eia" in t:
         return "major"
+    # Same fallback as _is_major above — only reached when the type
+    # field gave us nothing usable to match against.
+    if _is_outline_reference(reference):
+        return "outline"
     return "other"
 
 
