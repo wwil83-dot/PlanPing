@@ -1478,6 +1478,42 @@ async def process_council(
 
 
 # ---------------------------------------------------------------------------
+# Targeted group — added 2026-07-31, after a blanket per-request delay
+# (REQUEST_DELAY_SECONDS) was tried across ALL councils and rolled back:
+# real before/after comparison showed near-identical WAF/429 hit counts
+# and the SAME councils affected both nights, while costing real runtime
+# margin on the largest batch (48.0 -> 55.5 minutes). Diluting a small
+# delay across 216 councils to help ~13 of them was the wrong lever.
+#
+# This is a small, isolated group that can afford a much heavier delay
+# (and CONCURRENCY=1) without threatening any other batch's time budget,
+# giving a clean, uncontaminated test of whether heavier pacing actually
+# helps at all — rather than another diluted, inconclusive result.
+#
+# DELIBERATELY SCOPED to only councils that showed a real, explicit
+# WAF/429 diagnostic on BOTH of the last two nights (2026-07-30 and
+# 2026-07-31) — not just any currently-failing council. Cloudflare
+# challenge pages, IDX002 errors, and generic page-load timeouts are
+# different failure modes with different root causes; bundling them in
+# here would muddy the result the same way the blanket approach did.
+TARGETED_GROUP = {
+    "Wakefield Metropolitan District Council",
+    "Maidstone Borough Council",
+    "Dover District Council",
+    "Swale Borough Council",
+    "Chichester District Council",
+    "Winchester City Council",
+    "Test Valley Borough Council",
+    "New Forest District Council",
+    "Cornwall Council",
+    "Babergh District Council",
+    "London Borough of Lewisham",
+    "London Borough of Greenwich",
+    "Argyll and Bute Council",
+}
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 async def main():
@@ -1499,7 +1535,13 @@ async def main():
     # request volume across the whole batch was a real factor — more,
     # smaller batches spread further apart in the schedule reduces how
     # many councils get hit within any given tight time window.
+    #
+    # Pass --targeted instead of --batch/--total-batches to run ONLY the
+    # TARGETED_GROUP above — mutually exclusive with normal batching,
+    # since this is a small, separate, deliberately isolated job.
     # --------------------------------------------------------------------
+    targeted = "--targeted" in sys.argv
+
     batch = None
     total_batches = 2
     for arg in sys.argv:
@@ -1515,6 +1557,10 @@ async def main():
                 print(f"ERROR: --batch must be between 1 and {total_batches}, got {batch}")
                 sys.exit(1)
 
+    if targeted and batch is not None:
+        print("ERROR: --targeted and --batch are mutually exclusive")
+        sys.exit(1)
+
     try:
         from idox_councils import IDOX_COUNCILS, COUNCIL_DB_IDS
     except ImportError:
@@ -1522,7 +1568,14 @@ async def main():
         sys.exit(1)
 
     full_count = len(IDOX_COUNCILS)
-    if batch is not None:
+    if targeted:
+        IDOX_COUNCILS = [c for c in IDOX_COUNCILS if c[0] in TARGETED_GROUP]
+        found_names = {c[0] for c in IDOX_COUNCILS}
+        missing = TARGETED_GROUP - found_names
+        if missing:
+            print(f"⚠ WARNING: {len(missing)} targeted council(s) not found in "
+                  f"IDOX_COUNCILS (renamed or removed?): {sorted(missing)}")
+    elif batch is not None:
         # Even split with any remainder distributed across the first
         # few batches, so no batch is left disproportionately small/large
         # (e.g. 208 councils / 4 batches = exactly 52 each; 210 / 4 =
@@ -1554,7 +1607,9 @@ async def main():
 
     print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Idox scraper (Playwright)")
     print(f"Mode:        {'BULK' if bulk else 'FAST'} ({days} days back)")
-    if batch is not None:
+    if targeted:
+        print(f"Batch:       TARGETED GROUP ({len(IDOX_COUNCILS)} confirmed WAF/429-affected councils)")
+    elif batch is not None:
         print(f"Batch:       {batch} of {total_batches} ({len(IDOX_COUNCILS)} of {full_count} councils)")
     print(f"Councils:    {len(IDOX_COUNCILS)}")
     print(f"Concurrency: {concurrency}")
