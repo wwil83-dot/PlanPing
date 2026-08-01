@@ -71,6 +71,12 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Rochdale Borough Council":             172,  # reused from Idox — genuinely
                                                    # never was Idox, real Arcus council
                                                    # misfiled the whole time
+    "Burnley Borough Council":              310,  # reused from Idox — the old Idox
+                                                   # guess (publicaccess.burnley.gov.uk)
+                                                   # was wrong the whole time, sat
+                                                   # commented out as "BROKEN"; genuinely
+                                                   # an Arcus council, same pattern as
+                                                   # Rochdale
     "Folkestone and Hythe District Council": 423,
     "London Borough of Haringey":            243,
     "Cumberland Council":                    424,
@@ -177,6 +183,18 @@ ARCUS_COUNCILS = [
     # "redirect" finding).
     ("Rochdale Borough Council",
      "https://account.rochdale.gov.uk/pr/s",
+     "advanced_search", None),
+
+    # Added 2026-08-01 — confirmed via a real, direct check showing the
+    # genuine Arcus register-view URL. Burnley was ALWAYS misfiled as a
+    # broken Idox guess (publicaccess.burnley.gov.uk, sat commented out
+    # for months as "BROKEN — WAF/cloud-IP blocking") — turns out it was
+    # never Idox at all, same discovery pattern as Rochdale. Note the
+    # unusual "burnleycouncil.my.site.com" domain (a Salesforce-hosted
+    # site, not the council's own domain) — a real, valid variant, not
+    # a typo.
+    ("Burnley Borough Council",
+     "https://burnleycouncil.my.site.com/pr/s",
      "advanced_search", None),
 
     # Added 2026-07-21, confirmed via arcus_recon.py real evidence:
