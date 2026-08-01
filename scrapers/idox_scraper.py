@@ -14,6 +14,7 @@ Architecture:
 """
 import asyncio
 import os
+import random
 import re
 import sys
 import time
@@ -92,6 +93,82 @@ def log_retry_after_if_present(response, council_name: str) -> Optional[str]:
             print(f"    ⚠ RETRY-AFTER DIAGNOSTIC [{council_name}]: status {status} "
                   f"but NO Retry-After header present")
     return retry_after
+
+
+# Added 2026-08-01 — a real, BOUNDED backoff-with-jitter retry, built
+# only after a real crash fix (internal per-council budget checkpoint)
+# made it safe to add: retries add real wall-clock time to councils
+# that are already struggling, and without that fix a batch running
+# long from retries could have crashed the whole run the same way
+# Cornwall did. Deliberately capped small (MAX_429_RETRIES defaults to
+# 2) rather than open-ended — real evidence from the targeted-group
+# test (CONCURRENCY=1, 5s delay, still hit the same 429s on 6 of 9
+# councils) suggests at least some of these blocks aren't purely
+# rate/timing-based, so unlimited retries could just mean waiting
+# longer before failing anyway. Honors a real Retry-After value when
+# the server sends one (RETRY-AFTER DIAGNOSTIC above tells us whether
+# that's actually happening); falls back to jittered exponential
+# backoff otherwise.
+MAX_429_RETRIES = int(os.environ.get("MAX_429_RETRIES", "2"))
+BACKOFF_BASE_SECONDS = float(os.environ.get("BACKOFF_BASE_SECONDS", "5"))
+
+
+def _parse_retry_after_seconds(retry_after: Optional[str]) -> Optional[float]:
+    """Retry-After is either an integer number of seconds, or an
+    HTTP-date (RFC 9110) — real servers use either form. Returns None
+    if it's neither a valid number nor parseable, so the caller can
+    fall back to backoff instead of crashing on an unexpected format."""
+    if not retry_after:
+        return None
+    try:
+        return float(retry_after)
+    except ValueError:
+        pass
+    try:
+        from email.utils import parsedate_to_datetime
+        target = parsedate_to_datetime(retry_after)
+        if target.tzinfo is None:
+            target = target.replace(tzinfo=timezone.utc)
+        delta = (target - datetime.now(timezone.utc)).total_seconds()
+        return max(0.0, delta)
+    except Exception:
+        return None
+
+
+async def goto_with_backoff(page, url: str, council_name: str,
+                             wait_until: str = "domcontentloaded",
+                             timeout: int = 45_000):
+    """Drop-in replacement for `await page.goto(...)` — same return
+    value, same exceptions propagate unchanged (PlaywrightTimeout etc.
+    are NOT caught here, existing try/except blocks around call sites
+    keep working exactly as before). Adds: the existing pace_request()
+    delay, a real Retry-After check via log_retry_after_if_present, and
+    — only on an actual 429 — a bounded, jittered retry. Honors a real
+    Retry-After value if the server sends one; otherwise a jittered
+    exponential backoff (BACKOFF_BASE_SECONDS * 2^attempt, +0-30%
+    random jitter so multiple councils retrying at once don't all
+    collide on the same instant). Capped at MAX_429_RETRIES — returns
+    the final response either way, success or still-blocked, letting
+    the existing per-call-site handling decide what to do with it."""
+    attempt = 0
+    while True:
+        await pace_request()
+        response = await page.goto(url, wait_until=wait_until, timeout=timeout)
+        retry_after = log_retry_after_if_present(response, council_name)
+
+        if response.status != 429 or attempt >= MAX_429_RETRIES:
+            return response
+
+        attempt += 1
+        wait_seconds = _parse_retry_after_seconds(retry_after)
+        if wait_seconds is None:
+            wait_seconds = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
+        jitter = random.uniform(0, wait_seconds * 0.3)
+        total_wait = wait_seconds + jitter
+        print(f"    ⚠ 429 retry {attempt}/{MAX_429_RETRIES} for {council_name} "
+              f"— waiting {total_wait:.1f}s "
+              f"({'honoring Retry-After' if retry_after else 'jittered backoff'})")
+        await asyncio.sleep(total_wait)
 
 
 def elapsed_minutes() -> float:
@@ -940,9 +1017,7 @@ class IdoxPortal:
 
         # — Step 1: Navigate to monthly list page —
         try:
-            await pace_request()
-            response = await page.goto(monthly_url, wait_until="domcontentloaded", timeout=45_000)
-            log_retry_after_if_present(response, self.council_name)
+            response = await goto_with_backoff(page, monthly_url, self.council_name, timeout=45_000)
         except PlaywrightTimeout:
             # FALLBACK: some portals (e.g. eaccess.dumgal.gov.uk) block/timeout
             # on the search.do?action=monthlyList path specifically, but the
@@ -1166,11 +1241,7 @@ class IdoxPortal:
                 f"?action=page&searchCriteria.page={page_num}"
             )
             try:
-                await pace_request()
-                response = await page.goto(
-                    next_url, wait_until="domcontentloaded", timeout=15_000
-                )
-                log_retry_after_if_present(response, self.council_name)
+                response = await goto_with_backoff(page, next_url, self.council_name, timeout=15_000)
                 # Give JS time to render — don't use wait_for_selector here
                 # as it can time out on pages that use non-standard selectors
                 await asyncio.sleep(2)
@@ -1192,9 +1263,7 @@ class IdoxPortal:
         fallback_url = f"{self.base_url}/monthlyListResults.do?action=firstPage"
 
         try:
-            await pace_request()
-            response = await page.goto(fallback_url, wait_until="domcontentloaded", timeout=45_000)
-            log_retry_after_if_present(response, self.council_name)
+            response = await goto_with_backoff(page, fallback_url, self.council_name, timeout=45_000)
         except PlaywrightTimeout:
             print(f"    ⚠ Fallback page load timeout")
             return []
@@ -1244,9 +1313,7 @@ class IdoxPortal:
                 f"?action=page&searchCriteria.page={page_num}"
             )
             try:
-                await pace_request()
-                response = await page.goto(next_url, wait_until="domcontentloaded", timeout=15_000)
-                log_retry_after_if_present(response, self.council_name)
+                response = await goto_with_backoff(page, next_url, self.council_name, timeout=15_000)
                 await asyncio.sleep(2)
             except Exception as e:
                 print(f"    Fallback page {page_num} nav error: {e}")
@@ -1282,9 +1349,7 @@ class IdoxPortal:
             weekly_url += f"&searchCriteria.weekNum={week_offset}"
 
         try:
-            await pace_request()
-            response = await page.goto(weekly_url, wait_until="domcontentloaded", timeout=45_000)
-            log_retry_after_if_present(response, self.council_name)
+            response = await goto_with_backoff(page, weekly_url, self.council_name, timeout=45_000)
         except PlaywrightTimeout:
             print(f"    ⚠ Page load timeout (week -{week_offset})")
             return []
@@ -1336,9 +1401,7 @@ class IdoxPortal:
                 f"?action=page&searchCriteria.page={page_num}"
             )
             try:
-                await pace_request()
-                response = await page.goto(next_url, wait_until="domcontentloaded", timeout=15_000)
-                log_retry_after_if_present(response, self.council_name)
+                response = await goto_with_backoff(page, next_url, self.council_name, timeout=15_000)
                 await asyncio.sleep(2)
             except Exception as e:
                 print(f"    Page {page_num} nav error: {e}")
