@@ -64,6 +64,36 @@ async def pace_request():
         await asyncio.sleep(REQUEST_DELAY_SECONDS)
 
 
+# Added 2026-08-01 — real diagnostic, not a guess: before building
+# Retry-After-aware backoff, we need to actually know whether any of
+# these councils' WAFs/portals send the header at all. Logged once per
+# council so a real run gives a direct, checkable answer either way.
+_RETRY_AFTER_CHECKED: set[str] = set()
+
+
+def log_retry_after_if_present(response, council_name: str) -> Optional[str]:
+    """Checks a Playwright navigation Response for a Retry-After header
+    and a 429/rate-limit-flavoured status, logging real evidence once
+    per council. Returns the raw header value if present (either an
+    integer number of seconds, or an HTTP-date string per RFC 9110 —
+    both are valid, a real implementation needs to handle both), or
+    None. response can be None (some navigations don't return one, e.g.
+    after a redirect chain Playwright doesn't expose) — handled safely."""
+    if response is None:
+        return None
+    retry_after = response.headers.get("retry-after")
+    status = response.status
+    if council_name not in _RETRY_AFTER_CHECKED and (status == 429 or retry_after):
+        _RETRY_AFTER_CHECKED.add(council_name)
+        if retry_after:
+            print(f"    ⚠ RETRY-AFTER DIAGNOSTIC [{council_name}]: server sent "
+                  f"Retry-After: {retry_after!r} (status {status})")
+        else:
+            print(f"    ⚠ RETRY-AFTER DIAGNOSTIC [{council_name}]: status {status} "
+                  f"but NO Retry-After header present")
+    return retry_after
+
+
 def elapsed_minutes() -> float:
     return (time.monotonic() - START_TIME) / 60
 
@@ -911,7 +941,8 @@ class IdoxPortal:
         # — Step 1: Navigate to monthly list page —
         try:
             await pace_request()
-            await page.goto(monthly_url, wait_until="domcontentloaded", timeout=45_000)
+            response = await page.goto(monthly_url, wait_until="domcontentloaded", timeout=45_000)
+            log_retry_after_if_present(response, self.council_name)
         except PlaywrightTimeout:
             # FALLBACK: some portals (e.g. eaccess.dumgal.gov.uk) block/timeout
             # on the search.do?action=monthlyList path specifically, but the
@@ -1136,9 +1167,10 @@ class IdoxPortal:
             )
             try:
                 await pace_request()
-                await page.goto(
+                response = await page.goto(
                     next_url, wait_until="domcontentloaded", timeout=15_000
                 )
+                log_retry_after_if_present(response, self.council_name)
                 # Give JS time to render — don't use wait_for_selector here
                 # as it can time out on pages that use non-standard selectors
                 await asyncio.sleep(2)
@@ -1161,7 +1193,8 @@ class IdoxPortal:
 
         try:
             await pace_request()
-            await page.goto(fallback_url, wait_until="domcontentloaded", timeout=45_000)
+            response = await page.goto(fallback_url, wait_until="domcontentloaded", timeout=45_000)
+            log_retry_after_if_present(response, self.council_name)
         except PlaywrightTimeout:
             print(f"    ⚠ Fallback page load timeout")
             return []
@@ -1212,7 +1245,8 @@ class IdoxPortal:
             )
             try:
                 await pace_request()
-                await page.goto(next_url, wait_until="domcontentloaded", timeout=15_000)
+                response = await page.goto(next_url, wait_until="domcontentloaded", timeout=15_000)
+                log_retry_after_if_present(response, self.council_name)
                 await asyncio.sleep(2)
             except Exception as e:
                 print(f"    Fallback page {page_num} nav error: {e}")
@@ -1249,7 +1283,8 @@ class IdoxPortal:
 
         try:
             await pace_request()
-            await page.goto(weekly_url, wait_until="domcontentloaded", timeout=45_000)
+            response = await page.goto(weekly_url, wait_until="domcontentloaded", timeout=45_000)
+            log_retry_after_if_present(response, self.council_name)
         except PlaywrightTimeout:
             print(f"    ⚠ Page load timeout (week -{week_offset})")
             return []
@@ -1302,7 +1337,8 @@ class IdoxPortal:
             )
             try:
                 await pace_request()
-                await page.goto(next_url, wait_until="domcontentloaded", timeout=15_000)
+                response = await page.goto(next_url, wait_until="domcontentloaded", timeout=15_000)
+                log_retry_after_if_present(response, self.council_name)
                 await asyncio.sleep(2)
             except Exception as e:
                 print(f"    Page {page_num} nav error: {e}")
