@@ -1130,8 +1130,13 @@ IDOX_COUNCILS = [
     # Conwy, Flintshire, Gwynedd, Anglesey, Pembrokeshire, Ceredigion,
     # Blaenau Gwent, Merthyr Tydfil, Vale of Glamorgan — DNS not found yet
     # -------------------------------------------------------------------------
+    # CORRECTED 2026-08-01 — confirmed via a fresh, real check showing
+    # this exact URL genuinely working. Completely different domain
+    # from the old config (planning.cardiff.gov.uk) — Cardiff appears
+    # to run on Idox's own managed cloud hosting
+    # (cardiffidoxcloud.wales) rather than the council's own domain.
     ("Cardiff Council",
-     "https://planning.cardiff.gov.uk/online-applications"),
+     "https://www.cardiffidoxcloud.wales/publicaccess"),
 
     ("Newport City Council",
      "https://planning.newport.gov.uk/online-applications"),
