@@ -748,7 +748,8 @@ class IdoxPortal:
         self.domain_root = f"{parsed.scheme}://{parsed.netloc}"
 
     async def scrape(self, browser: Browser, days_back: int = 7,
-                      pending_recheck: Optional[list[dict]] = None) -> list[dict]:
+                      pending_recheck: Optional[list[dict]] = None,
+                      budget_minutes: Optional[float] = None) -> list[dict]:
         cutoff = date.today() - timedelta(days=days_back)
 
         # Build the full list of calendar months to scrape.
@@ -833,6 +834,33 @@ class IdoxPortal:
                 all_apps.extend(apps)
             else:
                 for target_month in months:
+                    # FIX (2026-08-01) — real, confirmed gap: this loop had
+                    # NO internal time-budget check at all. The only check
+                    # anywhere was BETWEEN councils (further down this
+                    # file) — but a single council with several months to
+                    # scrape, each with many paced page-loads, could run
+                    # for a long, completely unchecked stretch. Confirmed
+                    # directly: the targeted-group job (CONCURRENCY=1,
+                    # 5s per-request delay — genuinely slow by design)
+                    # ran past its budget mid-council, wall-clock time
+                    # crept past GitHub Actions' own hard job timeout, and
+                    # the resulting asyncio.CancelledError propagated
+                    # straight through every "except Exception" handler in
+                    # this file (CancelledError is deliberately NOT a
+                    # subclass of Exception since Python 3.8, specifically
+                    # so genuine cancellations aren't accidentally
+                    # swallowed) — crashing the whole run and silently
+                    # losing every council still queued behind it. Adding
+                    # a real checkpoint here lets a slow council bail out
+                    # of its OWN remaining months gracefully, keeping
+                    # whatever it already collected, well before any
+                    # external hard-kill is ever reached.
+                    if budget_minutes is not None and elapsed_minutes() >= budget_minutes - 3:
+                        print(f"    ⚠ Time budget reached mid-council "
+                              f"({elapsed_minutes():.1f} min elapsed) — "
+                              f"stopping at {target_month.strftime('%b %Y')}, "
+                              f"keeping {len(all_apps)} already collected")
+                        break
                     apps = await self._scrape_month(page, target_month)
                     # Use TODAY as fallback date for apps without a parsed date.
                     # Using today (not start-of-month) means undated apps show as
@@ -1361,7 +1389,8 @@ async def process_council(
         await asyncio.sleep(1)  # stagger requests — avoids triggering WAF rate limits
 
         try:
-            apps = await portal.scrape(browser, days_back, pending_recheck=pending_recheck)
+            apps = await portal.scrape(browser, days_back, pending_recheck=pending_recheck,
+                                        budget_minutes=budget_minutes)
         except Exception as e:
             print(f"    ✗ Error: {e}")
             return 0
