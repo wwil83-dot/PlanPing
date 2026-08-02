@@ -10,7 +10,6 @@ on:
     - cron: '20 7 * * *'  # arcus nightly scrape
     - cron: '35 7 * * *'  # civica nightly scrape (St Albans)
     - cron: '50 7 * * *'  # northgate nightly scrape (Runnymede)
-    - cron: '5 8 * * *'   # idox targeted group (confirmed WAF/429 councils)
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
   workflow_dispatch:
@@ -207,24 +206,19 @@ jobs:
         run: cd scrapers && python idox_scraper.py --batch=4 --total-batches=4
 
   # ---------------------------------------------------------------------
-  # scrape_idox_targeted — added 2026-07-31. A small, isolated job for
-  # just the 13 councils that showed a real, explicit WAF/429 diagnostic
-  # on BOTH of the last two nights (not just any currently-failing
-  # council — Cloudflare challenges, IDX002 errors, and generic timeouts
-  # are different failure modes that a request delay likely can't fix,
-  # and bundling them in would muddy this test the same way the earlier
-  # blanket-delay attempt did).
-  #
-  # Deliberately heavier settings than the main batches can afford,
-  # since this group is small enough to have real time budget to spare:
-  # CONCURRENCY=1 (fully sequential, no overlap at all) and a 5-second
-  # per-request delay — a genuine test of whether heavier pacing helps
-  # this specific, isolated group, uncontaminated by diluting the delay
-  # across 216 councils the way the rolled-back attempt did.
+  # scrape_idox_targeted — added 2026-07-31, RETIRED FROM THE SCHEDULE
+  # 2026-08-02. A small, isolated test of whether heavy pacing
+  # (CONCURRENCY=1, 5s per-request delay) could rescue the 13 councils
+  # that showed a real, explicit WAF/429 diagnostic on multiple nights.
+  # Real result: even at these settings, 6 of 9 councils that got
+  # processed before a crash still hit the exact same block — clean
+  # evidence that at least most of these blocks aren't primarily
+  # rate/timing-based (more likely IP reputation or fingerprinting,
+  # neither fixable by pacing). Kept available for manual triggering
+  # only (workflow_dispatch), not run automatically — no evidence it's
+  # worth the nightly runtime cost of a dedicated job.
   scrape_idox_targeted:
-    if: >
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_targeted') ||
-      (github.event_name == 'schedule' && github.event.schedule == '5 8 * * *')
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_targeted'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
