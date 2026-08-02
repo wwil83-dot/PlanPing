@@ -19,7 +19,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -30,6 +30,42 @@ on:
         default: ''
 
 jobs:
+  # ---------------------------------------------------------------------
+  # diagnose_runner_location — added 2026-08-02, manual-trigger only.
+  # Real test of a genuinely important hypothesis: GitHub's own
+  # documentation confirms standard ubuntu-latest hosted runners run
+  # from Azure's East US 2 region, not the UK — and several Idox
+  # councils' WAFs may be geo-blocking or geo-throttling non-UK traffic
+  # the same way a VPN showing as offshore gets blocked on these same
+  # portals when tested manually. If confirmed, this would explain a
+  # large fraction of the persistent 429/WAF blocks fought all session —
+  # none of which responded to pacing, concurrency, or retry changes,
+  # none of which touch WHERE the traffic appears to come from. Checks
+  # two independent geolocation services for cross-confirmation, since
+  # a single service could occasionally be wrong or stale.
+  # ---------------------------------------------------------------------
+  diagnose_runner_location:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'diagnose_runner_location'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check real IP and geolocation (ipinfo.io)
+        run: |
+          echo "=== ipinfo.io ==="
+          curl -s https://ipinfo.io/json || echo "ipinfo.io request failed"
+      - name: Check real IP and geolocation (ip-api.com)
+        run: |
+          echo "=== ip-api.com ==="
+          curl -s http://ip-api.com/json || echo "ip-api.com request failed"
+      - name: Summary
+        run: |
+          echo ""
+          echo "If both services above report a country OTHER than GB/United"
+          echo "Kingdom, that's real, direct confirmation our scraper traffic"
+          echo "presents as non-UK to any council WAF checking geolocation —"
+          echo "the same mechanism a VPN showing as offshore triggers on these"
+          echo "same portals when tested manually."
+
   scrape:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape') ||
