@@ -876,8 +876,11 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # HAMPSHIRE — additional Idox portals found during South East expansion
     # -------------------------------------------------------------------------
-    ("Havant Borough Council",
-     "https://planningpublicaccess.havant.gov.uk/online-applications"),
+    # RESOLVED 2026-08-02 — this was never actually Idox. Genuinely an
+    # Arcus council, same discovery pattern as Rochdale and Burnley —
+    # see arcus_councils.py.
+    # ("Havant Borough Council",
+    #  "https://planningpublicaccess.havant.gov.uk/online-applications"),
 
     # BROKEN — planningpublicaccess.easthants.gov.uk DNS DEAD.
     # New portal at easthants.gov.uk requires account login as of March 2026.
