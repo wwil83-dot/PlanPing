@@ -905,11 +905,13 @@ IDOX_COUNCILS = [
      "https://publicaccess.uttlesford.gov.uk/online-applications"),
 
     # --- HERTFORDSHIRE districts ---
-    # BROKEN — Dacorum's server (planning.dacorum.gov.uk/publicaccess) gives
-    # ERR_EMPTY_RESPONSE consistently — accepts TCP but sends nothing back.
-    # URL is correct but server appears to block cloud provider IP ranges.
-    # ("Dacorum Borough Council",
-    #  "https://planning.dacorum.gov.uk/publicaccess"),
+    # RE-ENABLED 2026-08-02 for a retry — was confirmed IP-blocked
+    # (ERR_EMPTY_RESPONSE) a while ago, but cloud-provider IP blocks can
+    # be intermittent or change over time. Same URL as before; worth
+    # treating the next run as the real test rather than assuming it's
+    # permanently dead.
+    ("Dacorum Borough Council",
+     "https://planning.dacorum.gov.uk/publicaccess"),
 
     ("North Hertfordshire District Council",
      "https://pa2.north-herts.gov.uk/online-applications"),
@@ -950,9 +952,13 @@ IDOX_COUNCILS = [
     ("Huntingdonshire District Council",
      "https://publicaccess.huntingdonshire.gov.uk/online-applications"),
 
-    # BROKEN — Fenland gives ERR_HTTP2_PROTOCOL_ERROR (server-side HTTP/2 config issue).
-    # ("Fenland District Council",
-    #  "https://publicaccess.fenland.gov.uk/online-applications"),
+    # CORRECTED 2026-08-02 — genuinely different URL from the old one
+    # (which gave ERR_HTTP2_PROTOCOL_ERROR): different subdomain (www.
+    # prefix) AND different path (/publicaccess, not /online-applications).
+    # Worth a real try with this variant rather than assuming the old
+    # failure still applies to a URL we never actually tested.
+    ("Fenland District Council",
+     "https://www.publicaccess.fenland.gov.uk/publicaccess"),
 
     # -------------------------------------------------------------------------
     # HAMPSHIRE districts (all confirmed Idox via 403 bot-block test)
@@ -1541,8 +1547,11 @@ IDOX_COUNCILS = [
      "https://publicaccess.argyll-bute.gov.uk/online-applications"),
 
     # NOTE: trying /Online (capital O) - has failed on /online-applications, /publicaccess, /online, /idoxpa-web
+    # CORRECTED 2026-08-02 — confirmed via a fresh, real check showing
+    # this exact URL genuinely working. Old path was "/Online" — wrong
+    # the whole time, explaining its persistent "Page Not Found".
     ("Comhairle nan Eilean Siar",
-     "https://planning.cne-siar.gov.uk/Online"),
+     "https://planning.cne-siar.gov.uk/PublicAccess"),
 
     # --- Additional Scottish councils found Jun 2026 ---
     # NOTE: Midlothian and Renfrewshire have monthly list disabled — weekly list only.
