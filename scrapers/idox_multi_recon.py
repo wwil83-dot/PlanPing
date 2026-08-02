@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-PlanFind — multi-council Idox recon (round 5, 2026-07-28).
+PlanFind — multi-council Idox recon (round 8, 2026-08-02).
 
-PURPOSE: round 4 confirmed 3 real hits (Brentwood, Cheltenham, Lewisham,
-now active) and 2 genuine false positives from the prober (Hastings —
-redirected to a homepage; Bridgend — a real 404). Redbridge was ALSO a
-false positive at the URL the prober guessed (planning.redbridge.gov.uk
-— blank/empty response), but existing seed SQL data (from a much
-earlier bulk-seed operation) has a different, real URL on record:
-www.redbridge.gov.uk/online-applications. Worth one clean, targeted
-check with the corrected URL before writing Redbridge off entirely —
-same "wrong subdomain guess, not a genuinely broken council" pattern
-already confirmed for Solihull/Waverley earlier this session.
+PURPOSE: Durham County Council has sat commented out for a while with
+a note that its official URL (publicaccess.durham.gov.uk) shares Idox
+infrastructure with Stockton-on-Tees and returns Stockton's
+applications instead of Durham's own. Stockton currently uses its OWN
+separate URL (www.stockton.gov.uk), so there's no active mislabeling
+happening right now — but re-enabling Durham on this URL would only be
+safe if it genuinely shows Durham's own data, not Stockton's. Real
+verification, same as every other round: actually navigate, submit the
+real monthly-list form, check actual addresses (genuine Durham should
+show DH/DL postcodes and real County Durham place names; if this is
+really still Stockton's backend, expect TS postcodes instead).
 """
 import asyncio
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
@@ -30,7 +31,7 @@ CONTEXT_OPTIONS = {
 
 # (name, base_url, mode)
 TARGETS = [
-    ("London Borough of Redbridge", "https://www.redbridge.gov.uk/online-applications", "monthly"),
+    ("Durham County Council", "https://publicaccess.durham.gov.uk/online-applications", "monthly"),
 ]
 RESULTS_CONTAINER_SELECTOR = (
     "ul.searchresults, #searchresults, div.searchresults, #searchResultsContainer"
