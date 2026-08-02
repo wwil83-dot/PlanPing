@@ -77,6 +77,10 @@ COUNCIL_DB_IDS: dict[str, int] = {
                                                    # commented out as "BROKEN"; genuinely
                                                    # an Arcus council, same pattern as
                                                    # Rochdale
+    "Havant Borough Council":               294,  # reused from Idox — same pattern
+                                                   # again, the old Idox guess
+                                                   # (planningpublicaccess.havant.gov.uk)
+                                                   # was wrong the whole time
     "Folkestone and Hythe District Council": 423,
     "London Borough of Haringey":            243,
     "Cumberland Council":                    424,
@@ -195,6 +199,16 @@ ARCUS_COUNCILS = [
     # a typo.
     ("Burnley Borough Council",
      "https://burnleycouncil.my.site.com/pr/s",
+     "advanced_search", None),
+
+    # Added 2026-08-02 — confirmed via a real, direct check showing the
+    # genuine Arcus register-view URL. Same discovery pattern as
+    # Rochdale and Burnley — the old Idox guess
+    # (planningpublicaccess.havant.gov.uk) was wrong the whole time.
+    # Note the "service.havant.gov.uk" domain, distinct from the
+    # council's main website — a real, valid variant, not a typo.
+    ("Havant Borough Council",
+     "https://service.havant.gov.uk/pr/s",
      "advanced_search", None),
 
     # Added 2026-07-21, confirmed via arcus_recon.py real evidence:
