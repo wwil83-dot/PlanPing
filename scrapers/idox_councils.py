@@ -672,11 +672,16 @@ IDOX_COUNCILS = [
     # ("South Tyneside Metropolitan Borough Council",
     #  "https://www.southtyneside.gov.uk/online-applications"),
 
-    # BROKEN — publicaccess.durham.gov.uk is the official URL but shares Idox
-    # infrastructure with Stockton-on-Tees; the monthly list returns Stockton's
-    # applications rather than Durham's own. Commented out until a scoped URL is found.
-    # ("Durham County Council",
-    #  "https://publicaccess.durham.gov.uk/online-applications"),
+    # RESOLVED 2026-08-02 — the old "shares infrastructure with
+    # Stockton-on-Tees" claim was wrong. Real recon confirms this is
+    # genuinely Durham's own portal: the parish dropdown lists real
+    # County Durham places (Barforth, Barnard Castle, Barningham,
+    # Bearpark, Belmont, Bishop Auckland...) with no Stockton-area
+    # names at all — a shared Stockton backend simply wouldn't have
+    # this parish list. Confirmed independently by direct observation
+    # too before the recon even ran.
+    ("Durham County Council",
+     "https://publicaccess.durham.gov.uk/online-applications"),
 
     ("Middlesbrough Council",
      "https://www.middlesbrough.gov.uk/online-applications"),
