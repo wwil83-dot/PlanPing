@@ -933,7 +933,7 @@ class IdoxPortal:
                 # Only fetch current week (week -1 via searchCriteria.weekNum=1
                 # causes ERR_CONNECTION_TIMED_OUT on many servers).
                 # Daily cron covers the rolling 14-day window across consecutive runs.
-                apps = await self._scrape_week(page, week_offset=0)
+                apps = await self._scrape_week(page, week_offset=0, budget_minutes=budget_minutes)
                 today_str = date.today().isoformat()
                 for app in apps:
                     if not app.get("submitted_date"):
@@ -968,7 +968,7 @@ class IdoxPortal:
                               f"stopping at {target_month.strftime('%b %Y')}, "
                               f"keeping {len(all_apps)} already collected")
                         break
-                    apps = await self._scrape_month(page, target_month)
+                    apps = await self._scrape_month(page, target_month, budget_minutes=budget_minutes)
                     # Use TODAY as fallback date for apps without a parsed date.
                     # Using today (not start-of-month) means undated apps show as
                     # recently scraped rather than all clustering on '01/06/26'.
@@ -999,7 +999,8 @@ class IdoxPortal:
         print(f"    {len(all_apps)} this month → {len(recent)} in last {days_back} days")
         return recent
 
-    async def _scrape_month(self, page: Page, for_month: date) -> list[dict]:
+    async def _scrape_month(self, page: Page, for_month: date,
+                             budget_minutes: Optional[float] = None) -> list[dict]:
         """Load the monthly list, submit it for date received, collect all pages."""
         # Calculate monthYearIndex: 0 = current month, 1 = previous month, etc.
         today_month = date.today().replace(day=1)
@@ -1033,7 +1034,7 @@ class IdoxPortal:
                     and self.council_name in TRY_FIRSTPAGE_FALLBACK_COUNCILS
                     and not should_stop()):
                 print(f"    ⚠ Page load timeout — trying monthlyListResults.do fallback")
-                return await self._scrape_month_firstpage_fallback(page)
+                return await self._scrape_month_firstpage_fallback(page, budget_minutes=budget_minutes)
             print(f"    ⚠ Page load timeout")
             return []
         except Exception as e:
@@ -1054,7 +1055,7 @@ class IdoxPortal:
                     and self.council_name in TRY_FIRSTPAGE_FALLBACK_COUNCILS
                     and not should_stop()):
                 print(f"    ⚠ Trying monthlyListResults.do fallback")
-                return await self._scrape_month_firstpage_fallback(page)
+                return await self._scrape_month_firstpage_fallback(page, budget_minutes=budget_minutes)
             return []
 
         # — Step 2: Click "date received" radio & submit form —
@@ -1195,7 +1196,7 @@ class IdoxPortal:
                     and self.council_name in TRY_FIRSTPAGE_FALLBACK_COUNCILS
                     and not should_stop()):
                 print(f"    ⚠ Trying monthlyListResults.do fallback")
-                return await self._scrape_month_firstpage_fallback(page)
+                return await self._scrape_month_firstpage_fallback(page, budget_minutes=budget_minutes)
             return []
 
         # — Step 3: Collect all pages —
@@ -1236,6 +1237,25 @@ class IdoxPortal:
                 break
 
             page_num += 1
+
+            # FIX (2026-08-02) — the REAL location this needed to be, not
+            # the month loop (see the fix dated 2026-08-01 further up this
+            # file, which turned out to be checking the wrong level).
+            # Confirmed by a second real crash: with backoff-with-jitter
+            # retries now added on top of pacing, a SINGLE page navigation
+            # can itself take 15-25+ seconds when it hits a 429 (up to 2
+            # retries, 5-13s backoff each) — and this loop can run up to
+            # 50 pages within ONE month. For FAST mode (typically only
+            # 1-2 months total), almost all the real time is spent HERE,
+            # inside a single month's pagination — the between-months
+            # checkpoint was structurally unable to catch a slow month
+            # before external cancellation hit, since most runs never
+            # even reach a second month.
+            if budget_minutes is not None and elapsed_minutes() >= budget_minutes - 3:
+                print(f"    ⚠ Time budget reached mid-pagination "
+                      f"({elapsed_minutes():.1f} min elapsed) — stopping at "
+                      f"page {page_num}, keeping {len(all_apps)} already collected")
+                break
             next_url = (
                 f"{self.base_url}/pagedSearchResults.do"
                 f"?action=page&searchCriteria.page={page_num}"
@@ -1253,7 +1273,8 @@ class IdoxPortal:
             print(f"    Total across {page_num} pages: {len(all_apps)}")
         return all_apps
 
-    async def _scrape_month_firstpage_fallback(self, page: Page) -> list[dict]:
+    async def _scrape_month_firstpage_fallback(self, page: Page,
+                                                 budget_minutes: Optional[float] = None) -> list[dict]:
         """Fallback for portals where search.do?action=monthlyList times out or
         gets blocked, but monthlyListResults.do?action=firstPage works. This is
         the URL a human lands on clicking 'Weekly/Monthly Lists' in the UI — it
@@ -1308,6 +1329,11 @@ class IdoxPortal:
                 break
 
             page_num += 1
+            if budget_minutes is not None and elapsed_minutes() >= budget_minutes - 3:
+                print(f"    ⚠ Time budget reached mid-pagination "
+                      f"({elapsed_minutes():.1f} min elapsed) — stopping at "
+                      f"page {page_num}, keeping {len(all_apps)} already collected")
+                break
             next_url = (
                 f"{self.base_url}/pagedSearchResults.do"
                 f"?action=page&searchCriteria.page={page_num}"
@@ -1323,7 +1349,8 @@ class IdoxPortal:
             print(f"    Fallback total across {page_num} pages: {len(all_apps)}")
         return all_apps
 
-    async def _scrape_week(self, page: Page, week_offset: int = 0) -> list[dict]:
+    async def _scrape_week(self, page: Page, week_offset: int = 0,
+                            budget_minutes: Optional[float] = None) -> list[dict]:
         """Scrape a weekly list page for portals that don't support monthly lists.
         week_offset=0 is the current week, 1 is last week.
         Weekly lists go directly to results — no form submission needed.
@@ -1396,6 +1423,11 @@ class IdoxPortal:
                 break
 
             page_num += 1
+            if budget_minutes is not None and elapsed_minutes() >= budget_minutes - 3:
+                print(f"    ⚠ Time budget reached mid-pagination "
+                      f"({elapsed_minutes():.1f} min elapsed) — stopping at "
+                      f"page {page_num}, keeping {len(all_apps)} already collected")
+                break
             next_url = (
                 f"{self.base_url}/pagedSearchResults.do"
                 f"?action=page&searchCriteria.page={page_num}"
