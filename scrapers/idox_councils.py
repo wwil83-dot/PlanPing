@@ -1074,8 +1074,18 @@ IDOX_COUNCILS = [
     # DERBYSHIRE
     # Amber Valley CONFIRMED not Idox — bespoke ASP.NET "dailylistnew"
     # system. Erewash, High Peak, South Derbyshire not otherwise checked.
-    # Chesterfield already covered (see COUNCIL_DB_IDS, id=317).
     # -------------------------------------------------------------------------
+    # FIX (2026-08-11) — genuine silent gap found and fixed. This council
+    # has had a real DB row (id=317, coverage_source='idox_scraper') the
+    # whole time, and the comment that used to sit here claimed it was
+    # "already covered (see COUNCIL_DB_IDS, id=317)" — but having an ID
+    # in that shortcut dict means nothing if the (name, url) tuple was
+    # never actually added to THIS list, the one the scraper genuinely
+    # iterates over. It never was. Chesterfield sat completely unscraped,
+    # every single night, while looking fully configured in the database.
+    ("Chesterfield Borough Council",
+     "https://publicaccess.chesterfield.gov.uk/online-applications"),
+
     # BROKEN — North East Derbyshire confirmed real Cloudflare WAF block
     # (2026-07-23). Confirmed via idox_recon_round2.py replicating the
     # REAL production form-submit flow (not just an initial page load) —
@@ -1337,7 +1347,24 @@ IDOX_COUNCILS = [
     # Note: some use non-standard subdomains (pa., pam., publicaccess2. etc)
     # Camden already covered by open data feed
     # -------------------------------------------------------------------------
-    # BROKEN — Hackney moved off Idox; now uses planningapps.hackney.gov.uk (non-Idox system).
+    # CONFIRMED DEAD END 2026-08-02 — not just "moved off Idox", genuinely
+    # unscrapable from our infrastructure. Real, direct evidence on the
+    # portal itself: "The Planning Application Search Portal is
+    # inaccessible outside the United Kingdom due to supplier security
+    # restrictions." A deliberate geographic block, not a WAF/rate-limit
+    # issue — no amount of pacing, retries, or careful timing can ever
+    # get past this from cloud infrastructure that isn't guaranteed to
+    # register as UK. Real URL: developmentandhousing.hackney.gov.uk/
+    # planning/index.html?fa=search — same distinctive "/planning/
+    # index.html?fa=..." URL shape and form layout (Application
+    # Reference Number/Proposal/Applicant/Agent/Ps Development Code,
+    # Grid Reference X/Y, three-section Application/Location/Dates
+    # structure) as Waltham Forest (confirmed) and likely Harrow (real
+    # IDX002 error for every automated attempt) — a real, distinct 4th
+    # vendor/platform some London boroughs specifically use, likely
+    # with the same UK-only restriction across all of them. Worth
+    # manual_link treatment (real, working portal for a human visitor),
+    # not further scraper investment.
     # ("London Borough of Hackney",
     #  "https://planning.hackney.gov.uk/online-applications"),
 
