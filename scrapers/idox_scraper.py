@@ -1002,6 +1002,30 @@ class IdoxPortal:
     async def _scrape_month(self, page: Page, for_month: date,
                              budget_minutes: Optional[float] = None) -> list[dict]:
         """Load the monthly list, submit it for date received, collect all pages."""
+        # FIX (2026-08-11) — added after real, direct evidence: Cornwall's
+        # bare monthly-list URL was failing with ERR_EMPTY_RESPONSE for
+        # three consecutive nights, but a real manual check found the
+        # portal's own homepage loads slowly/uncleanly while the actual
+        # Weekly/Monthly Lists page (reached by clicking through from the
+        # homepage, meaning a session was already established) loads
+        # fine. This is the exact same root cause already fixed for
+        # Midlothian in _scrape_week() below — some Idox installations
+        # reject direct access to a deep URL without a valid session
+        # cookie first. That fix only ever applied to the weekly flow;
+        # this brings the same, general fix to the monthly flow too,
+        # since any monthly-mode council could plausibly have the same
+        # issue, not just Cornwall.
+        try:
+            await pace_request()
+            await page.goto(
+                f"{self.base_url}/search.do?action=simple&searchType=Application",
+                wait_until="domcontentloaded",
+                timeout=30_000,
+            )
+            await asyncio.sleep(1)
+        except Exception:
+            pass  # Best effort — proceed even if home page fails
+
         # Calculate monthYearIndex: 0 = current month, 1 = previous month, etc.
         today_month = date.today().replace(day=1)
         month_index = (today_month.year - for_month.year) * 12 + (today_month.month - for_month.month)
