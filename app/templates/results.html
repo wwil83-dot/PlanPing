@@ -70,18 +70,24 @@
     </button>
   </div>
 
-  {# Filter bar — status/type/keyword refinement + CSV export. Deliberately
-     a separate form from the hero search bar above (different concern:
-     refining an existing result set, not starting a new search), but
-     carries every current parameter forward as hidden fields so changing
-     a filter never loses the postcode/radius/days already in play.
+  {# Filter bar — status/type/keyword/sort/date-range refinement + CSV
+     export. Deliberately a separate form from the hero search bar above
+     (different concern: refining an existing result set, not starting a
+     new search), but carries every current parameter forward as hidden
+     fields so changing a filter never loses the postcode/radius/days
+     already in play.
 
-     ADDED (2026-08-11): keyword search. The two dropdowns auto-submit on
-     change (instant refine, no extra click) — a free-text field can't do
-     that (would fire a request on every keystroke), so it submits on
-     Enter (standard browser behaviour for a text input inside a form) or
-     the explicit "Search" button placed right next to it. #}
-  {% if total > 0 or status or app_type or keyword %}
+     ADDED (2026-08-11): user-selectable sorting and an explicit date
+     range, alongside keyword search. The dropdowns auto-submit on
+     change (instant refine, no extra click) — the free-text keyword
+     and date fields can't do that (would fire a request on every
+     keystroke), so they submit on Enter or the explicit "Apply" button.
+     The date range is deliberately optional and separate from the
+     "days back" dropdown in the hero form above — when a real
+     date_from/date_to is set here, it takes precedence for filtering,
+     but the simple days-back control still works fine on its own for
+     anyone who just clears these two fields. #}
+  {% if total > 0 or status or app_type or keyword or date_from or date_to %}
   <form action="/search" method="get" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.25rem;padding:.85rem 1rem;background:#fff;border:1px solid var(--border);border-radius:8px">
     <input type="hidden" name="postcode" value="{{ postcode }}">
     <input type="hidden" name="radius" value="{{ radius }}">
@@ -89,7 +95,7 @@
 
     <label style="font-size:.8rem;color:var(--muted);font-weight:600">Filter:</label>
 
-    <input type="text" name="keyword" class="form-input" style="max-width:200px"
+    <input type="text" name="keyword" class="form-input" style="max-width:180px"
       placeholder="Keyword, e.g. solar, barn, HMO"
       value="{{ keyword }}"
       aria-label="Filter by keyword in description or address">
@@ -108,14 +114,30 @@
       {% endfor %}
     </select>
 
+    <select name="sort" class="form-input" style="max-width:170px" onchange="this.form.submit()" aria-label="Sort results by">
+      <option value="date_desc" {{ 'selected' if sort == 'date_desc' }}>Newest first</option>
+      <option value="date_asc" {{ 'selected' if sort == 'date_asc' }}>Oldest first</option>
+      <option value="distance" {{ 'selected' if sort == 'distance' }}>Nearest first</option>
+    </select>
+
+    <span style="display:flex;align-items:center;gap:.35rem">
+      <label for="filter-date-from" style="font-size:.78rem;color:var(--muted)">From</label>
+      <input type="date" id="filter-date-from" name="date_from" class="form-input" style="max-width:150px"
+        value="{{ date_from }}" aria-label="Submitted from this date">
+      <label for="filter-date-to" style="font-size:.78rem;color:var(--muted)">to</label>
+      <input type="date" id="filter-date-to" name="date_to" class="form-input" style="max-width:150px"
+        value="{{ date_to }}" aria-label="Submitted up to this date">
+    </span>
+
     <button type="submit" class="btn btn-sm">Apply</button>
 
-    {% if status or app_type or keyword %}
+    {% if status or app_type or keyword or date_from or date_to %}
     <a href="/search?postcode={{ postcode|urlencode }}&radius={{ radius }}&days={{ days }}" class="btn-link" style="font-size:.8rem">Clear filters</a>
     {% endif %}
 
-    <a href="/search.csv?postcode={{ postcode|urlencode }}&radius={{ radius }}&days={{ days }}{{ '&status=' + status if status }}{{ '&app_type=' + app_type if app_type }}{{ '&keyword=' + keyword|urlencode if keyword }}"
+    <a href="/search.csv?postcode={{ postcode|urlencode }}&radius={{ radius }}&days={{ days }}{{ '&status=' + status if status }}{{ '&app_type=' + app_type if app_type }}{{ '&keyword=' + keyword|urlencode if keyword }}{{ '&sort=' + sort if sort }}{{ '&date_from=' + date_from if date_from }}{{ '&date_to=' + date_to if date_to }}"
        class="btn btn-sm" style="margin-left:auto">⬇ Download CSV</a>
+
   </form>
   {% endif %}
 
