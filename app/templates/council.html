@@ -26,6 +26,30 @@
         · <a href="{{ council.portal_url }}" target="_blank" rel="noopener">Visit council portal →</a>
         {% endif %}
       </p>
+      {# ADDED (2026-08-13) — explicit, clearly-labeled statement of
+         when WE last successfully scraped this council, deliberately
+         separate from any individual application's own date below
+         (which is when THAT application was submitted to the council —
+         a genuinely different thing). Real user confusion prompted
+         this: /councils correctly showed "Live, updated today" while
+         this page showed a week-old date with nothing explaining that
+         it belonged to a specific application, not to our own scraper
+         status. #}
+      {% if council.status %}
+      <p class="results-sub" style="margin-top:.3rem">
+        {{ council.status.emoji }} Our data:
+        {% if council.days_since_save is none %}
+          no successful update recorded yet
+        {% elif council.days_since_save == 0 %}
+          last updated today
+        {% elif council.days_since_save == 1 %}
+          last updated yesterday
+        {% else %}
+          last updated {{ council.days_since_save }} days ago
+        {% endif %}
+        ({{ council.status.label }}) — the dates on individual applications below show when each was submitted to the council, not when we last checked.
+      </p>
+      {% endif %}
       {% if council.date_unavailable_note %}
       <p class="results-sub" style="margin-top:.3rem">
         Note: this council doesn't publish exact application dates in the data we can access —
