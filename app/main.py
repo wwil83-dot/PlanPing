@@ -50,7 +50,8 @@ async def index(request: Request):
 
 async def _fetch_applications(db, lat: float, lng: float, radius: float, days: int,
                                status: Optional[str] = None,
-                               app_type: Optional[str] = None) -> list[dict]:
+                               app_type: Optional[str] = None,
+                               keyword: Optional[str] = None) -> list[dict]:
     # FIX (2026-07-30) — same real bug found and fixed on the tag pages,
     # applied here at the shared source so every caller (search,
     # search_csv, bulk_search, application_detail's neighbours) is
@@ -62,6 +63,12 @@ async def _fetch_applications(db, lat: float, lng: float, radius: float, days: i
     # treated a genuinely missing value as "no filter".
     status = status or None
     app_type = app_type or None
+    # ADDED (2026-08-11) — keyword search. Same empty-string normalization
+    # applied here too, from day one — a bare, empty keyword box submitted
+    # alongside other filters would otherwise silently exclude everything,
+    # exactly the bug already found and fixed for status/app_type above.
+    keyword = keyword.strip() if keyword else ""
+    keyword = keyword or None
 
     rows = await db.fetch("""
         SELECT
@@ -76,8 +83,10 @@ async def _fetch_applications(db, lat: float, lng: float, radius: float, days: i
         JOIN planning_applications a ON a.id = an.application_id
         JOIN councils c ON c.id = a.council_id
         WHERE ($5::text IS NULL OR a.status = $5)
+        AND ($6::text IS NULL OR a.description ILIKE '%' || $6 || '%'
+                              OR a.address ILIKE '%' || $6 || '%')
         ORDER BY a.submitted_date DESC NULLS LAST, an.distance_miles
-    """, lat, lng, radius, days, status)
+    """, lat, lng, radius, days, status, keyword)
 
     applications = [dict(r) for r in rows]
     for a in applications:
@@ -198,7 +207,8 @@ def _add_date_availability_flag(applications: list[dict]) -> None:
 
 @app.get("/search", response_class=HTMLResponse)
 async def search(request: Request, postcode: str, radius: float = 1.0, days: int = 30,
-                  status: Optional[str] = None, app_type: Optional[str] = None):
+                  status: Optional[str] = None, app_type: Optional[str] = None,
+                  keyword: Optional[str] = None):
     postcode = postcode.strip().upper()
     location = await postcode_lookup(postcode)
 
@@ -228,7 +238,7 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
     council_name = location.get("council", "")
 
     async with get_db() as db:
-        applications = await _fetch_applications(db, lat, lng, radius, days, status, app_type)
+        applications = await _fetch_applications(db, lat, lng, radius, days, status, app_type, keyword)
 
         council = await db.fetchrow("""
             SELECT id, name, slug, coverage_source, portal_url, system
@@ -260,6 +270,7 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
         "days": days,
         "status": status,
         "app_type": app_type,
+        "keyword": keyword or "",
         "status_options": STATUS_FILTER_OPTIONS,
         "type_options": TYPE_FILTER_OPTIONS,
         "applications": applications,
@@ -275,7 +286,8 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
 
 @app.get("/search.csv")
 async def search_csv(postcode: str, radius: float = 1.0, days: int = 30,
-                      status: Optional[str] = None, app_type: Optional[str] = None):
+                      status: Optional[str] = None, app_type: Optional[str] = None,
+                      keyword: Optional[str] = None):
     postcode = postcode.strip().upper()
     location = await postcode_lookup(postcode)
     if not location:
@@ -284,7 +296,7 @@ async def search_csv(postcode: str, radius: float = 1.0, days: int = 30,
     lat, lng = location["lat"], location["lng"]
 
     async with get_db() as db:
-        applications = await _fetch_applications(db, lat, lng, radius, days, status, app_type)
+        applications = await _fetch_applications(db, lat, lng, radius, days, status, app_type, keyword)
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
