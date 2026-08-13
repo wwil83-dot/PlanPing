@@ -841,12 +841,14 @@ async def councils_list(request: Request):
     async with get_db() as db:
         councils = await db.fetch("""
             SELECT c.name, c.slug, c.region, c.system, c.coverage_source, c.portal_url,
+                   c.last_saved_at,
                    COUNT(pa.id) AS app_count,
                    MAX(pa.submitted_date) AS latest_date
             FROM councils c
             LEFT JOIN planning_applications pa ON pa.council_id = c.id
             WHERE c.active = TRUE
-            GROUP BY c.id, c.name, c.slug, c.region, c.system, c.coverage_source, c.portal_url
+            GROUP BY c.id, c.name, c.slug, c.region, c.system, c.coverage_source,
+                     c.portal_url, c.last_saved_at
             ORDER BY c.name
         """)
 
@@ -869,6 +871,19 @@ async def councils_list(request: Request):
         # search match — so searching "Harrogate" finds the real North
         # Yorkshire Council card, not just its own literal name.
         c["search_haystack"] = " ".join([c["name"]] + c["area_aliases"]).lower()
+        # ADDED (2026-08-13) — a real, honest status (Live/Delayed/
+        # Offline), computed from last_saved_at (when WE last actually
+        # scraped successfully), not latest_date (when the most recent
+        # APPLICATION was submitted — a genuinely different thing: a
+        # council can have old applications but still be scraping fine
+        # nightly, or have recent applications sitting there while our
+        # own scraper has actually stopped running).
+        days_since_save = (
+            (date.today() - c["last_saved_at"].date()).days
+            if c["last_saved_at"] else None
+        )
+        c["days_since_save"] = days_since_save
+        c["status"] = _coverage_status(c["coverage_source"], days_since_save)
 
     manual_link = [
         c for c in councils
@@ -912,8 +927,40 @@ KNOWN_GAP_REASONS = {
 # How many days without a successful save before we consider a
 # previously-working council to be a genuine gap, not just a quiet
 # night. Generous enough to avoid flagging a single bad run, tight
-# enough to catch a real, sustained problem quickly.
+# enough to catch a real, sustained problem quickly. Also reused below
+# by _coverage_status() as the "Offline" boundary, so both pages agree
+# on what "gone quiet" actually means rather than using two different,
+# silently inconsistent thresholds.
 GAP_THRESHOLD_DAYS = 10
+
+# ADDED (2026-08-13) — a genuine three-state status, not just the
+# existing covered/manual_link/pending split, which only answers
+# whether a council has EVER been covered, not whether it's currently
+# healthy. "Delayed" is a real middle state that neither existing page
+# currently shows at all — /coverage-gaps only surfaces things already
+# past the full GAP_THRESHOLD_DAYS, nothing shows "starting to look a
+# bit stale but not a confirmed gap yet". 2 days allows for one missed
+# night (matches the real nightly cadence) without unduly alarming.
+DELAYED_THRESHOLD_DAYS = 2
+
+
+def _coverage_status(coverage_source: str, days_since_save: Optional[int]) -> dict:
+    """Real, honest status computed from data we already store — no new
+    columns or migration needed. days_since_save should be
+    (CURRENT_DATE - last_saved_at::date), the same real, stored field
+    /coverage-gaps already uses, NOT the most recent application's own
+    submitted_date (a genuinely different thing: when data was last
+    scraped vs. how recent the data itself is)."""
+    if coverage_source in ("pending", "none", "manual_link"):
+        return {"key": "offline", "emoji": "🔴", "label": "Not yet covered"}
+    if days_since_save is None:
+        return {"key": "offline", "emoji": "🔴", "label": "Offline"}
+    if days_since_save >= GAP_THRESHOLD_DAYS:
+        return {"key": "offline", "emoji": "🔴", "label": "Offline"}
+    if days_since_save >= DELAYED_THRESHOLD_DAYS:
+        return {"key": "delayed", "emoji": "🟠", "label": "Delayed"}
+    return {"key": "live", "emoji": "🟢", "label": "Live"}
+
 
 # Real, confirmed areas covered by a single merged scraper entry — NOT
 # separate councils, and deliberately NOT counted separately in
