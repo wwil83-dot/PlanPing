@@ -70,6 +70,20 @@ SORT_OPTIONS = {
 }
 DEFAULT_SORT = "date_desc"
 
+# BUG FIX (2026-08-11) — a genuinely SEPARATE mapping for tag pages,
+# after SORT_OPTIONS above caused a 500 on every single tag-page
+# request regardless of which sort was chosen. Both "date_desc" and
+# "date_asc" reference "an.distance_miles" as a secondary tiebreaker —
+# a table alias from the applications_near() Postgres function used by
+# the main postcode search, which tag pages never join against at all
+# (no postcode/search point on those pages for a distance to be
+# relative to). Deliberately has no "distance" key at all — there's
+# nothing correct it could ever map to here.
+TAG_SORT_OPTIONS = {
+    "date_desc": "a.submitted_date DESC NULLS LAST",
+    "date_asc": "a.submitted_date ASC NULLS LAST",
+}
+
 
 def _resolve_sort_order(sort: Optional[str]) -> str:
     """Maps a validated sort key to its fixed SQL snippet, defaulting to
@@ -192,14 +206,19 @@ async def _fetch_tagged_applications(db, tag: str, status: Optional[str] = None,
                                       date_to: Optional[date] = None,
                                       limit: int = 200) -> list[dict]:
     keyword = _normalize_keyword(keyword)
-    # "distance" has no meaning here — this page has no search point to
-    # be relative to, unlike the postcode search (no applications_near()
-    # join exists in this query at all, so the "an." alias that sort
-    # option references doesn't even exist here). Real design choice,
-    # not an oversight: falls back to the default rather than risk
-    # passing a broken table reference into raw SQL.
-    order_by = (SORT_OPTIONS["date_asc"] if sort == "date_asc"
-                else SORT_OPTIONS[DEFAULT_SORT])
+    # BUG FIX (2026-08-11) — this was causing a genuine 500 on EVERY tag
+    # page request, regardless of which sort was actually chosen. The
+    # earlier version only special-cased "distance" as invalid here (no
+    # applications_near() join in this query), but missed that BOTH
+    # remaining SORT_OPTIONS entries (date_desc AND date_asc) ALSO
+    # reference "an.distance_miles" as a secondary tiebreaker — a table
+    # alias that doesn't exist in this query's FROM clause either way.
+    # Postgres correctly rejected every single query with "missing
+    # FROM-clause entry for table an", 100% of the time, since even the
+    # DEFAULT sort fell into this trap. Fixed using TAG_SORT_OPTIONS
+    # (see its own definition above), a genuinely separate mapping that
+    # never references that alias at all.
+    order_by = TAG_SORT_OPTIONS.get(sort, TAG_SORT_OPTIONS["date_desc"])
 
     # ADDED (2026-08-11) — keyword/sort/date range, reusing the exact
     # same keyword normalization already built and tested for the main
