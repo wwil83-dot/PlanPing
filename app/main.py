@@ -58,10 +58,48 @@ def _normalize_keyword(keyword: Optional[str]) -> Optional[str]:
     return keyword or None
 
 
+# ADDED (2026-08-11) — allowlisted sort options. SQL ORDER BY can't be
+# parameterized with $N placeholders the way column VALUES can — the
+# only safe way to make it user-selectable is to map a validated key
+# to a fixed, hardcoded SQL snippet like this, never interpolate raw
+# user input into the query string directly.
+SORT_OPTIONS = {
+    "date_desc": "a.submitted_date DESC NULLS LAST, an.distance_miles",
+    "date_asc": "a.submitted_date ASC NULLS LAST, an.distance_miles",
+    "distance": "an.distance_miles, a.submitted_date DESC NULLS LAST",
+}
+DEFAULT_SORT = "date_desc"
+
+
+def _resolve_sort_order(sort: Optional[str]) -> str:
+    """Maps a validated sort key to its fixed SQL snippet, defaulting to
+    DEFAULT_SORT for anything unrecognized (including None) — this is
+    the actual safety boundary: an unknown/malicious value never
+    reaches the query string, it just falls back to the default."""
+    return SORT_OPTIONS.get(sort, SORT_OPTIONS[DEFAULT_SORT])
+
+
+def _widen_days_for_date_range(days: int, date_from: Optional[date]) -> int:
+    """applications_near() only accepts a simple lookback window, not an
+    explicit date range — when a real date_from is given, this widens
+    the window passed into that function so its own internal filter
+    can't accidentally exclude something the precise date_from/date_to
+    check (applied separately, directly on a.submitted_date) actually
+    wants. Never narrows — only ever returns days itself, or something
+    larger."""
+    if date_from is None:
+        return days
+    widened = (date.today() - date_from).days
+    return max(days, widened)
+
+
 async def _fetch_applications(db, lat: float, lng: float, radius: float, days: int,
                                status: Optional[str] = None,
                                app_type: Optional[str] = None,
-                               keyword: Optional[str] = None) -> list[dict]:
+                               keyword: Optional[str] = None,
+                               sort: Optional[str] = None,
+                               date_from: Optional[date] = None,
+                               date_to: Optional[date] = None) -> list[dict]:
     # FIX (2026-07-30) — same real bug found and fixed on the tag pages,
     # applied here at the shared source so every caller (search,
     # search_csv, bulk_search, application_detail's neighbours) is
@@ -75,7 +113,21 @@ async def _fetch_applications(db, lat: float, lng: float, radius: float, days: i
     app_type = app_type or None
     keyword = _normalize_keyword(keyword)
 
-    rows = await db.fetch("""
+    # ADDED (2026-08-11) — explicit date range. applications_near() is a
+    # Postgres FUNCTION that only accepts a simple lookback window
+    # (p_days_back), not an explicit from/to range — changing that would
+    # mean a real schema migration. Rather than touch the function, when
+    # a real date range is given we widen the days_back passed INTO the
+    # function (so its own internal filter can't accidentally exclude
+    # something we actually want), then apply the precise date_from/
+    # date_to boundary as an additional filter in THIS query, which has
+    # direct access to a.submitted_date. No migration needed, and the
+    # function's existing simple-lookback behaviour is untouched for
+    # every caller that doesn't pass a range.
+    effective_days = _widen_days_for_date_range(days, date_from)
+    order_by = _resolve_sort_order(sort)
+
+    rows = await db.fetch(f"""
         SELECT
             a.id, a.reference, a.address, a.postcode,
             a.description, a.application_type, a.status,
@@ -90,8 +142,10 @@ async def _fetch_applications(db, lat: float, lng: float, radius: float, days: i
         WHERE ($5::text IS NULL OR a.status = $5)
         AND ($6::text IS NULL OR a.description ILIKE '%' || $6 || '%'
                               OR a.address ILIKE '%' || $6 || '%')
-        ORDER BY a.submitted_date DESC NULLS LAST, an.distance_miles
-    """, lat, lng, radius, days, status, keyword)
+        AND ($7::date IS NULL OR a.submitted_date >= $7)
+        AND ($8::date IS NULL OR a.submitted_date <= $8)
+        ORDER BY {order_by}
+    """, lat, lng, radius, effective_days, status, keyword, date_from, date_to)
 
     applications = [dict(r) for r in rows]
     for a in applications:
@@ -213,7 +267,8 @@ def _add_date_availability_flag(applications: list[dict]) -> None:
 @app.get("/search", response_class=HTMLResponse)
 async def search(request: Request, postcode: str, radius: float = 1.0, days: int = 30,
                   status: Optional[str] = None, app_type: Optional[str] = None,
-                  keyword: Optional[str] = None):
+                  keyword: Optional[str] = None, sort: Optional[str] = None,
+                  date_from: Optional[date] = None, date_to: Optional[date] = None):
     postcode = postcode.strip().upper()
     location = await postcode_lookup(postcode)
 
@@ -243,7 +298,10 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
     council_name = location.get("council", "")
 
     async with get_db() as db:
-        applications = await _fetch_applications(db, lat, lng, radius, days, status, app_type, keyword)
+        applications = await _fetch_applications(
+            db, lat, lng, radius, days, status, app_type, keyword,
+            sort, date_from, date_to,
+        )
 
         council = await db.fetchrow("""
             SELECT id, name, slug, coverage_source, portal_url, system
@@ -276,6 +334,10 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
         "status": status,
         "app_type": app_type,
         "keyword": keyword or "",
+        "sort": sort or DEFAULT_SORT,
+        "sort_options": SORT_OPTIONS,
+        "date_from": date_from.isoformat() if date_from else "",
+        "date_to": date_to.isoformat() if date_to else "",
         "status_options": STATUS_FILTER_OPTIONS,
         "type_options": TYPE_FILTER_OPTIONS,
         "applications": applications,
@@ -292,7 +354,8 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
 @app.get("/search.csv")
 async def search_csv(postcode: str, radius: float = 1.0, days: int = 30,
                       status: Optional[str] = None, app_type: Optional[str] = None,
-                      keyword: Optional[str] = None):
+                      keyword: Optional[str] = None, sort: Optional[str] = None,
+                      date_from: Optional[date] = None, date_to: Optional[date] = None):
     postcode = postcode.strip().upper()
     location = await postcode_lookup(postcode)
     if not location:
@@ -301,7 +364,10 @@ async def search_csv(postcode: str, radius: float = 1.0, days: int = 30,
     lat, lng = location["lat"], location["lng"]
 
     async with get_db() as db:
-        applications = await _fetch_applications(db, lat, lng, radius, days, status, app_type, keyword)
+        applications = await _fetch_applications(
+            db, lat, lng, radius, days, status, app_type, keyword,
+            sort, date_from, date_to,
+        )
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
