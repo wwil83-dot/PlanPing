@@ -26,13 +26,26 @@
       </h2>
     </div>
   </div>
-  {# Filter bar — status and council refinement; this is a national
-     search, not a postcode/radius one, so it deliberately doesn't
-     carry those params. Council options are pre-filtered server-side
-     to only councils that genuinely have at least one match for this
-     tag, so the dropdown never lists empty/useless options. #}
+  {# Filter bar — status, council, keyword, sort, and date-range
+     refinement; this is a national search, not a postcode/radius one,
+     so it deliberately doesn't carry those params.  Council options
+     are pre-filtered server-side to only councils that genuinely have
+     at least one match for this tag, so the dropdown never lists
+     empty/useless options.
+
+     ADDED (2026-08-11): keyword, sort, and an explicit date range,
+     matching the same fields and behaviour already built for the main
+     postcode search. "Nearest first" is deliberately not offered here
+     — there's no postcode/search point on this page for a distance to
+     be relative to, unlike the main search. #}
   <form method="get" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.25rem;padding:.85rem 1rem;background:#fff;border:1px solid var(--border);border-radius:8px">
     <label style="font-size:.8rem;color:var(--muted);font-weight:600">Filter:</label>
+
+    <input type="text" name="keyword" class="form-input" style="max-width:180px"
+      placeholder="Keyword, e.g. solar, barn, HMO"
+      value="{{ keyword }}"
+      aria-label="Filter by keyword in description or address">
+
     <select name="status" class="form-input" style="max-width:150px" onchange="this.form.submit()">
       <option value="">Any status</option>
       <option value="pending" {{ 'selected' if status == 'pending' }}>Pending</option>
@@ -46,13 +59,35 @@
       <option value="{{ c.slug }}" {{ 'selected' if council == c.slug }}>{{ c.name }}</option>
       {% endfor %}
     </select>
-    {% if status or council %}
+
+    <select name="sort" class="form-input" style="max-width:170px" onchange="this.form.submit()" aria-label="Sort results by">
+      <option value="date_desc" {{ 'selected' if sort == 'date_desc' }}>Newest first</option>
+      <option value="date_asc" {{ 'selected' if sort == 'date_asc' }}>Oldest first</option>
+    </select>
+
+    <span style="display:flex;align-items:center;gap:.35rem">
+      <label for="tag-date-from" style="font-size:.78rem;color:var(--muted)">From</label>
+      <input type="date" id="tag-date-from" name="date_from" class="form-input" style="max-width:150px"
+        value="{{ date_from }}" aria-label="Submitted from this date">
+      <label for="tag-date-to" style="font-size:.78rem;color:var(--muted)">to</label>
+      <input type="date" id="tag-date-to" name="date_to" class="form-input" style="max-width:150px"
+        value="{{ date_to }}" aria-label="Submitted up to this date">
+    </span>
+
+    <button type="submit" class="btn btn-sm">Apply</button>
+
+    {% if status or council or keyword or date_from or date_to %}
     <a href="?" class="btn-link" style="font-size:.8rem">Clear filters</a>
     {% endif %}
   </form>
   {% if total == 0 %}
   <div class="banner banner-amber">
-    {% if council %}
+    {% if keyword %}
+    No applications matching "<strong>{{ keyword }}</strong>" currently match this category{{ ' for the selected council' if council }}.
+    This may mean genuinely none exist right now, or that the keyword
+    rules missed some real matches — worth checking back as more
+    applications are scraped{{ ', clearing the council filter,' if council }} or trying a different search term.
+    {% elif council %}
     No applications currently match this category for the selected council.
     This may mean genuinely none exist right now, or that the keyword
     rules missed some real matches — worth checking back as more
