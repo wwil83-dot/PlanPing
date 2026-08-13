@@ -58,6 +58,32 @@ def _normalize_keyword(keyword: Optional[str]) -> Optional[str]:
     return keyword or None
 
 
+def _parse_date_param(value: Optional[str]) -> Optional[date]:
+    """BUG FIX (2026-08-13) — a real, confirmed production bug. Route
+    parameters typed as `Optional[date]` get validated by FastAPI/
+    Pydantic BEFORE our own code ever runs — an empty string fails that
+    validation as "not a valid date" and returns a 422, since Pydantic
+    treats a blank string as malformed input, not as an absent
+    parameter. This is the exact same empty-string-vs-None lesson
+    already learned and fixed for status/app_type/keyword — but those
+    are plain `Optional[str]` params, where FastAPI passes the empty
+    string straight through and OUR OWN code gets to normalize it. A
+    strictly-typed `Optional[date]` never gives us that chance at all.
+    The real fix: routes accept the raw string (Optional[str]) and call
+    this function to parse it themselves — normalizing blank/whitespace
+    input to None first, exactly like every other filter on this site,
+    THEN parsing whatever's left into a real date. A genuinely malformed
+    date (not just blank) is treated as "no filter" too, rather than
+    crashing the whole page over one bad value in the URL."""
+    value = value.strip() if value else ""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 # ADDED (2026-08-11) — allowlisted sort options. SQL ORDER BY can't be
 # parameterized with $N placeholders the way column VALUES can — the
 # only safe way to make it user-selectable is to map a validated key
@@ -312,9 +338,18 @@ def _add_date_availability_flag(applications: list[dict]) -> None:
 async def search(request: Request, postcode: str, radius: float = 1.0, days: int = 30,
                   status: Optional[str] = None, app_type: Optional[str] = None,
                   keyword: Optional[str] = None, sort: Optional[str] = None,
-                  date_from: Optional[date] = None, date_to: Optional[date] = None):
+                  date_from: Optional[str] = None, date_to: Optional[str] = None):
     postcode = postcode.strip().upper()
     location = await postcode_lookup(postcode)
+    # BUG FIX (2026-08-13) — parsed here, not via the route's own type
+    # hint. See _parse_date_param's docstring for the full real-bug
+    # writeup: an Optional[date] parameter gets validated by FastAPI
+    # before our code runs, and an empty string (which the filter form
+    # sends whenever the date fields are left blank) fails that
+    # validation as malformed input rather than being treated as
+    # "no filter" — every filter submission was 422ing site-wide.
+    date_from_parsed = _parse_date_param(date_from)
+    date_to_parsed = _parse_date_param(date_to)
 
     if not location:
         async with get_db() as db:
@@ -344,7 +379,7 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
     async with get_db() as db:
         applications = await _fetch_applications(
             db, lat, lng, radius, days, status, app_type, keyword,
-            sort, date_from, date_to,
+            sort, date_from_parsed, date_to_parsed,
         )
 
         council = await db.fetchrow("""
@@ -380,8 +415,8 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
         "keyword": keyword or "",
         "sort": sort or DEFAULT_SORT,
         "sort_options": SORT_OPTIONS,
-        "date_from": date_from.isoformat() if date_from else "",
-        "date_to": date_to.isoformat() if date_to else "",
+        "date_from": date_from_parsed.isoformat() if date_from_parsed else "",
+        "date_to": date_to_parsed.isoformat() if date_to_parsed else "",
         "status_options": STATUS_FILTER_OPTIONS,
         "type_options": TYPE_FILTER_OPTIONS,
         "applications": applications,
@@ -399,7 +434,7 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
 async def search_csv(postcode: str, radius: float = 1.0, days: int = 30,
                       status: Optional[str] = None, app_type: Optional[str] = None,
                       keyword: Optional[str] = None, sort: Optional[str] = None,
-                      date_from: Optional[date] = None, date_to: Optional[date] = None):
+                      date_from: Optional[str] = None, date_to: Optional[str] = None):
     postcode = postcode.strip().upper()
     location = await postcode_lookup(postcode)
     if not location:
@@ -410,7 +445,7 @@ async def search_csv(postcode: str, radius: float = 1.0, days: int = 30,
     async with get_db() as db:
         applications = await _fetch_applications(
             db, lat, lng, radius, days, status, app_type, keyword,
-            sort, date_from, date_to,
+            sort, _parse_date_param(date_from), _parse_date_param(date_to),
         )
 
     buffer = io.StringIO()
@@ -731,8 +766,8 @@ async def trends(request: Request):
 async def _render_tag_page(request: Request, tag: str, status: Optional[str],
                             council: Optional[str], keyword: Optional[str] = None,
                             sort: Optional[str] = None,
-                            date_from: Optional[date] = None,
-                            date_to: Optional[date] = None) -> HTMLResponse:
+                            date_from: Optional[str] = None,
+                            date_to: Optional[str] = None) -> HTMLResponse:
     # FIX (2026-07-30) — a real bug, not a guess: both dropdowns live in
     # the same <form>, so selecting one resubmits the other too. "Any
     # status"/"All councils" are <option value=""> — a GET form always
@@ -747,12 +782,19 @@ async def _render_tag_page(request: Request, tag: str, status: Optional[str],
     # request.
     status = status or None
     council = council or None
+    # BUG FIX (2026-08-13) — date_from/date_to arrive here as raw
+    # strings now (not Optional[date]) precisely so an empty string from
+    # an untouched date field doesn't 422 before this function even
+    # runs. See _parse_date_param's docstring for the full writeup.
+    date_from_parsed = _parse_date_param(date_from)
+    date_to_parsed = _parse_date_param(date_to)
 
     meta = TAG_META[tag]
     async with get_db() as db:
         applications = await _fetch_tagged_applications(
             db, tag, status=status, council_slug=council,
-            keyword=keyword, sort=sort, date_from=date_from, date_to=date_to,
+            keyword=keyword, sort=sort,
+            date_from=date_from_parsed, date_to=date_to_parsed,
         )
         council_options = await _fetch_tag_council_options(db, tag)
 
@@ -767,8 +809,8 @@ async def _render_tag_page(request: Request, tag: str, status: Optional[str],
         "council": council,
         "keyword": keyword or "",
         "sort": sort or DEFAULT_SORT,
-        "date_from": date_from.isoformat() if date_from else "",
-        "date_to": date_to.isoformat() if date_to else "",
+        "date_from": date_from_parsed.isoformat() if date_from_parsed else "",
+        "date_to": date_to_parsed.isoformat() if date_to_parsed else "",
         "council_options": council_options,
     })
 
@@ -776,21 +818,21 @@ async def _render_tag_page(request: Request, tag: str, status: Optional[str],
 @app.get("/large-sites", response_class=HTMLResponse)
 async def large_sites(request: Request, status: Optional[str] = None, council: Optional[str] = None,
                        keyword: Optional[str] = None, sort: Optional[str] = None,
-                       date_from: Optional[date] = None, date_to: Optional[date] = None):
+                       date_from: Optional[str] = None, date_to: Optional[str] = None):
     return await _render_tag_page(request, "large_site", status, council, keyword, sort, date_from, date_to)
 
 
 @app.get("/farm-diversification", response_class=HTMLResponse)
 async def farm_diversification(request: Request, status: Optional[str] = None, council: Optional[str] = None,
                                 keyword: Optional[str] = None, sort: Optional[str] = None,
-                                date_from: Optional[date] = None, date_to: Optional[date] = None):
+                                date_from: Optional[str] = None, date_to: Optional[str] = None):
     return await _render_tag_page(request, "farm_diversification", status, council, keyword, sort, date_from, date_to)
 
 
 @app.get("/commercial-conversion", response_class=HTMLResponse)
 async def commercial_conversion(request: Request, status: Optional[str] = None, council: Optional[str] = None,
                                  keyword: Optional[str] = None, sort: Optional[str] = None,
-                                 date_from: Optional[date] = None, date_to: Optional[date] = None):
+                                 date_from: Optional[str] = None, date_to: Optional[str] = None):
     return await _render_tag_page(request, "commercial_conversion", status, council, keyword, sort, date_from, date_to)
 
 
