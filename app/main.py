@@ -672,6 +672,23 @@ async def council_page(request: Request, slug: str):
     council_dict = dict(council)
     council_dict["date_unavailable_note"] = council["name"] in COUNCILS_WITHOUT_DATE_DATA
 
+    # ADDED (2026-08-13) — same real status already built for
+    # /councils, reused here for consistency. This page previously had
+    # NO council-wide "last updated" statement at all — the only date
+    # visible was each individual application's own days_ago, which is
+    # a genuinely different thing (when that application was submitted
+    # to the council, not when we last successfully scraped). A real
+    # user report confirmed exactly this confusion: /councils correctly
+    # said "Live, updated today" while this page showed a one-week-old
+    # date on the top application card, with nothing on the page
+    # distinguishing which fact was which.
+    days_since_save = (
+        (date.today() - council["last_saved_at"].date()).days
+        if council["last_saved_at"] else None
+    )
+    council_dict["days_since_save"] = days_since_save
+    council_dict["status"] = _coverage_status(council["coverage_source"], days_since_save)
+
     return render("council.html", {
         "request": request,
         "council": council_dict,
