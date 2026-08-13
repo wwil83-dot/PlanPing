@@ -48,6 +48,16 @@ async def index(request: Request):
     })
 
 
+def _normalize_keyword(keyword: Optional[str]) -> Optional[str]:
+    """Empty or whitespace-only input becomes None (no filter) — same
+    lesson already learned once this session for status/app_type: a
+    blank field submitted alongside real filters must never silently
+    exclude every result. Pulled out as its own function so tests
+    exercise the real logic, not a separate copy that could drift."""
+    keyword = keyword.strip() if keyword else ""
+    return keyword or None
+
+
 async def _fetch_applications(db, lat: float, lng: float, radius: float, days: int,
                                status: Optional[str] = None,
                                app_type: Optional[str] = None,
@@ -63,12 +73,7 @@ async def _fetch_applications(db, lat: float, lng: float, radius: float, days: i
     # treated a genuinely missing value as "no filter".
     status = status or None
     app_type = app_type or None
-    # ADDED (2026-08-11) — keyword search. Same empty-string normalization
-    # applied here too, from day one — a bare, empty keyword box submitted
-    # alongside other filters would otherwise silently exclude everything,
-    # exactly the bug already found and fixed for status/app_type above.
-    keyword = keyword.strip() if keyword else ""
-    keyword = keyword or None
+    keyword = _normalize_keyword(keyword)
 
     rows = await db.fetch("""
         SELECT
