@@ -17,19 +17,39 @@
       No council matches that search.
     </p>
 
+    {# ADDED (2026-08-13) — real per-council status, computed server-side
+       from last_saved_at (when we actually last scraped successfully),
+       not just a static "Live" label on every card regardless of
+       reality. Colours reused from elsewhere already in this codebase
+       (amber from the "External" badge below, red from the results-page
+       map markers) rather than inventing a new, unconfirmed palette. #}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.6rem" id="coverage-grid">
       {% for c in covered %}
-      <a href="/council/{{ c.slug }}" data-search="{{ c.search_haystack }}" style="background:#fff;border:1px solid var(--border);border-left:3px solid var(--green);border-radius:8px;padding:.8rem 1rem;text-decoration:none;color:var(--text);display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,.04)">
+      {% set border_color = '#c0392b' if c.status.key == 'offline' else ('#d9a441' if c.status.key == 'delayed' else 'var(--green)') %}
+      {% set badge_color = '#8a3229' if c.status.key == 'offline' else ('#8a6416' if c.status.key == 'delayed' else 'var(--green)') %}
+      {% set badge_bg = '#fdf1f0' if c.status.key == 'offline' else ('#fdf3e0' if c.status.key == 'delayed' else 'var(--green-light)') %}
+      <a href="/council/{{ c.slug }}" data-search="{{ c.search_haystack }}" style="background:#fff;border:1px solid var(--border);border-left:3px solid {{ border_color }};border-radius:8px;padding:.8rem 1rem;text-decoration:none;color:var(--text);display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,.04)">
         <div>
           <div style="font-size:.88rem;font-weight:600">{{ c.name }}</div>
           <div style="font-size:.75rem;color:var(--muted);margin-top:2px">{{ c.app_count }} applications</div>
+          <div style="font-size:.72rem;color:var(--muted);margin-top:2px">
+            {% if c.days_since_save is none %}
+              No successful update recorded yet
+            {% elif c.days_since_save == 0 %}
+              Updated today
+            {% elif c.days_since_save == 1 %}
+              Updated yesterday
+            {% else %}
+              Updated {{ c.days_since_save }} days ago
+            {% endif %}
+          </div>
           {% if c.area_aliases %}
           <div style="font-size:.72rem;color:var(--muted);margin-top:3px;font-style:italic">
             Also covers: {{ c.area_aliases | join(', ') }}
           </div>
           {% endif %}
         </div>
-        <span style="font-size:.7rem;color:var(--green);background:var(--green-light);padding:2px 8px;border-radius:10px;font-weight:500">Live</span>
+        <span style="font-size:.7rem;color:{{ badge_color }};background:{{ badge_bg }};padding:2px 8px;border-radius:10px;font-weight:500;white-space:nowrap">{{ c.status.emoji }} {{ c.status.label }}</span>
       </a>
       {% endfor %}
     </div>
