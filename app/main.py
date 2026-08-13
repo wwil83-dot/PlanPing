@@ -186,8 +186,29 @@ TAG_META = {
 
 async def _fetch_tagged_applications(db, tag: str, status: Optional[str] = None,
                                       council_slug: Optional[str] = None,
+                                      keyword: Optional[str] = None,
+                                      sort: Optional[str] = None,
+                                      date_from: Optional[date] = None,
+                                      date_to: Optional[date] = None,
                                       limit: int = 200) -> list[dict]:
-    rows = await db.fetch("""
+    keyword = _normalize_keyword(keyword)
+    # "distance" has no meaning here — this page has no search point to
+    # be relative to, unlike the postcode search (no applications_near()
+    # join exists in this query at all, so the "an." alias that sort
+    # option references doesn't even exist here). Real design choice,
+    # not an oversight: falls back to the default rather than risk
+    # passing a broken table reference into raw SQL.
+    order_by = (SORT_OPTIONS["date_asc"] if sort == "date_asc"
+                else SORT_OPTIONS[DEFAULT_SORT])
+
+    # ADDED (2026-08-11) — keyword/sort/date range, reusing the exact
+    # same keyword normalization already built and tested for the main
+    # postcode search. No date-widening workaround needed here, unlike
+    # _fetch_applications — this query goes straight against
+    # planning_applications with a plain WHERE clause, not through the
+    # applications_near() Postgres function that only accepts a simple
+    # lookback window.
+    rows = await db.fetch(f"""
         SELECT
             a.id, a.reference, a.address, a.postcode,
             a.description, a.application_type, a.status,
@@ -198,9 +219,13 @@ async def _fetch_tagged_applications(db, tag: str, status: Optional[str] = None,
         WHERE a.tags @> ARRAY[$1]::text[]
         AND ($2::text IS NULL OR a.status = $2)
         AND ($3::text IS NULL OR c.slug = $3)
-        ORDER BY a.submitted_date DESC NULLS LAST
-        LIMIT $4
-    """, tag, status, council_slug, limit)
+        AND ($4::text IS NULL OR a.description ILIKE '%' || $4 || '%'
+                              OR a.address ILIKE '%' || $4 || '%')
+        AND ($5::date IS NULL OR a.submitted_date >= $5)
+        AND ($6::date IS NULL OR a.submitted_date <= $6)
+        ORDER BY {order_by}
+        LIMIT $7
+    """, tag, status, council_slug, keyword, date_from, date_to, limit)
 
     applications = [dict(r) for r in rows]
     for a in applications:
@@ -685,7 +710,10 @@ async def trends(request: Request):
 
 
 async def _render_tag_page(request: Request, tag: str, status: Optional[str],
-                            council: Optional[str]) -> HTMLResponse:
+                            council: Optional[str], keyword: Optional[str] = None,
+                            sort: Optional[str] = None,
+                            date_from: Optional[date] = None,
+                            date_to: Optional[date] = None) -> HTMLResponse:
     # FIX (2026-07-30) — a real bug, not a guess: both dropdowns live in
     # the same <form>, so selecting one resubmits the other too. "Any
     # status"/"All councils" are <option value=""> — a GET form always
@@ -703,7 +731,10 @@ async def _render_tag_page(request: Request, tag: str, status: Optional[str],
 
     meta = TAG_META[tag]
     async with get_db() as db:
-        applications = await _fetch_tagged_applications(db, tag, status=status, council_slug=council)
+        applications = await _fetch_tagged_applications(
+            db, tag, status=status, council_slug=council,
+            keyword=keyword, sort=sort, date_from=date_from, date_to=date_to,
+        )
         council_options = await _fetch_tag_council_options(db, tag)
 
     return render("tag_search.html", {
@@ -715,23 +746,33 @@ async def _render_tag_page(request: Request, tag: str, status: Optional[str],
         "total": len(applications),
         "status": status,
         "council": council,
+        "keyword": keyword or "",
+        "sort": sort or DEFAULT_SORT,
+        "date_from": date_from.isoformat() if date_from else "",
+        "date_to": date_to.isoformat() if date_to else "",
         "council_options": council_options,
     })
 
 
 @app.get("/large-sites", response_class=HTMLResponse)
-async def large_sites(request: Request, status: Optional[str] = None, council: Optional[str] = None):
-    return await _render_tag_page(request, "large_site", status, council)
+async def large_sites(request: Request, status: Optional[str] = None, council: Optional[str] = None,
+                       keyword: Optional[str] = None, sort: Optional[str] = None,
+                       date_from: Optional[date] = None, date_to: Optional[date] = None):
+    return await _render_tag_page(request, "large_site", status, council, keyword, sort, date_from, date_to)
 
 
 @app.get("/farm-diversification", response_class=HTMLResponse)
-async def farm_diversification(request: Request, status: Optional[str] = None, council: Optional[str] = None):
-    return await _render_tag_page(request, "farm_diversification", status, council)
+async def farm_diversification(request: Request, status: Optional[str] = None, council: Optional[str] = None,
+                                keyword: Optional[str] = None, sort: Optional[str] = None,
+                                date_from: Optional[date] = None, date_to: Optional[date] = None):
+    return await _render_tag_page(request, "farm_diversification", status, council, keyword, sort, date_from, date_to)
 
 
 @app.get("/commercial-conversion", response_class=HTMLResponse)
-async def commercial_conversion(request: Request, status: Optional[str] = None, council: Optional[str] = None):
-    return await _render_tag_page(request, "commercial_conversion", status, council)
+async def commercial_conversion(request: Request, status: Optional[str] = None, council: Optional[str] = None,
+                                 keyword: Optional[str] = None, sort: Optional[str] = None,
+                                 date_from: Optional[date] = None, date_to: Optional[date] = None):
+    return await _render_tag_page(request, "commercial_conversion", status, council, keyword, sort, date_from, date_to)
 
 
 @app.get("/councils", response_class=HTMLResponse)
