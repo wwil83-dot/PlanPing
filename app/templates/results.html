@@ -70,18 +70,29 @@
     </button>
   </div>
 
-  {# Filter bar — status/type refinement + CSV export. Deliberately a
-     separate form from the hero search bar above (different concern:
+  {# Filter bar — status/type/keyword refinement + CSV export. Deliberately
+     a separate form from the hero search bar above (different concern:
      refining an existing result set, not starting a new search), but
      carries every current parameter forward as hidden fields so changing
-     a filter never loses the postcode/radius/days already in play. #}
-  {% if total > 0 or status or app_type %}
+     a filter never loses the postcode/radius/days already in play.
+
+     ADDED (2026-08-11): keyword search. The two dropdowns auto-submit on
+     change (instant refine, no extra click) — a free-text field can't do
+     that (would fire a request on every keystroke), so it submits on
+     Enter (standard browser behaviour for a text input inside a form) or
+     the explicit "Search" button placed right next to it. #}
+  {% if total > 0 or status or app_type or keyword %}
   <form action="/search" method="get" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.25rem;padding:.85rem 1rem;background:#fff;border:1px solid var(--border);border-radius:8px">
     <input type="hidden" name="postcode" value="{{ postcode }}">
     <input type="hidden" name="radius" value="{{ radius }}">
     <input type="hidden" name="days" value="{{ days }}">
 
     <label style="font-size:.8rem;color:var(--muted);font-weight:600">Filter:</label>
+
+    <input type="text" name="keyword" class="form-input" style="max-width:200px"
+      placeholder="Keyword, e.g. solar, barn, HMO"
+      value="{{ keyword }}"
+      aria-label="Filter by keyword in description or address">
 
     <select name="status" class="form-input" style="max-width:150px" onchange="this.form.submit()">
       <option value="">Any status</option>
@@ -97,11 +108,13 @@
       {% endfor %}
     </select>
 
-    {% if status or app_type %}
+    <button type="submit" class="btn btn-sm">Apply</button>
+
+    {% if status or app_type or keyword %}
     <a href="/search?postcode={{ postcode|urlencode }}&radius={{ radius }}&days={{ days }}" class="btn-link" style="font-size:.8rem">Clear filters</a>
     {% endif %}
 
-    <a href="/search.csv?postcode={{ postcode|urlencode }}&radius={{ radius }}&days={{ days }}{{ '&status=' + status if status }}{{ '&app_type=' + app_type if app_type }}"
+    <a href="/search.csv?postcode={{ postcode|urlencode }}&radius={{ radius }}&days={{ days }}{{ '&status=' + status if status }}{{ '&app_type=' + app_type if app_type }}{{ '&keyword=' + keyword|urlencode if keyword }}"
        class="btn btn-sm" style="margin-left:auto">⬇ Download CSV</a>
   </form>
   {% endif %}
@@ -110,7 +123,11 @@
   <div class="empty-state">
     <div class="empty-icon">📭</div>
     <h3>No applications found</h3>
+    {% if keyword %}
+    <p>No planning applications matching "<strong>{{ keyword }}</strong>" were found within {{ radius }} mile{{ 's' if radius != 1 }} of {{ postcode }} in the last {{ days }} days.</p>
+    {% else %}
     <p>No planning applications were submitted within {{ radius }} mile{{ 's' if radius != 1 }} of {{ postcode }} in the last {{ days }} days.</p>
+    {% endif %}
     <p>This could mean your council isn't yet covered, or there genuinely haven't been any applications.</p>
     <button class="btn btn-primary" onclick="openModal('modal-alert')">Set up an alert for future applications</button>
   </div>
