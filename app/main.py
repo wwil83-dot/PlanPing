@@ -682,10 +682,13 @@ async def council_page(request: Request, slug: str):
     # said "Live, updated today" while this page showed a one-week-old
     # date on the top application card, with nothing on the page
     # distinguishing which fact was which.
-    days_since_save = (
-        (date.today() - council["last_saved_at"].date()).days
-        if council["last_saved_at"] else None
-    )
+    # Fallback source for _effective_days_since_save when last_saved_at
+    # is NULL — apps is already sorted DESC by submitted_date (NULLS
+    # LAST), so the first entry's own date is the best available
+    # evidence of real freshness if the scraper never recorded
+    # last_saved_at directly.
+    fallback_date = apps[0].get("submitted_date") if apps else None
+    days_since_save = _effective_days_since_save(council["last_saved_at"], fallback_date)
     council_dict["days_since_save"] = days_since_save
     council_dict["status"] = _coverage_status(council["coverage_source"], days_since_save)
 
@@ -895,10 +898,15 @@ async def councils_list(request: Request):
         # council can have old applications but still be scraping fine
         # nightly, or have recent applications sitting there while our
         # own scraper has actually stopped running).
-        days_since_save = (
-            (date.today() - c["last_saved_at"].date()).days
-            if c["last_saved_at"] else None
-        )
+        #
+        # BUG FIX (2026-08-13) — confirmed real gap via a direct user
+        # report: Camden (coverage_source='data_gov_uk') had
+        # last_saved_at = NULL despite 64,572 real applications, freshest
+        # dated yesterday — falsely showing as "Offline". See
+        # _effective_days_since_save's docstring for the full writeup.
+        # latest_date (already selected above) is exactly the right
+        # fallback signal here.
+        days_since_save = _effective_days_since_save(c["last_saved_at"], c["latest_date"])
         c["days_since_save"] = days_since_save
         c["status"] = _coverage_status(c["coverage_source"], days_since_save)
 
@@ -961,13 +969,38 @@ GAP_THRESHOLD_DAYS = 10
 DELAYED_THRESHOLD_DAYS = 2
 
 
+def _effective_days_since_save(last_saved_at, fallback_date: Optional[date]) -> Optional[int]:
+    """BUG FIX (2026-08-13) — a real, confirmed gap found via a direct
+    user report: Camden (coverage_source='data_gov_uk', fed by the
+    separate national open-data harvester, not any of the Idox/Arcus/
+    Civica/Northgate scrapers) had last_saved_at = NULL despite 64,572
+    real applications with the freshest dated literally yesterday — the
+    harvester script evidently never sets that column at all, even on
+    a genuinely successful save. Without this fallback, _coverage_status
+    would show ANY council in that same situation as flatly "Offline"
+    while it's actually current — the opposite of what an honest status
+    feature should ever do. Prefers the real last_saved_at when it
+    exists (the correct, precise signal); only falls back to the most
+    recent application's own submitted_date when last_saved_at is
+    genuinely absent, as the next-best available evidence of freshness.
+    The real, permanent fix is for every ingestion path to set
+    last_saved_at on every successful save — this fallback is a safety
+    net for whenever one doesn't, not a replacement for that."""
+    if last_saved_at is not None:
+        return (date.today() - last_saved_at.date()).days
+    if fallback_date is not None:
+        return (date.today() - fallback_date).days
+    return None
+
+
 def _coverage_status(coverage_source: str, days_since_save: Optional[int]) -> dict:
     """Real, honest status computed from data we already store — no new
-    columns or migration needed. days_since_save should be
+    columns or migration needed. days_since_save is normally
     (CURRENT_DATE - last_saved_at::date), the same real, stored field
-    /coverage-gaps already uses, NOT the most recent application's own
-    submitted_date (a genuinely different thing: when data was last
-    scraped vs. how recent the data itself is)."""
+    /coverage-gaps already uses — but see _effective_days_since_save
+    for a real, confirmed case where that field can be NULL despite
+    genuinely fresh data, and the fallback this function relies on
+    callers to have already applied before this point."""
     if coverage_source in ("pending", "none", "manual_link"):
         return {"key": "offline", "emoji": "🔴", "label": "Not yet covered"}
     if days_since_save is None:
