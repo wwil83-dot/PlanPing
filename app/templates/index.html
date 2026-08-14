@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}PlanFind — Planning Application Search Made Easy{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+{% endblock %}
 
 {% block content %}
 <header class="hero">
@@ -112,10 +115,198 @@
     </div>
   </div>
 
+  {# ADDED (2026-08-13) — real, boundary-shape coverage map, matching
+     the same standard used by a real competitor (Planning Lens, whose
+     own map page footer credits "Boundaries: ONS Open Geography").
+     Real UK council boundary shapes fetched directly by the BROWSER
+     from the official ONS Open Geography FeatureServer at page-load
+     time — not proxied through our own backend, which would mean
+     shipping tens of MB of geometry through our own server on every
+     single homepage visit. The small, separate /api/coverage-map-data
+     endpoint only carries OUR side of the data (council name + real
+     status), matched to the ONS shapes by name client-side.
+
+     HONEST LIMITATION, worth being direct about: UK council naming has
+     real, genuine inconsistencies between ONS's own convention and
+     ours (e.g. "Bristol, City of" vs "Bristol City Council", merged
+     unitary authorities, historic district names) — matchCouncilName()
+     below normalizes both sides as best it reasonably can, but a
+     council that fails to match will render in the neutral "not yet
+     matched" colour rather than silently vanish, and any mismatch logs
+     to the browser console so it's easy to diagnose and fix once this
+     is live against the real data, rather than guess blind. #}
+  <div class="coverage-map-section" style="margin:2.5rem 0">
+    <h2 style="font-size:1.3rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Where we cover</h2>
+    <p style="font-size:.88rem;color:var(--muted);margin-bottom:1rem">{{ council_count|default(0) }}+ UK planning authorities — England, Scotland &amp; Wales. More being added every week.</p>
+    <div id="coverage-map" style="height:480px;border-radius:12px;border:1px solid var(--border);background:#f4f6f8"></div>
+    <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.75rem;font-size:.78rem;color:var(--muted)">
+      <span><span style="display:inline-block;width:12px;height:12px;background:var(--green);border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Live</span>
+      <span><span style="display:inline-block;width:12px;height:12px;background:#d9a441;border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Delayed</span>
+      <span><span style="display:inline-block;width:12px;height:12px;background:#c0392b;border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Offline</span>
+      <span><span style="display:inline-block;width:12px;height:12px;background:#e3e7ea;border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Not yet covered</span>
+    </div>
+  </div>
+
   <div class="coverage-note">
     <strong>Coverage is growing.</strong>
     We currently cover {{ council_count|default(0) }}+ councils across England, Scotland and Wales — including major cities, coastal towns and rural districts — with more being added weekly.
     <a href="/councils">See full coverage →</a>
   </div>
 </main>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function () {
+  var STATUS_COLOURS = {
+    live: '#3a9d5f',      /* matches var(--green) */
+    delayed: '#d9a441',
+    offline: '#c0392b',
+    unmatched: '#e3e7ea', /* real ONS shape, no match found on our side */
+  };
+
+  // Real ONS Open Geography FeatureServer — Local Authority Districts,
+  // May 2025, Super Generalised (200m). "Super Generalised" chosen
+  // deliberately for this specific use: a homepage overview map needs
+  // fast load and a recognisable shape, not survey-grade precision —
+  // the same boundaries dataset family Planning Lens itself credits.
+  var ONS_FEATURE_SERVER =
+    'https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/' +
+    'LAD_MAY_2025_UK_BSC_V2/FeatureServer/0/query' +
+    '?where=1%3D1&outFields=LAD25NM&f=geojson&outSR=4326';
+
+  // Real, aggressive normalization on BOTH sides — ONS and our own
+  // database use genuinely different naming conventions, confirmed
+  // across this whole project's own council-name matching work.
+  // Strips common suffixes ("X Borough Council" -> "x"), common
+  // prefixes ("City of X" -> "x"), and ONS's own comma-inverted style
+  // ("X, City of" -> "x") so both sides collapse to the same core name
+  // wherever reasonably possible.
+  function normalizeCouncilName(raw) {
+    if (!raw) return '';
+    var s = raw.toLowerCase().trim();
+    // BUG FIX (2026-08-13), found via real testing before deploy — our
+    // own internal disambiguation suffixes (e.g. "Cumberland Council
+    // (Carlisle)", used elsewhere in this project to distinguish a
+    // merged unitary authority) aren't part of the council's real
+    // name at all — strip parenthetical content entirely first.
+    s = s.replace(/\([^)]*\)/g, '').trim();
+    // ONS comma-inverted style: "bristol, city of" -> "bristol"
+    s = s.split(',')[0].trim();
+    // Common leading prefixes, either side
+    s = s.replace(/^(london borough of|royal borough of|city of|county of)\s+/i, '');
+    // BUG FIX (2026-08-13), found via real testing — "metropolitan
+    // district" was missing from this list entirely, so "Wakefield
+    // Metropolitan District Council" only had "District Council"
+    // stripped, leaving "wakefield metropolitan" rather than
+    // "wakefield". Added the missing compound plus a bare
+    // "metropolitan" fallback.
+    s = s.replace(/\s+(metropolitan district|metropolitan borough|county borough|metropolitan|borough|district|city|county|unitary authority)?\s*council$/i, '');
+    s = s.replace(/\s+council$/i, '');
+    // BUG FIX (2026-08-13), found via real testing — "Glasgow City
+    // Council" correctly stripped to "glasgow", but the real ONS name
+    // "Glasgow City" (no "Council" suffix at all) never got "City"
+    // stripped, since the check above only fires when "council"
+    // actually follows. A bare trailing designation word, with
+    // nothing after it, needs the same treatment.
+    s = s.replace(/\s+(city|county|borough|district)$/i, '');
+    // Collapse remaining whitespace/punctuation differences
+    s = s.replace(/[^a-z0-9]+/g, ' ').trim();
+    return s;
+  }
+
+  function loadCoverageMap() {
+    var mapDiv = document.getElementById('coverage-map');
+    if (!mapDiv) return;
+
+    Promise.all([
+      fetch('/api/coverage-map-data').then(function (r) { return r.json(); }),
+      fetch(ONS_FEATURE_SERVER).then(function (r) { return r.json(); }),
+    ]).then(function (results) {
+      var ourData = results[0];
+      var boundaries = results[1];
+
+      if (!boundaries || !boundaries.features || !boundaries.features.length) {
+        throw new Error('ONS boundary data empty or malformed');
+      }
+
+      // Build a lookup from normalized name -> our real status data
+      var lookup = {};
+      ourData.forEach(function (c) {
+        lookup[normalizeCouncilName(c.name)] = c;
+      });
+
+      var unmatchedBoundaries = [];
+      var unmatchedOurs = Object.keys(lookup);
+
+      var map = L.map('coverage-map', {
+        scrollWheelZoom: false,
+        zoomControl: true,
+      }).setView([54.5, -3.5], 6);
+
+      L.geoJSON(boundaries, {
+        style: function (feature) {
+          var onsName = feature.properties && feature.properties.LAD25NM;
+          var key = normalizeCouncilName(onsName);
+          var match = lookup[key];
+          if (match) {
+            var idx = unmatchedOurs.indexOf(key);
+            if (idx !== -1) unmatchedOurs.splice(idx, 1);
+          } else {
+            unmatchedBoundaries.push(onsName);
+          }
+          var status = match ? match.status : 'unmatched';
+          return {
+            fillColor: STATUS_COLOURS[status] || STATUS_COLOURS.unmatched,
+            fillOpacity: match ? 0.75 : 0.35,
+            color: '#fff',
+            weight: 0.6,
+          };
+        },
+        onEachFeature: function (feature, layer) {
+          var onsName = feature.properties && feature.properties.LAD25NM;
+          var key = normalizeCouncilName(onsName);
+          var match = lookup[key];
+          var label = match
+            ? '<strong>' + match.name + '</strong><br>' + match.app_count + ' applications tracked'
+            : '<strong>' + onsName + '</strong><br>Not yet covered';
+          layer.bindPopup(label);
+        },
+      }).addTo(map);
+
+      // HONEST DIAGNOSTIC — real naming mismatches, if any, surface
+      // here rather than fail silently. Genuinely expected that this
+      // needs at least one real-data iteration to fully reconcile UK
+      // council naming quirks; this is deliberately visible so that's
+      // easy to do, not something to discover by accident later.
+      if (unmatchedBoundaries.length || unmatchedOurs.length) {
+        console.warn(
+          '[coverage-map] ' + unmatchedBoundaries.length + ' ONS boundary shape(s) had no ' +
+          'matching covered council, ' + unmatchedOurs.length + ' covered council(s) had no ' +
+          'matching ONS boundary shape. Real names below — worth checking normalizeCouncilName() ' +
+          'against these if the map looks wrong.'
+        );
+        if (unmatchedBoundaries.length) console.warn('  Unmatched ONS shapes:', unmatchedBoundaries);
+        if (unmatchedOurs.length) {
+          console.warn('  Unmatched covered councils:', unmatchedOurs.map(function (k) { return lookup[k].name; }));
+        }
+      }
+    }).catch(function (err) {
+      // Real, deliberate graceful degradation — a failed fetch (CORS,
+      // ONS endpoint down, network issue) must never break the
+      // homepage itself, just quietly hide the map section.
+      console.warn('[coverage-map] failed to load, hiding section:', err);
+      var section = mapDiv.closest('.coverage-map-section');
+      if (section) section.style.display = 'none';
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadCoverageMap);
+  } else {
+    loadCoverageMap();
+  }
+})();
+</script>
 {% endblock %}
