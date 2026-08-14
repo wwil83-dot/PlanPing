@@ -135,19 +135,31 @@
      matched" colour rather than silently vanish, and any mismatch logs
      to the browser console so it's easy to diagnose and fix once this
      is live against the real data, rather than guess blind. #}
-  <div class="coverage-map-section" style="margin:2.5rem 0">
-    <h2 style="font-size:1.3rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Where we cover</h2>
-    <p style="font-size:.88rem;color:var(--muted);margin-bottom:1rem">{{ council_count|default(0) }}+ UK planning authorities — England, Scotland &amp; Wales. More being added every week.</p>
-    <div id="coverage-map" style="height:640px;border-radius:12px;border:1px solid var(--border);background:#2c3e50;position:relative"></div>
-    <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.75rem;font-size:.78rem;color:var(--muted)">
-      <span><span style="display:inline-block;width:12px;height:12px;background:var(--green);border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Live</span>
-      <span><span style="display:inline-block;width:12px;height:12px;background:#d9a441;border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Delayed</span>
-      <span><span style="display:inline-block;width:12px;height:12px;background:#c0392b;border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Offline</span>
-      <span><span style="display:inline-block;width:12px;height:12px;background:#e3e7ea;border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Not yet covered</span>
+  {# CHANGED (2026-08-13) — real, direct request: a blue gradient band
+     across the whole section, matching the postcode search area
+     above. Uses the EXACT gradient from style.css's .hero rule
+     (linear-gradient(135deg, --blue-dark 0%, --blue-mid 60%, #1a7a5e
+     100%)) rather than inventing a new one, so it's genuinely
+     consistent with the rest of the site, not just similar. Full-bleed
+     (edge to edge, not constrained to .main's 1100px width) using the
+     same technique .hero itself relies on — an outer element outside
+     the normal content width, with an inner wrapper that puts the
+     actual content back to the page's normal reading width. #}
+  <div style="background:linear-gradient(135deg, var(--blue-dark) 0%, var(--blue-mid) 60%, #1a7a5e 100%);width:100vw;position:relative;left:50%;right:50%;margin-left:-50vw;margin-right:-50vw;padding:2.5rem 1.5rem">
+    <div class="coverage-map-section" style="max-width:1100px;margin:0 auto">
+      <h2 style="font-size:1.3rem;font-weight:700;color:#fff;margin-bottom:.3rem">Where we cover</h2>
+      <p style="font-size:.88rem;color:rgba(255,255,255,.8);margin-bottom:1rem">{{ council_count|default(0) }}+ UK planning authorities — England, Scotland &amp; Wales. More being added every week.</p>
+      <div id="coverage-map" style="height:640px;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:#000;position:relative"></div>
+      <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.75rem;font-size:.78rem;color:rgba(255,255,255,.75)">
+        <span><span style="display:inline-block;width:12px;height:12px;background:var(--green);border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Live</span>
+        <span><span style="display:inline-block;width:12px;height:12px;background:#d9a441;border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Delayed</span>
+        <span><span style="display:inline-block;width:12px;height:12px;background:#c0392b;border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Offline</span>
+        <span><span style="display:inline-block;width:12px;height:12px;background:#e3e7ea;border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Not yet covered</span>
+      </div>
     </div>
   </div>
 
-  <div class="coverage-note">
+  <div class="coverage-note" style="margin-top:2.5rem">
     <strong>Coverage is growing.</strong>
     We currently cover {{ council_count|default(0) }}+ councils across England, Scotland and Wales — including major cities, coastal towns and rural districts — with more being added weekly.
     <a href="/councils">See full coverage →</a>
@@ -366,7 +378,27 @@
       // fitBounds(), calculated from the REAL loaded boundary data
       // rather than a guess, zooms and pans to precisely fill the
       // available space with Britain's actual extent.
-      map.fitBounds(geoLayer.getBounds(), { padding: [10, 10] });
+      // CHANGED (2026-08-13) — a real, direct request: widen the map's
+      // framing to include the whole of Ireland geographically, so it
+      // reads as a properly framed "British Isles" view rather than
+      // cropped tight to just the loaded UK boundary data. Worth being
+      // precise about what this does and doesn't do: we have no
+      // planning-application coverage in Ireland at all (the site's
+      // own copy says "England, Scotland & Wales"), and the actual
+      // boundary SHAPES for Ireland come from a completely different
+      // data source (Ordnance Survey Ireland, not the UK's ONS) that
+      // hasn't been sourced or integrated. This widens the VIEWPORT
+      // only — Ireland will show as the same dark background as the
+      // sea, giving proper geographic context, not outlined shapes or
+      // coverage data. A fixed bounding box (not derived from the
+      // loaded UK-only data) is used deliberately, so the framing
+      // stays consistent regardless of exactly what boundary data
+      // happens to load.
+      var BRITISH_ISLES_BOUNDS = [
+        [49.8, -11.0],  /* south-west: south of Ireland, west of its coast */
+        [61.0, 2.0],    /* north-east: north of Shetland, east of Norfolk */
+      ];
+      map.fitBounds(BRITISH_ISLES_BOUNDS, { padding: [10, 10] });
 
       // HONEST DIAGNOSTIC — real naming mismatches, if any, surface
       // here rather than fail silently. Genuinely expected that this
