@@ -166,6 +166,16 @@
     unmatched: '#e3e7ea', /* real ONS shape, no match found on our side */
   };
 
+  // Matches the exact wording _coverage_status() already uses
+  // server-side (main.py) — the hover tooltip must never say something
+  // different from what /councils or the council detail page says
+  // about the same council.
+  var STATUS_LABELS = {
+    live: '🟢 Live',
+    delayed: '🟠 Delayed',
+    offline: '🔴 Offline',
+  };
+
   // Real ONS Open Geography FeatureServer — Local Authority Districts,
   // May 2025, Super Generalised (200m). "Super Generalised" chosen
   // deliberately for this specific use: a homepage overview map needs
@@ -290,7 +300,7 @@
       var unmatchedOurs = Object.keys(lookup);
 
       var map = L.map('coverage-map', {
-        scrollWheelZoom: false,
+        scrollWheelZoom: true,
         zoomControl: true,
       });
 
@@ -318,9 +328,33 @@
           var key = normalizeCouncilName(onsName);
           var match = lookup[key];
           var label = match
-            ? '<strong>' + match.name + '</strong><br>' + match.app_count + ' applications tracked'
+            ? '<strong>' + match.name + '</strong><br>' +
+              STATUS_LABELS[match.status] + ' · ' + match.app_count + ' applications tracked'
             : '<strong>' + onsName + '</strong><br>Not yet covered';
-          layer.bindPopup(label);
+          // ADDED (2026-08-13) — hover tooltip, sticky so it follows
+          // the cursor as it moves across a shape, matching what was
+          // asked for directly (a click-triggered popup was the
+          // previous behaviour, which needed a deliberate click rather
+          // than just moving the mouse over).
+          layer.bindTooltip(label, { sticky: true });
+
+          var baseStyle = {
+            fillColor: STATUS_COLOURS[match ? match.status : 'unmatched'] || STATUS_COLOURS.unmatched,
+            fillOpacity: match ? 0.75 : 0.35,
+            color: '#fff',
+            weight: 0.6,
+          };
+          // A small, real hover highlight — brightened opacity and a
+          // thicker outline while the cursor is genuinely over a shape,
+          // reverting cleanly on mouseout. Not explicitly asked for,
+          // but a natural complement to the hover tooltip itself —
+          // confirms visually which exact shape the tooltip refers to.
+          layer.on('mouseover', function () {
+            layer.setStyle({ fillOpacity: Math.min(1, baseStyle.fillOpacity + 0.2), weight: 2 });
+          });
+          layer.on('mouseout', function () {
+            layer.setStyle(baseStyle);
+          });
         },
       }).addTo(map);
 
