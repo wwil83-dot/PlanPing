@@ -428,15 +428,38 @@ async def supabase_upsert(apps, council_name):
             except Exception as e:
                 print(f"  Batch error: {e}")
 
-    # Mark council as covered in the DB so the UI shows the green banner
-    if new > 0:
+    # BUG FIX (2026-08-13) — real, confirmed production bug, found via a
+    # direct user report: Camden (coverage_source='data_gov_uk') showed
+    # last_saved_at = NULL despite 64,572 real applications with the
+    # freshest dated literally yesterday, falsely appearing "Offline" on
+    # the coverage page. Root cause: this PATCH was writing to a column
+    # called "last_scraped_at" — but every other feature that reads
+    # freshness (the coverage-gaps page, the coverage-status feature
+    # built this session) reads from a genuinely different column,
+    # "last_saved_at". Every Idox/Arcus/Civica/Northgate scraper
+    # apparently writes to the correct column already; this harvester,
+    # built separately, never did. Fixed to write to the real column
+    # name the rest of the codebase actually uses.
+    #
+    # ALSO FIXED: this used to only update the timestamp when new > 0
+    # (genuinely NEW records inserted). A council whose feed is already
+    # fully up to date on a given run — real, successful contact with
+    # the source, zero new records because there was nothing new to add
+    # — is still a healthy, successful check, and should still count as
+    # "we verified this today". The old condition would let a
+    # consistently-current council's status quietly decay toward
+    # "Offline" purely because it never happened to have anything new,
+    # which is the opposite of what an honest status feature should do.
+    # Broadened to len(apps) > 0 — we genuinely parsed and attempted to
+    # save real applications, regardless of how many were already there.
+    if len(apps) > 0:
         try:
             async with httpx.AsyncClient(timeout=10) as c:
                 await c.patch(
                     f"{SUPABASE_URL}/rest/v1/councils",
                     params={"id": f"eq.{council_id}"},
                     json={"coverage_source": "data_gov_uk",
-                          "last_scraped_at": datetime.now(timezone.utc).isoformat()},
+                          "last_saved_at": datetime.now(timezone.utc).isoformat()},
                     headers={**headers, "Prefer": "return=minimal"},
                 )
         except Exception as e:
