@@ -138,7 +138,7 @@
   <div class="coverage-map-section" style="margin:2.5rem 0">
     <h2 style="font-size:1.3rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Where we cover</h2>
     <p style="font-size:.88rem;color:var(--muted);margin-bottom:1rem">{{ council_count|default(0) }}+ UK planning authorities — England, Scotland &amp; Wales. More being added every week.</p>
-    <div id="coverage-map" style="height:480px;border-radius:12px;border:1px solid var(--border);background:#f4f6f8"></div>
+    <div id="coverage-map" style="height:640px;border-radius:12px;border:1px solid var(--border);background:#f4f6f8"></div>
     <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.75rem;font-size:.78rem;color:var(--muted)">
       <span><span style="display:inline-block;width:12px;height:12px;background:var(--green);border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Live</span>
       <span><span style="display:inline-block;width:12px;height:12px;background:#d9a441;border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Delayed</span>
@@ -243,9 +243,9 @@
       var map = L.map('coverage-map', {
         scrollWheelZoom: false,
         zoomControl: true,
-      }).setView([54.5, -3.5], 6);
+      });
 
-      L.geoJSON(boundaries, {
+      var geoLayer = L.geoJSON(boundaries, {
         style: function (feature) {
           var onsName = feature.properties && feature.properties.LAD25NM;
           var key = normalizeCouncilName(onsName);
@@ -274,6 +274,16 @@
           layer.bindPopup(label);
         },
       }).addTo(map);
+
+      // BUG FIX (2026-08-13) — a real, direct user report: the map
+      // rendered correctly but was hard to see, individual council
+      // shapes small and hard to distinguish. Root cause: the previous
+      // fixed setView([54.5, -3.5], 6) was a guessed centre/zoom that
+      // left a lot of wasted canvas space around the actual landmass.
+      // fitBounds(), calculated from the REAL loaded boundary data
+      // rather than a guess, zooms and pans to precisely fill the
+      // available space with Britain's actual extent.
+      map.fitBounds(geoLayer.getBounds(), { padding: [10, 10] });
 
       // HONEST DIAGNOSTIC — real naming mismatches, if any, surface
       // here rather than fail silently. Genuinely expected that this
