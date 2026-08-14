@@ -138,7 +138,7 @@
   <div class="coverage-map-section" style="margin:2.5rem 0">
     <h2 style="font-size:1.3rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Where we cover</h2>
     <p style="font-size:.88rem;color:var(--muted);margin-bottom:1rem">{{ council_count|default(0) }}+ UK planning authorities — England, Scotland &amp; Wales. More being added every week.</p>
-    <div id="coverage-map" style="height:640px;border-radius:12px;border:1px solid var(--border);background:#f4f6f8"></div>
+    <div id="coverage-map" style="height:640px;border-radius:12px;border:1px solid var(--border);background:#2c3e50;position:relative"></div>
     <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.75rem;font-size:.78rem;color:var(--muted)">
       <span><span style="display:inline-block;width:12px;height:12px;background:var(--green);border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Live</span>
       <span><span style="display:inline-block;width:12px;height:12px;background:#d9a441;border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Delayed</span>
@@ -216,14 +216,63 @@
     return s;
   }
 
+  // ADDED (2026-08-13) — a real, direct user report that the map took
+  // ~5s to render. Almost certainly the ONS boundary fetch itself —
+  // even at the smallest available resolution, that's genuinely
+  // several MB of geometry for ~380 UK authorities. Council boundaries
+  // essentially never change (maybe once every few years, if that), so
+  // caching that specific payload in the browser after a successful
+  // first load means only a genuine first-time visitor ever pays that
+  // cost — every return visit loads instantly from cache instead.
+  // Wrapped defensively: localStorage has a real, finite quota (often
+  // 5-10MB depending on the browser), and a multi-MB payload could
+  // legitimately exceed it on some devices — a failed cache write must
+  // never break the map, just silently skip caching that one time.
+  var BOUNDARY_CACHE_KEY = 'planfind_coverage_boundaries_v1';
+  var BOUNDARY_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; /* 30 days */
+
+  function fetchBoundariesWithCache() {
+    try {
+      var cached = localStorage.getItem(BOUNDARY_CACHE_KEY);
+      if (cached) {
+        var parsed = JSON.parse(cached);
+        if (parsed.savedAt && (Date.now() - parsed.savedAt) < BOUNDARY_CACHE_MAX_AGE_MS) {
+          return Promise.resolve(parsed.data);
+        }
+      }
+    } catch (e) {
+      // Corrupt/unreadable cache entry — fall through to a real fetch
+    }
+
+    return fetch(ONS_FEATURE_SERVER).then(function (r) { return r.json(); }).then(function (data) {
+      try {
+        localStorage.setItem(BOUNDARY_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), data: data }));
+      } catch (e) {
+        // Quota exceeded or storage disabled — map still works this
+        // visit, just won't benefit from caching until it fits
+      }
+      return data;
+    });
+  }
+
   function loadCoverageMap() {
     var mapDiv = document.getElementById('coverage-map');
     if (!mapDiv) return;
 
+    // Visible loading state — shown immediately, so the wait (real on
+    // a first visit, near-instant on a cached repeat visit) looks
+    // intentional rather than like the section is broken/empty.
+    var loadingEl = document.createElement('div');
+    loadingEl.textContent = 'Loading coverage map…';
+    loadingEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);' +
+      'color:#cbd5e1;font-size:.9rem;font-weight:500';
+    mapDiv.appendChild(loadingEl);
+
     Promise.all([
       fetch('/api/coverage-map-data').then(function (r) { return r.json(); }),
-      fetch(ONS_FEATURE_SERVER).then(function (r) { return r.json(); }),
+      fetchBoundariesWithCache(),
     ]).then(function (results) {
+      loadingEl.remove();
       var ourData = results[0];
       var boundaries = results[1];
 
