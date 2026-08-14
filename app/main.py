@@ -10,7 +10,7 @@ from typing import Optional
 from jinja2 import Environment, FileSystemLoader
 
 from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.db import get_db, lifespan
@@ -927,6 +927,51 @@ async def councils_list(request: Request):
         "total": len(councils),
         "covered_count": len(covered),
     })
+
+
+@app.get("/api/coverage-map-data")
+async def coverage_map_data():
+    """ADDED (2026-08-13) — lightweight JSON for the homepage boundary
+    map. Deliberately a separate, small endpoint rather than embedding
+    this data directly in index.html's own render — the actual UK
+    boundary GeoJSON (~380 authority shapes) is fetched directly by the
+    BROWSER from the real ONS Open Geography FeatureServer at page-load
+    time (the standard way to consume these ArcGIS-hosted boundary
+    datasets, and it avoids proxying tens of MB of geometry through our
+    own backend on every homepage visit). This endpoint only needs to
+    return OUR side of the match: council name + real status, small
+    enough to embed or fetch cheaply, matched against the boundary
+    shapes client-side by name.
+
+    Returns the exact same real status (Live/Delayed/Offline) already
+    computed for /councils and the council detail page, reusing the
+    same helpers (_effective_days_since_save, _coverage_status) so all
+    three surfaces can never silently disagree about a council's real
+    state."""
+    async with get_db() as db:
+        councils = await db.fetch("""
+            SELECT c.name, c.coverage_source, c.last_saved_at,
+                   COUNT(pa.id) AS app_count,
+                   MAX(pa.submitted_date) AS latest_date
+            FROM councils c
+            LEFT JOIN planning_applications pa ON pa.council_id = c.id
+            WHERE c.active = TRUE
+            GROUP BY c.id, c.name, c.coverage_source, c.last_saved_at
+        """)
+
+    result = []
+    for c in councils:
+        if c["coverage_source"] in ("pending", "none", "manual_link") or c["app_count"] == 0:
+            continue
+        days_since_save = _effective_days_since_save(c["last_saved_at"], c["latest_date"])
+        status = _coverage_status(c["coverage_source"], days_since_save)
+        result.append({
+            "name": c["name"],
+            "status": status["key"],
+            "app_count": c["app_count"],
+        })
+
+    return JSONResponse(result)
 
 
 # Real, confirmed reasons for specific councils that have gone quiet —
