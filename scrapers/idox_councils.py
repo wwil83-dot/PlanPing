@@ -647,8 +647,18 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # NORTH EAST
     # -------------------------------------------------------------------------
-    ("Newcastle City Council",
-     "https://publicaccessapplications.newcastle.gov.uk/online-applications"),
+    # DISABLED 2026-08-13 — real, fresh evidence contradicts this entry.
+    # The council's actual live portal is
+    # https://portal.newcastle.gov.uk/planning/index.html?fa=getApplications
+    # — the SAME "index.html?fa=getApplications" pattern already known
+    # from Waltham Forest (manual_link) and Blackburn/Darwen, NOT a
+    # standard Idox weekly-list format at all. This Idox URL below was
+    # likely stale/wrong the whole time. Needs a bespoke scraper, not a
+    # standard Idox config — matches the same wrong-platform-guess
+    # pattern already found and fixed this session for Rochdale,
+    # Burnley, and Havant.
+    # ("Newcastle City Council",
+    #  "https://publicaccessapplications.newcastle.gov.uk/online-applications"),
 
     # Added 2026-07-29 — confirmed via a real, direct screenshot showing
     # genuine "Powered by idox" branding. Genuinely distinct from
@@ -686,8 +696,12 @@ IDOX_COUNCILS = [
     ("Middlesbrough Council",
      "https://www.middlesbrough.gov.uk/online-applications"),
 
+    # CORRECTED 2026-08-13 — confirmed via fresh, real evidence. Old
+    # subdomain was consistently showing a Cloudflare "Just a moment..."
+    # block — this different subdomain may not carry the same
+    # protection, worth testing directly.
     ("Stockton-on-Tees Borough Council",
-     "https://www.stockton.gov.uk/online-applications"),
+     "https://www.developmentmanagement.stockton.gov.uk/online-applications"),
 
     ("Darlington Borough Council",
      "https://publicaccess.darlington.gov.uk/online-applications"),
@@ -1548,14 +1562,22 @@ IDOX_COUNCILS = [
     ("East Lothian Council",
      "https://pa.eastlothian.gov.uk/online-applications"),
 
+    # CORRECTED 2026-08-13 — confirmed via fresh, real evidence. Old
+    # subdomain was wrong the whole time, likely explaining Stirling's
+    # persistent "Nothing loaded" failures.
     ("Stirling Council",
-     "https://planning.stirling.gov.uk/online-applications"),
+     "https://pabs.stirling.gov.uk/online-applications"),
 
     ("South Lanarkshire Council",
      "https://publicaccess.southlanarkshire.gov.uk/online-applications"),
 
+    # CORRECTED 2026-08-13 — confirmed via fresh, real evidence. Path
+    # was wrong the whole time (some Idox installations use
+    # "/publicaccess" instead of "/online-applications", same pattern
+    # already confirmed for Clackmannanshire) — likely explaining West
+    # Lothian's persistent "Page Not Found" failures.
     ("West Lothian Council",
-     "https://planning.westlothian.gov.uk/online-applications"),
+     "https://planning.westlothian.gov.uk/publicaccess"),
 
     ("East Dunbartonshire Council",
      "https://planning.eastdunbarton.gov.uk/online-applications"),
@@ -1620,6 +1642,27 @@ IDOX_COUNCILS = [
 
     ("North Lanarkshire Council",
      "https://eplanning.northlanarkshire.gov.uk/online-applications"),
+
+    # ADDED 2026-08-13 — new from fresh recon. User's own note: "IDOX
+    # but slightly different layout than normal" — worth extra
+    # attention on the first real run in case the layout difference
+    # trips up field extraction.
+    ("East Ayrshire Council",
+     "https://eplanning.east-ayrshire.gov.uk/online"),
+
+    # ADDED 2026-08-13 — new from fresh recon.
+    ("Aberdeenshire Council",
+     "https://upa.aberdeenshire.gov.uk/online-applications"),
+
+    # ADDED 2026-08-13 — new from fresh recon. Genuinely unusual: this
+    # is a Northern Ireland council, but confirmed as a REAL, standard
+    # Idox install — every other NI council uses a completely different,
+    # shared national portal (planningregister.planningsystemni.gov.uk)
+    # that needs its own bespoke scraper entirely. Mid Ulster is the one
+    # confirmed exception, worth treating as ordinary Idox rather than
+    # folding into that future NI-wide scraper project.
+    ("Mid Ulster Council",
+     "https://planning.midulstercouncil.org/online-applications"),
 
     ("Scottish Borders Council",
      "https://eplanning.scotborders.gov.uk/online-applications"),
