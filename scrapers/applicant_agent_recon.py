@@ -118,10 +118,19 @@ async def check_list_view(page) -> dict:
 async def check_detail_view(page, relative_link: str) -> dict:
     """Navigate to one real individual application's own detail page —
     the actual test of whether applicant/agent data lives there instead."""
-    if relative_link.startswith("http"):
-        url = relative_link
-    else:
-        url = f"{TARGET_BASE_URL}/{relative_link.lstrip('/')}"
+    # BUG FIX (2026-08-13) — real, confirmed bug caught on the first
+    # real run: the extracted href (e.g.
+    # "/online-applications/applicationDetails.do?...") is relative to
+    # the DOMAIN ROOT, not to TARGET_BASE_URL (which already ends in
+    # "/online-applications") — the old f-string concatenation
+    # duplicated that segment, producing a genuinely invalid URL and a
+    # real "Error" page that had nothing to do with whether Cotswold's
+    # detail page actually has applicant/agent data. urljoin() resolves
+    # this correctly regardless of the link's exact shape (leading
+    # slash, relative path, or already-absolute), using the CURRENT
+    # real page URL as the base rather than a hand-maintained constant.
+    from urllib.parse import urljoin
+    url = urljoin(page.url, relative_link)
 
     print(f"\nNavigating to individual application detail page: {url}")
     try:
