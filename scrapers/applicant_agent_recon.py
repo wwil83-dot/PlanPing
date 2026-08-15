@@ -115,20 +115,53 @@ async def check_list_view(page) -> dict:
     }
 
 
+async def _get_real_tabs(page) -> list:
+    """Discover the REAL tabs this specific application page actually
+    has — Idox installations vary in which tabs exist (Summary, Details,
+    Contacts, Dates, Documents, Constraints, etc.), so this reads them
+    directly from the page rather than guessing/hardcoding a fixed list
+    that might not match Cotswold's real set at all."""
+    tabs = []
+    try:
+        tab_links = page.locator("a[href*='activeTab=']")
+        count = await tab_links.count()
+        for i in range(count):
+            href = await tab_links.nth(i).get_attribute("href")
+            text = (await tab_links.nth(i).inner_text()).strip()
+            if href and text:
+                tabs.append((text, href))
+    except Exception as e:
+        print(f"  (tab discovery failed: {e})")
+    return tabs
+
+
+def _raw_context_snippets(html_lower: str, html_original: str, keyword: str, window: int = 150) -> list:
+    """Real, honest evidence instead of a guessed extraction — shows
+    the ACTUAL raw HTML surrounding every match, so it's directly
+    visible whether this is a genuine structured field (e.g. a table
+    row with a short label + short value) or boilerplate prose (a long
+    sentence that just happens to contain the word). No cleverness that
+    could itself be wrong in a new way — just the real surrounding
+    markup for a human to judge."""
+    snippets = []
+    start = 0
+    while True:
+        idx = html_lower.find(keyword, start)
+        if idx == -1:
+            break
+        snippet = html_original[max(0, idx - window):idx + len(keyword) + window]
+        snippets.append(snippet.replace("\n", " ").strip())
+        start = idx + len(keyword)
+        if len(snippets) >= 3:  # cap per keyword, per tab — plenty to judge from
+            break
+    return snippets
+
+
 async def check_detail_view(page, relative_link: str) -> dict:
-    """Navigate to one real individual application's own detail page —
-    the actual test of whether applicant/agent data lives there instead."""
-    # BUG FIX (2026-08-13) — real, confirmed bug caught on the first
-    # real run: the extracted href (e.g.
-    # "/online-applications/applicationDetails.do?...") is relative to
-    # the DOMAIN ROOT, not to TARGET_BASE_URL (which already ends in
-    # "/online-applications") — the old f-string concatenation
-    # duplicated that segment, producing a genuinely invalid URL and a
-    # real "Error" page that had nothing to do with whether Cotswold's
-    # detail page actually has applicant/agent data. urljoin() resolves
-    # this correctly regardless of the link's exact shape (leading
-    # slash, relative path, or already-absolute), using the CURRENT
-    # real page URL as the base rather than a hand-maintained constant.
+    """Navigate to one real individual application's own detail page,
+    then check EVERY real tab it actually has — not just the default
+    Summary tab, since a genuine applicant/agent field may live on a
+    completely different tab this recon would otherwise never see."""
     from urllib.parse import urljoin
     url = urljoin(page.url, relative_link)
 
@@ -139,32 +172,39 @@ async def check_detail_view(page, relative_link: str) -> dict:
     except PlaywrightTimeout:
         return {"error": "Page load timeout on application detail"}
 
-    body_text = (await page.inner_text("body")).lower()
-    found_keywords = [kw for kw in APPLICANT_AGENT_KEYWORDS if kw in body_text]
+    real_tabs = await _get_real_tabs(page)
+    print(f"  Real tabs found on this page: {[t[0] for t in real_tabs] if real_tabs else '(none found — single-page layout?)'}")
 
-    html = await page.content()
-    found_in_html = [kw for kw in APPLICANT_AGENT_KEYWORDS if kw in html.lower()]
+    results_by_tab = {}
+    # Always check the current (default/Summary) tab first, then every
+    # other real tab discovered above
+    tabs_to_check = [("(default/current tab)", None)] + real_tabs
 
-    # Real, direct extraction attempt — not just keyword presence, but
-    # actually pulling out real text near an "Applicant"/"Agent" label
-    # if one exists, so we have real sample data, not just a yes/no
-    real_samples = {}
-    for label in ["Applicant Name", "Applicant", "Agent Name", "Agent"]:
-        try:
-            locator = page.get_by_text(label, exact=False).first
-            if await locator.count() > 0:
-                # Try to grab the sibling/following text — real page
-                # structures vary, so this is best-effort, not guaranteed
-                parent_text = await locator.locator("xpath=..").inner_text()
-                real_samples[label] = parent_text.strip()[:200]
-        except Exception:
-            pass
+    for tab_name, tab_href in tabs_to_check:
+        if tab_href:
+            try:
+                tab_url = urljoin(page.url, tab_href)
+                await page.goto(tab_url, wait_until="domcontentloaded", timeout=30_000)
+                await page.wait_for_timeout(1000)
+            except Exception as e:
+                results_by_tab[tab_name] = {"error": f"Could not load tab: {e}"}
+                continue
+
+        html = await page.content()
+        html_lower = html.lower()
+
+        tab_findings = {}
+        for kw in APPLICANT_AGENT_KEYWORDS:
+            if kw in html_lower:
+                tab_findings[kw] = _raw_context_snippets(html_lower, html, kw)
+
+        if tab_findings:
+            results_by_tab[tab_name] = tab_findings
 
     return {
-        "detail_view_text_matches": found_keywords,
-        "detail_view_html_matches": found_in_html,
-        "real_sample_extracts": real_samples,
-        "full_page_title": await page.title(),
+        "url_loaded": url,
+        "real_tabs_found": [t[0] for t in real_tabs],
+        "findings_by_tab": results_by_tab,
     }
 
 
@@ -195,15 +235,28 @@ async def main():
 
         sample_link = list_result.get("sample_application_link")
         if sample_link:
-            print("\n--- STEP 2: Checking an individual APPLICATION DETAIL view ---")
+            print("\n--- STEP 2: Checking EVERY real tab on an individual APPLICATION DETAIL view ---")
             detail_result = await check_detail_view(page, sample_link)
-            for k, v in detail_result.items():
-                print(f"  {k}: {v}")
 
-            if detail_result.get("detail_view_text_matches") or detail_result.get("detail_view_html_matches"):
-                print("\n*** REAL FINDING: applicant/agent-related text found on the DETAIL view ***")
+            if detail_result.get("error"):
+                print(f"  {detail_result['error']}")
             else:
-                print("\n*** REAL FINDING: no applicant/agent-related text found on the DETAIL view either ***")
+                print(f"  URL loaded: {detail_result['url_loaded']}")
+                print(f"  Real tabs found: {detail_result['real_tabs_found']}")
+
+                findings = detail_result.get("findings_by_tab", {})
+                if not findings:
+                    print("\n*** REAL FINDING: no applicant/agent-related text found on ANY tab ***")
+                else:
+                    print(f"\n*** REAL FINDING: matches found on {len(findings)} tab(s) — "
+                          f"raw context below, judge for yourself whether this is a genuine "
+                          f"structured field or just prose mentioning the word ***")
+                    for tab_name, tab_findings in findings.items():
+                        print(f"\n  [{tab_name}]")
+                        for kw, snippets in tab_findings.items():
+                            print(f"    keyword {kw!r}:")
+                            for s in snippets:
+                                print(f"      ...{s}...")
         else:
             print("\nNo individual application link found on the list page — could not check STEP 2.")
 
