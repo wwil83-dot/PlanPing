@@ -19,7 +19,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -782,3 +782,31 @@ jobs:
       - run: playwright install --with-deps chromium
       - name: Run applicant/agent data recon
         run: cd scrapers && python applicant_agent_recon.py
+
+  # ---------------------------------------------------------------------
+  # Bright Data Web Unlocker API test — manual trigger only, no schedule.
+  #
+  # Built 2026-08-16, testing whether Web Unlocker API can get past
+  # whatever's blocking Aberdeenshire Council (confirmed real "Page load
+  # timeout" via idox_multi_recon.py — same signature as the existing
+  # ~13-council WAF-blocked group). Plain HTTP requests only, no
+  # Playwright/browser needed — Web Unlocker's own docs are explicit
+  # it's built for single, stateless requests, not browser sessions.
+  # Credentials read from GitHub Secrets, never hardcoded here or in the
+  # script itself.
+  # ---------------------------------------------------------------------
+  brightdata_unlocker_test:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'brightdata_unlocker_test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - name: Run Bright Data Web Unlocker API test
+        env:
+          BRIGHTDATA_API_KEY: ${{ secrets.BRIGHTDATA_API_KEY }}
+          BRIGHTDATA_ZONE_NAME: ${{ secrets.BRIGHTDATA_ZONE_NAME }}
+        run: cd scrapers && python test_brightdata_unlocker.py
