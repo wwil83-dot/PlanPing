@@ -102,21 +102,32 @@ def scrape_request(target_url: str, label: str, extra_params: dict = None,
         return {"error": str(e)}
 
     print(f"  HTTP status from ScraperAPI: {response.status_code}")
-    print(f"  Response headers of note:")
+    # BUG FIX (2026-08-16) — a real, genuine gap in this diagnostic that
+    # likely explains round 5's 403s: this used to only print sa-
+    # prefixed headers, meaning a real Set-Cookie header from the
+    # TARGET site (almost certain for a CSRF-protected form) was never
+    # actually looked at. Printing everything now.
+    print(f"  ALL response headers:")
     for k in response.headers:
-        if k.lower().startswith("sa-") or "scraperapi" in k.lower():
-            print(f"    {k}: {response.headers[k]}")
+        print(f"    {k}: {response.headers[k]}")
+    # requests' own parsed cookie jar — the reliable way to get real
+    # cookie values, rather than manually parsing a raw Set-Cookie
+    # string ourselves.
+    real_cookies = dict(response.cookies)
+    print(f"  Real cookies received (via requests' parsed cookie jar): "
+          f"{real_cookies if real_cookies else 'NONE'}")
 
     if response.status_code != 200:
         print(f"  Response body (first 500 chars): {response.text[:500]!r}")
-        return {"error": f"non-200: {response.status_code}", "body": response.text[:2000]}
+        return {"error": f"non-200: {response.status_code}", "body": response.text[:2000],
+                "cookies": real_cookies}
 
     html = response.text
     html_lower = html.lower()
 
     if len(html) == 0:
         print(f"  ⚠ Real content length: 0 chars — genuinely empty body despite HTTP 200.")
-        return {"status": 200, "length": 0, "empty_200": True}
+        return {"status": 200, "length": 0, "empty_200": True, "cookies": real_cookies}
 
     has_results_container = any(m.lower() in html_lower for m in RESULTS_CONTAINER_MARKERS)
     waf_hits = [m for m in WAF_BLOCK_MARKERS if m in html_lower]
@@ -187,6 +198,7 @@ def scrape_request(target_url: str, label: str, extra_params: dict = None,
         "restriction_hits": restriction_hits,
         "real_data_hits": real_data_hits,
         "form_info": form_info,
+        "cookies": real_cookies,
     }
 
 
@@ -195,10 +207,19 @@ def submit_monthly_list_form(name: str, base_url: str, form_path: str) -> dict:
     1. Fetch the form page (as already proven to work), extract a real,
        fresh CSRF token from it.
     2. POST the real form fields — _csrf, month, dateType, searchType —
-       to the form's own action URL, using the SAME session_number so
-       (hopefully) the cookies/session that issued the CSRF token carry
-       over to the POST. This is the genuinely uncertain part, worth
-       testing directly rather than assuming either way."""
+       to the form's own action URL.
+
+    FIX (2026-08-16) — round 5 got a real, specific 403 (not a vague
+    500), the classic signature of a CSRF/session mismatch. Root cause
+    found: this diagnostic was only ever printing sa- prefixed
+    response headers, so a real Set-Cookie from the target site (near-
+    certain for a CSRF-protected form) was never actually seen or used
+    — session_number alone was being trusted to carry the session
+    across two SEPARATE API calls, with no verification it actually
+    does. Now explicitly capturing the real cookies from Step 1 via
+    requests' own parsed cookie jar and forwarding them as an explicit
+    Cookie header on Step 2, rather than hoping session_number alone
+    handles it invisibly."""
     print(f"\n{'#' * 70}")
     print(f"# {name} — real two-step form submission")
     print("#" * 70)
@@ -223,6 +244,11 @@ def submit_monthly_list_form(name: str, base_url: str, form_path: str) -> dict:
 
     print(f"  Real CSRF token extracted: {csrf_token}")
 
+    real_cookies = get_result.get("cookies") or {}
+    cookie_header = "; ".join(f"{k}={v}" for k, v in real_cookies.items())
+    print(f"  Real cookies to forward explicitly on Step 2: "
+          f"{cookie_header if cookie_header else '(none received in Step 1 — genuinely worth noting)'}")
+
     action = form_info["action"]
     if action.startswith("/"):
         from urllib.parse import urlparse
@@ -246,8 +272,14 @@ def submit_monthly_list_form(name: str, base_url: str, form_path: str) -> dict:
 
     params = {"api_key": API_KEY, "url": post_target, "premium": "true",
               "session_number": str(SESSION_NUMBER)}
+    # ScraperAPI forwards custom headers through to the target site when
+    # a "keep_headers"-style behaviour applies to these header names —
+    # explicitly setting Cookie here, on top of session_number, rather
+    # than relying on session_number alone.
+    headers = {"Cookie": cookie_header} if cookie_header else {}
     try:
-        response = requests.post(API_ENDPOINT, params=params, data=post_data, timeout=70)
+        response = requests.post(API_ENDPOINT, params=params, data=post_data,
+                                  headers=headers, timeout=70)
     except requests.exceptions.RequestException as e:
         print(f"  ⚠ POST request itself failed: {e}")
         return {"error": str(e)}
