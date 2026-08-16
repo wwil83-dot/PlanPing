@@ -85,12 +85,15 @@ def scrape_request(target_url: str, label: str, extra_params: dict = None,
         print("  ⚠ SCRAPERAPI_KEY not set — cannot test.")
         return {"error": "missing credentials"}
 
-    # BUG FIX (2026-08-16) — the hardcoded session_number="101" risked
-    # reusing a stale/expired session across separate script runs
-    # (sessions expire 15 minutes after last use per ScraperAPI's own
-    # docs). A fresh, genuinely random session number each run avoids
-    # that specific confound when comparing results across runs.
-    params = {"api_key": API_KEY, "url": target_url, "premium": "true",
+    # CHANGED (2026-08-16) — round 7: switching to ultra_premium=true,
+    # relying entirely on ScraperAPI's own internal session handling
+    # rather than our explicit Cookie forwarding. keep_headers=true
+    # (round 6) changed the failure from a specific 403 to a vaguer
+    # 500 — a real, worse signal, not better — worth trying the
+    # opposite approach instead. ultra_premium is documented as
+    # discarding all custom headers regardless of keep_headers, so
+    # deliberately not setting either here.
+    params = {"api_key": API_KEY, "url": target_url, "ultra_premium": "true",
               "session_number": str(SESSION_NUMBER)}
     if extra_params:
         params.update(extra_params)
@@ -246,8 +249,9 @@ def submit_monthly_list_form(name: str, base_url: str, form_path: str) -> dict:
 
     real_cookies = get_result.get("cookies") or {}
     cookie_header = "; ".join(f"{k}={v}" for k, v in real_cookies.items())
-    print(f"  Real cookies to forward explicitly on Step 2: "
-          f"{cookie_header if cookie_header else '(none received in Step 1 — genuinely worth noting)'}")
+    print(f"  Real cookies Step 1 received (informational only this round — "
+          f"NOT explicitly forwarded, relying on ultra_premium's own session "
+          f"handling instead): {cookie_header if cookie_header else '(none)'}")
 
     action = form_info["action"]
     if action.startswith("/"):
@@ -270,20 +274,16 @@ def submit_monthly_list_form(name: str, base_url: str, form_path: str) -> dict:
     print(f"POST body: {post_data}")
     print("-" * 70)
 
-    # BUG FIX (2026-08-16) — confirmed via ScraperAPI's own docs: custom
-    # headers (including Cookie) are silently dropped UNLESS
-    # keep_headers=true is explicitly set. This was the real, missing
-    # piece the whole time — our Step 2 Cookie header was very likely
-    # never actually reaching the target site at all, regardless of how
-    # correctly it was built. Confirmed compatible with our setup: the
-    # docs specifically warn keep_headers is incompatible with
-    # ultra_premium=true, but we only ever use premium=true.
-    params = {"api_key": API_KEY, "url": post_target, "premium": "true",
-              "session_number": str(SESSION_NUMBER), "keep_headers": "true"}
-    headers = {"Cookie": cookie_header} if cookie_header else {}
+    # CHANGED (2026-08-16) — round 7: ultra_premium=true instead of
+    # keep_headers=true. Documented as discarding all custom headers
+    # regardless of keep_headers, so no point sending either here —
+    # relying entirely on ScraperAPI's own internal session/cookie
+    # handling for this round, not our own explicit forwarding.
+    params = {"api_key": API_KEY, "url": post_target, "ultra_premium": "true",
+              "session_number": str(SESSION_NUMBER)}
     try:
         response = requests.post(API_ENDPOINT, params=params, data=post_data,
-                                  headers=headers, timeout=70)
+                                  timeout=70)
     except requests.exceptions.RequestException as e:
         print(f"  ⚠ POST request itself failed: {e}")
         return {"error": str(e)}
@@ -321,11 +321,11 @@ def submit_monthly_list_form(name: str, base_url: str, form_path: str) -> dict:
 
 
 def main():
-    print("SCRAPERAPI — round 5: the real two-step form submission.")
-    print("Round 4 found the form's OWN action is monthlyListResults.do?action=")
-    print("firstPage, submitted via POST with a real CSRF token — explaining why")
-    print("round 3's plain GET to that same URL failed. This builds the genuine")
-    print("POST request instead of interactive clicking.\n")
+    print("SCRAPERAPI — round 7: ultra_premium=true, relying entirely on")
+    print("ScraperAPI's own internal session handling instead of our explicit")
+    print("Cookie forwarding. Round 6 (keep_headers=true) changed the failure")
+    print("from a specific 403 to a vaguer 500 — a worse signal, not better —")
+    print("worth trying the opposite approach.\n")
 
     if not API_KEY:
         print("Set SCRAPERAPI_KEY as an environment variable before running this —")
