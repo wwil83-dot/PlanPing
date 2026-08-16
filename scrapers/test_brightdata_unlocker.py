@@ -80,12 +80,30 @@ def unlock_request(target_url: str, label: str) -> dict:
 
     print(f"  HTTP status from Bright Data: {response.status_code}")
 
+    # ADDED (2026-08-16) — a real gap in round 2's diagnostics. Babergh
+    # and Argyll and Bute both came back 200 with a genuinely empty
+    # body — not a recognized block marker, not the KYC wall, just
+    # nothing. Bright Data's own docs mention response headers can
+    # carry real diagnostic info (e.g. an unblock-expect-style header)
+    # that the body alone doesn't show. Printing every header now,
+    # rather than only ever looking at the body.
+    print(f"  Response headers from Bright Data:")
+    for k, v in response.headers.items():
+        print(f"    {k}: {v}")
+
     if response.status_code != 200:
         print(f"  Response body (first 500 chars): {response.text[:500]!r}")
         return {"error": f"non-200: {response.status_code}", "body": response.text[:2000]}
 
     html = response.text
     html_lower = html.lower()
+
+    if len(html) == 0:
+        print(f"  ⚠ Real content length: 0 chars — genuinely empty body despite HTTP 200.")
+        print(f"  This is NOT the same as the KYC wall (that returns real explanatory text)")
+        print(f"  and NOT a recognized WAF block page — worth treating as its own, distinct")
+        print(f"  outcome rather than assuming it means the same thing as either.")
+        return {"status": 200, "length": 0, "empty_200": True}
 
     has_results_container = any(m.lower() in html_lower for m in RESULTS_CONTAINER_MARKERS)
     waf_hits = [m for m in WAF_BLOCK_MARKERS if m in html_lower]
@@ -127,9 +145,14 @@ def main():
     print("REAL SUMMARY — judge for yourself from the evidence above:")
     print("=" * 70)
     kyc_count = 0
+    empty_count = 0
     for name, result in results.items():
         if result.get("error"):
             print(f"  {name}: FAILED — {result['error']}")
+        elif result.get("empty_200"):
+            print(f"  {name}: EMPTY 200 — genuinely blank body, distinct from both "
+                  f"the KYC wall and a recognized WAF block; see headers above")
+            empty_count += 1
         elif result.get("kyc_hits"):
             print(f"  {name}: HIT THE SAME KYC WALL")
             kyc_count += 1
@@ -141,14 +164,16 @@ def main():
             print(f"  {name}: UNCLEAR — got 200 but no known marker matched, "
                   f"worth reading the snippet above directly")
 
-    print(f"\n{kyc_count} of {len(TARGETS)} councils hit the KYC wall.")
+    print(f"\n{kyc_count} of {len(TARGETS)} hit the KYC wall, "
+          f"{empty_count} of {len(TARGETS)} came back genuinely empty.")
     if kyc_count == len(TARGETS):
         print("Confirms the KYC wall is a real, general policy — not Aberdeenshire-specific.")
-    elif kyc_count == 0:
+    elif kyc_count == 0 and empty_count == 0:
         print("The KYC wall was NOT hit again — worth re-examining what made "
               "Aberdeenshire's request different.")
     else:
-        print("Mixed result — worth looking at exactly which councils hit it and which didn't.")
+        print("Mixed result — three different councils, three different outcomes. "
+              "Worth treating each as its own case rather than one general answer.")
 
 
 if __name__ == "__main__":
