@@ -19,7 +19,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test, brightdata_browser_api_test]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -836,3 +836,30 @@ jobs:
         env:
           SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
         run: cd scrapers && python test_scraperapi.py
+
+  # ---------------------------------------------------------------------
+  # Bright Data Browser API test — manual trigger only, no schedule.
+  #
+  # Built 2026-08-16, after seven rounds of testing ScraperAPI's plain
+  # HTTP approach against a CSRF-protected Idox form all landed on the
+  # same consistent 403. Browser API is a real remote browser connected
+  # to via Playwright's connect_over_cdp() — our own already-proven
+  # form-interaction logic can run essentially unchanged, sidestepping
+  # the whole CSRF/cookie puzzle entirely. Only playwright itself is
+  # needed here, NOT a local Chromium install — the actual browser runs
+  # on Bright Data's own infrastructure, not the runner.
+  # ---------------------------------------------------------------------
+  brightdata_browser_api_test:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'brightdata_browser_api_test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install playwright
+      - name: Run Bright Data Browser API test
+        env:
+          BRIGHTDATA_BROWSER_AUTH: ${{ secrets.BRIGHTDATA_BROWSER_AUTH }}
+        run: cd scrapers && python test_brightdata_browser_api.py
