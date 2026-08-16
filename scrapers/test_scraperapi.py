@@ -27,14 +27,25 @@ import requests
 
 API_KEY = os.environ.get("SCRAPERAPI_KEY", "")
 API_ENDPOINT = "https://api.scraperapi.com"
+# A fresh, genuinely random session number each run, not a hardcoded
+# value that could carry a stale/expired session from an earlier run.
+SESSION_NUMBER = int(time.time())
+
+import time
 
 TARGETS = [
     ("Aberdeenshire Council",
-     "https://upa.aberdeenshire.gov.uk/online-applications/monthlyListResults.do?action=firstPage"),
+     "https://upa.aberdeenshire.gov.uk/online-applications",
+     "search.do?action=monthlyList&searchCriteria.monthYearIndex=0&searchType=Application",
+     "monthlyListResults.do?action=firstPage"),
     ("Babergh District Council",
-     "https://planning.baberghmidsuffolk.gov.uk/online-applications/monthlyListResults.do?action=firstPage"),
+     "https://planning.baberghmidsuffolk.gov.uk/online-applications",
+     "search.do?action=monthlyList&searchCriteria.monthYearIndex=0&searchType=Application",
+     "monthlyListResults.do?action=firstPage"),
     ("Argyll and Bute Council",
-     "https://publicaccess.argyll-bute.gov.uk/online-applications/monthlyListResults.do?action=firstPage"),
+     "https://publicaccess.argyll-bute.gov.uk/online-applications",
+     "search.do?action=monthlyList&searchCriteria.monthYearIndex=0&searchType=Application",
+     "monthlyListResults.do?action=firstPage"),
 ]
 
 RESULTS_CONTAINER_MARKERS = [
@@ -59,7 +70,8 @@ REAL_DATA_MARKERS = [
 
 
 def slug(name: str) -> str:
-    return name.lower().replace(" ", "_").replace(".", "")
+    s = name.lower().replace(" ", "_").replace(".", "")
+    return "".join(c for c in s if c.isascii() and (c.isalnum() or c == "_"))
 
 
 def scrape_request(target_url: str, label: str, extra_params: dict = None,
@@ -74,13 +86,13 @@ def scrape_request(target_url: str, label: str, extra_params: dict = None,
         print("  ⚠ SCRAPERAPI_KEY not set — cannot test.")
         return {"error": "missing credentials"}
 
-    # ADDED (2026-08-16) — session_number now included by default, not
-    # just in the separate session-persistence experiment. Round 1's
-    # results strongly suggested this was the real difference between
-    # failure and success for Aberdeenshire — worth testing that
-    # directly against all three councils, not just one.
+    # BUG FIX (2026-08-16) — the hardcoded session_number="101" risked
+    # reusing a stale/expired session across separate script runs
+    # (sessions expire 15 minutes after last use per ScraperAPI's own
+    # docs). A fresh, genuinely random session number each run avoids
+    # that specific confound when comparing results across runs.
     params = {"api_key": API_KEY, "url": target_url, "premium": "true",
-              "session_number": "101"}
+              "session_number": str(SESSION_NUMBER)}
     if extra_params:
         params.update(extra_params)
 
@@ -141,9 +153,11 @@ def scrape_request(target_url: str, label: str, extra_params: dict = None,
 
 
 def main():
-    print("SCRAPERAPI — round 2: retesting all three councils WITH session_number")
-    print("included by default, since round 1 strongly suggested that was the real")
-    print("difference between Aberdeenshire's failure and the session-test success.\n")
+    print("SCRAPERAPI — round 3: testing BOTH the form URL and the firstPage URL")
+    print("back-to-back for each council, to tell apart two real possibilities:")
+    print("(a) firstPage genuinely doesn't work for these specific councils, or")
+    print("(b) proxy/session variability between separate runs is the real cause.")
+    print(f"Session number for this run: {SESSION_NUMBER}\n")
 
     if not API_KEY:
         print("Set SCRAPERAPI_KEY as an environment variable before running this —")
@@ -151,34 +165,43 @@ def main():
         sys.exit(1)
 
     results = {}
-    for name, url in TARGETS:
-        results[name] = scrape_request(url, name, save_html=True)
+    for name, base_url, form_path, firstpage_path in TARGETS:
+        print(f"\n{'#' * 70}")
+        print(f"# {name}")
+        print("#" * 70)
+        form_result = scrape_request(
+            f"{base_url}/{form_path}", f"{name} — FORM URL", save_html=True)
+        time.sleep(2)  # small, deliberate gap — not testing rate-limit behaviour here
+        firstpage_result = scrape_request(
+            f"{base_url}/{firstpage_path}", f"{name} — FIRSTPAGE URL", save_html=True)
+        results[name] = {"form": form_result, "firstpage": firstpage_result}
+
+    def classify(result):
+        if result.get("error"):
+            return f"FAILED ({result['error']})"
+        if result.get("empty_200"):
+            return "EMPTY 200"
+        if result.get("restriction_hits"):
+            return f"RESTRICTED ({result['restriction_hits']})"
+        if result.get("real_data_hits"):
+            return f"REAL SUCCESS ({result['real_data_hits']})"
+        if result.get("waf_hits"):
+            return f"WAF BLOCKED ({result['waf_hits']})"
+        return "LOADED, no real-data markers"
 
     print(f"\n\n{'=' * 70}")
     print("REAL SUMMARY — judge for yourself from the evidence above:")
     print("=" * 70)
-    real_success_count = 0
-    restriction_count = 0
-    for name, result in results.items():
-        if result.get("error"):
-            print(f"  {name}: FAILED — {result['error']}")
-        elif result.get("empty_200"):
-            print(f"  {name}: EMPTY 200 — genuinely blank body")
-        elif result.get("restriction_hits"):
-            print(f"  {name}: LIKELY HIT A RESTRICTION — {result['restriction_hits']}")
-            restriction_count += 1
-        elif result.get("real_data_hits"):
-            print(f"  {name}: REAL SUCCESS — genuine Idox data markers found "
-                  f"({result['real_data_hits']}), not just a page that loaded")
-            real_success_count += 1
-        elif result.get("waf_hits"):
-            print(f"  {name}: STILL BLOCKED (WAF) — {result['waf_hits']}")
-        else:
-            print(f"  {name}: LOADED but no real-data markers found — worth reading "
-                  f"the full saved HTML directly before calling this a success")
+    for name, pair in results.items():
+        print(f"\n  {name}")
+        print(f"    Form URL:       {classify(pair['form'])}")
+        print(f"    FirstPage URL:  {classify(pair['firstpage'])}")
 
-    print(f"\n{real_success_count} of {len(TARGETS)} showed genuine real application data.")
-    print(f"{restriction_count} of {len(TARGETS)} showed a likely restriction marker.")
+    print(f"\n{'-' * 70}")
+    print("If FORM succeeds but FIRSTPAGE fails consistently: firstPage genuinely")
+    print("isn't supported for these councils — a real, council-specific limit.")
+    print("If BOTH fail this run despite one succeeding last run: points toward")
+    print("proxy/session variability between runs as the real explanation.")
 
 
 if __name__ == "__main__":
