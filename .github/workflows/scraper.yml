@@ -19,7 +19,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -810,3 +810,29 @@ jobs:
           BRIGHTDATA_API_KEY: ${{ secrets.BRIGHTDATA_API_KEY }}
           BRIGHTDATA_ZONE_NAME: ${{ secrets.BRIGHTDATA_ZONE_NAME }}
         run: cd scrapers && python test_brightdata_unlocker.py
+
+  # ---------------------------------------------------------------------
+  # ScraperAPI test — manual trigger only, no schedule.
+  #
+  # Built 2026-08-16. All three residential proxy providers checked so
+  # far (Bright Data, Oxylabs, Decodo) explicitly restrict government
+  # sites behind KYC/ID verification. Worth testing ScraperAPI directly
+  # rather than trust a secondhand, unverified claim that it doesn't.
+  # Same three confirmed-blocked councils as the Bright Data test, for a
+  # fair, direct comparison. Credentials read from GitHub Secrets, never
+  # hardcoded here or in the script itself.
+  # ---------------------------------------------------------------------
+  scraperapi_test:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scraperapi_test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - name: Run ScraperAPI test
+        env:
+          SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
+        run: cd scrapers && python test_scraperapi.py
