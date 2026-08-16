@@ -46,14 +46,27 @@ RESULTS_CONTAINER_MARKERS = [
 ]
 WAF_BLOCK_MARKERS = [
     "429 too many requests", "too many requests", "unusual traffic",
-    "access denied", "captcha", "cloudflare",
+    "access denied", "cloudflare",
 ]
 RESTRICTION_MARKERS = [
     "kyc", "not permitted", "restricted", "not available", "blocked domain",
 ]
+# ADDED (2026-08-16) — real evidence of an actual application listing,
+# not just a page that LOADED. A page title matching "Monthly List"
+# alone isn't proof real data came through — this looks for the actual
+# shape of Idox application rows (reference number patterns, the
+# specific column headers Idox monthly-list pages always show).
+REAL_DATA_MARKERS = [
+    "application type", "date received", "ref. no", "decision",
+]
 
 
-def scrape_request(target_url: str, label: str, extra_params: dict = None) -> dict:
+def slug(name: str) -> str:
+    return name.lower().replace(" ", "_").replace(".", "")
+
+
+def scrape_request(target_url: str, label: str, extra_params: dict = None,
+                    save_html: bool = False) -> dict:
     """One real call to ScraperAPI — returns honest, direct diagnostics."""
     print(f"\n{'-' * 70}")
     print(f"{label}")
@@ -64,7 +77,13 @@ def scrape_request(target_url: str, label: str, extra_params: dict = None) -> di
         print("  ⚠ SCRAPERAPI_KEY not set — cannot test.")
         return {"error": "missing credentials"}
 
-    params = {"api_key": API_KEY, "url": target_url, "premium": "true"}
+    # ADDED (2026-08-16) — session_number now included by default, not
+    # just in the separate session-persistence experiment. Round 1's
+    # results strongly suggested this was the real difference between
+    # failure and success for Aberdeenshire — worth testing that
+    # directly against all three councils, not just one.
+    params = {"api_key": API_KEY, "url": target_url, "premium": "true",
+              "session_number": "101"}
     if extra_params:
         params.update(extra_params)
 
@@ -94,14 +113,25 @@ def scrape_request(target_url: str, label: str, extra_params: dict = None) -> di
     has_results_container = any(m.lower() in html_lower for m in RESULTS_CONTAINER_MARKERS)
     waf_hits = [m for m in WAF_BLOCK_MARKERS if m in html_lower]
     restriction_hits = [m for m in RESTRICTION_MARKERS if m in html_lower]
+    real_data_hits = [m for m in REAL_DATA_MARKERS if m in html_lower]
 
     print(f"  Real content length: {len(html):,} chars")
+    print(f"  Real page title: {html[html_lower.find('<title>')+7:html_lower.find('</title>')] if '<title>' in html_lower else '(no title tag found)'}")
     print(f"  Results container found: {'YES' if has_results_container else 'NO'}")
+    print(f"  Real Idox data markers found: {real_data_hits if real_data_hits else 'NONE — genuinely worth doubting this is real application data'}")
     print(f"  Restriction/policy markers found: {restriction_hits if restriction_hits else 'none'}")
     print(f"  WAF/block-page markers found: {waf_hits if waf_hits else 'none'}")
 
-    snippet = " ".join(html.split())[:400]
-    print(f"  Visible text snippet: {snippet!r}")
+    # Much bigger snippet than before (400 chars only ever showed <head>)
+    # — enough to actually see whether real application rows are present
+    snippet = " ".join(html.split())[:3000]
+    print(f"  Content snippet (first 3000 chars of visible text): {snippet!r}")
+
+    if save_html:
+        path = f"/tmp/scraperapi_{slug(label)}.html"
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(html)
+        print(f"  Full HTML saved: {path} ({len(html):,} chars) — download as a workflow artifact if needed")
 
     return {
         "status": response.status_code,
@@ -109,12 +139,14 @@ def scrape_request(target_url: str, label: str, extra_params: dict = None) -> di
         "has_results_container": has_results_container,
         "waf_hits": waf_hits,
         "restriction_hits": restriction_hits,
+        "real_data_hits": real_data_hits,
     }
 
 
 def main():
-    print("SCRAPERAPI — real test across the same three confirmed-blocked councils")
-    print("used for the Bright Data comparison, for a fair, direct read.\n")
+    print("SCRAPERAPI — round 2: retesting all three councils WITH session_number")
+    print("included by default, since round 1 strongly suggested that was the real")
+    print("difference between Aberdeenshire's failure and the session-test success.\n")
 
     if not API_KEY:
         print("Set SCRAPERAPI_KEY as an environment variable before running this —")
@@ -123,23 +155,12 @@ def main():
 
     results = {}
     for name, url in TARGETS:
-        results[name] = scrape_request(url, name)
-
-    # Real, separate test of session persistence — directly relevant to
-    # our session-dependent councils, using ScraperAPI's own documented
-    # session_number mechanism rather than assuming it works
-    print(f"\n\n{'=' * 70}")
-    print("SESSION PERSISTENCE TEST — does session_number genuinely keep the")
-    print("same IP/session across two separate calls?")
-    print("=" * 70)
-    aberdeenshire_name, aberdeenshire_url = TARGETS[0]
-    homepage_url = "https://upa.aberdeenshire.gov.uk/online-applications/search.do?action=simple&searchType=Application"
-    scrape_request(homepage_url, "Homepage visit, session_number=42", {"session_number": "42"})
-    scrape_request(aberdeenshire_url, "Same session_number=42, immediately after", {"session_number": "42"})
+        results[name] = scrape_request(url, name, save_html=True)
 
     print(f"\n\n{'=' * 70}")
     print("REAL SUMMARY — judge for yourself from the evidence above:")
     print("=" * 70)
+    real_success_count = 0
     restriction_count = 0
     for name, result in results.items():
         if result.get("error"):
@@ -149,15 +170,18 @@ def main():
         elif result.get("restriction_hits"):
             print(f"  {name}: LIKELY HIT A RESTRICTION — {result['restriction_hits']}")
             restriction_count += 1
-        elif result.get("has_results_container"):
-            print(f"  {name}: REAL SUCCESS — results container found")
+        elif result.get("real_data_hits"):
+            print(f"  {name}: REAL SUCCESS — genuine Idox data markers found "
+                  f"({result['real_data_hits']}), not just a page that loaded")
+            real_success_count += 1
         elif result.get("waf_hits"):
             print(f"  {name}: STILL BLOCKED (WAF) — {result['waf_hits']}")
         else:
-            print(f"  {name}: UNCLEAR — got 200 but no known marker matched, "
-                  f"worth reading the snippet above directly")
+            print(f"  {name}: LOADED but no real-data markers found — worth reading "
+                  f"the full saved HTML directly before calling this a success")
 
-    print(f"\n{restriction_count} of {len(TARGETS)} showed a likely restriction marker.")
+    print(f"\n{real_success_count} of {len(TARGETS)} showed genuine real application data.")
+    print(f"{restriction_count} of {len(TARGETS)} showed a likely restriction marker.")
 
 
 if __name__ == "__main__":
