@@ -270,12 +270,16 @@ def submit_monthly_list_form(name: str, base_url: str, form_path: str) -> dict:
     print(f"POST body: {post_data}")
     print("-" * 70)
 
+    # BUG FIX (2026-08-16) — confirmed via ScraperAPI's own docs: custom
+    # headers (including Cookie) are silently dropped UNLESS
+    # keep_headers=true is explicitly set. This was the real, missing
+    # piece the whole time — our Step 2 Cookie header was very likely
+    # never actually reaching the target site at all, regardless of how
+    # correctly it was built. Confirmed compatible with our setup: the
+    # docs specifically warn keep_headers is incompatible with
+    # ultra_premium=true, but we only ever use premium=true.
     params = {"api_key": API_KEY, "url": post_target, "premium": "true",
-              "session_number": str(SESSION_NUMBER)}
-    # ScraperAPI forwards custom headers through to the target site when
-    # a "keep_headers"-style behaviour applies to these header names —
-    # explicitly setting Cookie here, on top of session_number, rather
-    # than relying on session_number alone.
+              "session_number": str(SESSION_NUMBER), "keep_headers": "true"}
     headers = {"Cookie": cookie_header} if cookie_header else {}
     try:
         response = requests.post(API_ENDPOINT, params=params, data=post_data,
