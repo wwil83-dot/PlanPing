@@ -23,6 +23,7 @@ throughout this whole project.
 """
 import os
 import sys
+import time
 import requests
 
 API_KEY = os.environ.get("SCRAPERAPI_KEY", "")
@@ -30,8 +31,6 @@ API_ENDPOINT = "https://api.scraperapi.com"
 # A fresh, genuinely random session number each run, not a hardcoded
 # value that could carry a stale/expired session from an earlier run.
 SESSION_NUMBER = int(time.time())
-
-import time
 
 TARGETS = [
     ("Aberdeenshire Council",
