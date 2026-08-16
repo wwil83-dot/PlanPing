@@ -190,30 +190,126 @@ def scrape_request(target_url: str, label: str, extra_params: dict = None,
     }
 
 
+def submit_monthly_list_form(name: str, base_url: str, form_path: str) -> dict:
+    """The real, two-step flow now that we know the actual form structure:
+    1. Fetch the form page (as already proven to work), extract a real,
+       fresh CSRF token from it.
+    2. POST the real form fields — _csrf, month, dateType, searchType —
+       to the form's own action URL, using the SAME session_number so
+       (hopefully) the cookies/session that issued the CSRF token carry
+       over to the POST. This is the genuinely uncertain part, worth
+       testing directly rather than assuming either way."""
+    print(f"\n{'#' * 70}")
+    print(f"# {name} — real two-step form submission")
+    print("#" * 70)
+
+    form_url = f"{base_url}/{form_path}"
+    get_result = scrape_request(form_url, f"{name} — Step 1: fetch form", save_html=False)
+
+    if not get_result.get("form_info"):
+        print(f"  ⚠ No form info extracted — cannot proceed to Step 2 for {name}.")
+        return {"error": "no form info from step 1"}
+
+    form_info = get_result["form_info"]
+    csrf_token = None
+    for field in form_info["fields"]:
+        if field["name"] == "_csrf":
+            csrf_token = field["value"]
+            break
+
+    if not csrf_token:
+        print(f"  ⚠ No _csrf token found in the extracted form — cannot proceed.")
+        return {"error": "no csrf token"}
+
+    print(f"  Real CSRF token extracted: {csrf_token}")
+
+    action = form_info["action"]
+    if action.startswith("/"):
+        from urllib.parse import urlparse
+        parsed = urlparse(base_url)
+        post_target = f"{parsed.scheme}://{parsed.netloc}{action}"
+    else:
+        post_target = action
+
+    # Real form data, using the actual field names/values found in Step 1
+    post_data = {
+        "_csrf": csrf_token,
+        "month": "0",  # current month, matching month_index=0 convention
+        "dateType": "DC_Validated",
+        "searchType": "Application",
+    }
+
+    print(f"\n{'-' * 70}")
+    print(f"{name} — Step 2: POST real form data to {post_target}")
+    print(f"POST body: {post_data}")
+    print("-" * 70)
+
+    params = {"api_key": API_KEY, "url": post_target, "premium": "true",
+              "session_number": str(SESSION_NUMBER)}
+    try:
+        response = requests.post(API_ENDPOINT, params=params, data=post_data, timeout=70)
+    except requests.exceptions.RequestException as e:
+        print(f"  ⚠ POST request itself failed: {e}")
+        return {"error": str(e)}
+
+    print(f"  HTTP status from ScraperAPI: {response.status_code}")
+    for k in response.headers:
+        if k.lower().startswith("sa-"):
+            print(f"    {k}: {response.headers[k]}")
+
+    if response.status_code != 200:
+        print(f"  Response body (first 500 chars): {response.text[:500]!r}")
+        return {"error": f"non-200: {response.status_code}"}
+
+    html = response.text
+    html_lower = html.lower()
+    real_data_hits = [m for m in REAL_DATA_MARKERS if m in html_lower]
+    has_results_container = any(m.lower() in html_lower for m in RESULTS_CONTAINER_MARKERS)
+
+    print(f"  Real content length: {len(html):,} chars")
+    print(f"  Real Idox data markers found: {real_data_hits if real_data_hits else 'NONE'}")
+    print(f"  Results container found: {'YES' if has_results_container else 'NO'}")
+    snippet = " ".join(html.split())[:2000]
+    print(f"  Content snippet: {snippet!r}")
+
+    path = f"/tmp/scraperapi_{slug(name)}_post_result.html"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"  Full HTML saved: {path}")
+
+    return {
+        "status": response.status_code,
+        "real_data_hits": real_data_hits,
+        "has_results_container": has_results_container,
+    }
+
+
 def main():
-    print("SCRAPERAPI — round 4: extracting the REAL monthly-list form structure")
-    print("for all three councils. Round 3 conclusively ruled out the firstPage")
-    print("URL for this group (3/3 form success vs 3/3 firstPage failure, same")
-    print("run, fresh session — a real, consistent, council-specific limit, not")
-    print("proxy variability). The form URL works; we just can't submit it via a")
-    print("plain GET. This extracts the real field names needed to build the")
-    print("equivalent direct request instead of interactive clicking.\n")
+    print("SCRAPERAPI — round 5: the real two-step form submission.")
+    print("Round 4 found the form's OWN action is monthlyListResults.do?action=")
+    print("firstPage, submitted via POST with a real CSRF token — explaining why")
+    print("round 3's plain GET to that same URL failed. This builds the genuine")
+    print("POST request instead of interactive clicking.\n")
 
     if not API_KEY:
         print("Set SCRAPERAPI_KEY as an environment variable before running this —")
         print("never hardcode real credentials into this file.")
         sys.exit(1)
 
+    results = {}
     for name, base_url, form_path, firstpage_path in TARGETS:
-        print(f"\n{'#' * 70}")
-        print(f"# {name}")
-        print("#" * 70)
-        scrape_request(f"{base_url}/{form_path}", f"{name} — FORM URL", save_html=True)
+        results[name] = submit_monthly_list_form(name, base_url, form_path)
 
     print(f"\n\n{'=' * 70}")
-    print("Real form field names printed above for each council — use these to")
-    print("build the equivalent direct request instead of interactive clicking.")
+    print("REAL SUMMARY — judge for yourself from the evidence above:")
     print("=" * 70)
+    for name, result in results.items():
+        if result.get("error"):
+            print(f"  {name}: FAILED — {result['error']}")
+        elif result.get("real_data_hits"):
+            print(f"  {name}: REAL SUCCESS — genuine Idox data markers found")
+        else:
+            print(f"  {name}: loaded but no real-data markers — check the saved HTML directly")
 
 
 if __name__ == "__main__":
