@@ -37,8 +37,22 @@ from playwright.async_api import (
 # ---------------------------------------------------------------------------
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
-MAX_MINUTES  = 55  # hardcoded — was overridden by workflow env var
-DAYS_BACK    = 14  # hardcoded — was overridden by workflow env var
+# BUG FIX (2026-08-16) — real, confirmed production bug, found via a
+# direct discrepancy: scrape.yml has said MAX_MINUTES=75 on every Idox
+# batch job for a while now, but a real batch-4 run's own startup log
+# printed "Budget: 55 minutes" — the OLD value. Root cause: this
+# constant was genuinely hardcoded to 55, and the comment claiming it
+# "was overridden by workflow env var" was simply wrong — nothing here
+# ever actually read the environment variable for FAST/non-bulk mode
+# (the mode every nightly batch runs in; only --bulk mode read it
+# correctly, via a separate os.environ.get() call much further down).
+# Fixed at the source so every place that references MAX_MINUTES
+# (should_stop()'s budget check, the default scrape() parameter, and
+# fast-mode's own budget assignment) all consistently see the real,
+# intended value from scrape.yml, with 55 as a sensible fallback if the
+# env var is ever genuinely unset.
+MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "55"))
+DAYS_BACK    = 14  # hardcoded — deliberately, see days= assignment below
 CONCURRENCY  = int(os.environ.get("CONCURRENCY", "3"))
 
 # Added 2026-07-30 — a real, deliberate pause before EVERY page request
