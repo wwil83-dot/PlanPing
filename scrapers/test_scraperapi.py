@@ -30,19 +30,16 @@ API_ENDPOINT = "https://api.scraperapi.com"
 
 TARGETS = [
     ("Aberdeenshire Council",
-     "https://upa.aberdeenshire.gov.uk/online-applications/search.do"
-     "?action=monthlyList&searchCriteria.monthYearIndex=0&searchType=Application"),
+     "https://upa.aberdeenshire.gov.uk/online-applications/monthlyListResults.do?action=firstPage"),
     ("Babergh District Council",
-     "https://planning.baberghmidsuffolk.gov.uk/online-applications/search.do"
-     "?action=monthlyList&searchCriteria.monthYearIndex=0&searchType=Application"),
+     "https://planning.baberghmidsuffolk.gov.uk/online-applications/monthlyListResults.do?action=firstPage"),
     ("Argyll and Bute Council",
-     "https://publicaccess.argyll-bute.gov.uk/online-applications/search.do"
-     "?action=monthlyList&searchCriteria.monthYearIndex=0&searchType=Application"),
+     "https://publicaccess.argyll-bute.gov.uk/online-applications/monthlyListResults.do?action=firstPage"),
 ]
 
 RESULTS_CONTAINER_MARKERS = [
-    'ul.searchresults', 'id="searchresults"', 'searchResultsContainer',
-    'class="searchresults"',
+    'ul.searchresults', 'id="searchresults"', 'searchresultscontainer',
+    'class="searchresults"', 'searchresultsform', 'no-results',
 ]
 WAF_BLOCK_MARKERS = [
     "429 too many requests", "too many requests", "unusual traffic",
