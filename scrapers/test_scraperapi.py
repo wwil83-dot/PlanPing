@@ -130,6 +130,44 @@ def scrape_request(target_url: str, label: str, extra_params: dict = None,
     print(f"  Restriction/policy markers found: {restriction_hits if restriction_hits else 'none'}")
     print(f"  WAF/block-page markers found: {waf_hits if waf_hits else 'none'}")
 
+    # ADDED (2026-08-16) — real, direct extraction of the monthly-list
+    # form's actual structure. Our own production scraper has to try
+    # SEVERAL candidate selectors for the "date received" radio button
+    # (dc, DC, dv, DV, dateReceived — genuinely varies by council), so
+    # rather than guess which applies to these three specific councils,
+    # extract the real field names directly from the real HTML we
+    # already have, using BeautifulSoup rather than fragile hand-rolled
+    # regex for something structural like this.
+    form_info = None
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, "html.parser")
+        form = soup.find("form", id="monthlyListForm") or soup.find("form")
+        if form:
+            fields = []
+            for el in form.find_all(["input", "select"]):
+                fields.append({
+                    "tag": el.name,
+                    "type": el.get("type", ""),
+                    "name": el.get("name", ""),
+                    "id": el.get("id", ""),
+                    "value": el.get("value", ""),
+                })
+            form_info = {
+                "action": form.get("action", "(none — submits to current URL)"),
+                "method": form.get("method", "GET"),
+                "fields": fields,
+            }
+            print(f"  Real form found — action={form_info['action']!r}, method={form_info['method']!r}")
+            print(f"  Real form fields:")
+            for f in fields:
+                print(f"    <{f['tag']}> type={f['type']!r} name={f['name']!r} "
+                      f"id={f['id']!r} value={f['value']!r}")
+        else:
+            print(f"  ⚠ No <form> element found at all in this response.")
+    except ImportError:
+        print(f"  ⚠ BeautifulSoup not installed — skipping form structure extraction.")
+
     # Much bigger snippet than before (400 chars only ever showed <head>)
     # — enough to actually see whether real application rows are present
     snippet = " ".join(html.split())[:3000]
@@ -148,59 +186,34 @@ def scrape_request(target_url: str, label: str, extra_params: dict = None,
         "waf_hits": waf_hits,
         "restriction_hits": restriction_hits,
         "real_data_hits": real_data_hits,
+        "form_info": form_info,
     }
 
 
 def main():
-    print("SCRAPERAPI — round 3: testing BOTH the form URL and the firstPage URL")
-    print("back-to-back for each council, to tell apart two real possibilities:")
-    print("(a) firstPage genuinely doesn't work for these specific councils, or")
-    print("(b) proxy/session variability between separate runs is the real cause.")
-    print(f"Session number for this run: {SESSION_NUMBER}\n")
+    print("SCRAPERAPI — round 4: extracting the REAL monthly-list form structure")
+    print("for all three councils. Round 3 conclusively ruled out the firstPage")
+    print("URL for this group (3/3 form success vs 3/3 firstPage failure, same")
+    print("run, fresh session — a real, consistent, council-specific limit, not")
+    print("proxy variability). The form URL works; we just can't submit it via a")
+    print("plain GET. This extracts the real field names needed to build the")
+    print("equivalent direct request instead of interactive clicking.\n")
 
     if not API_KEY:
         print("Set SCRAPERAPI_KEY as an environment variable before running this —")
         print("never hardcode real credentials into this file.")
         sys.exit(1)
 
-    results = {}
     for name, base_url, form_path, firstpage_path in TARGETS:
         print(f"\n{'#' * 70}")
         print(f"# {name}")
         print("#" * 70)
-        form_result = scrape_request(
-            f"{base_url}/{form_path}", f"{name} — FORM URL", save_html=True)
-        time.sleep(2)  # small, deliberate gap — not testing rate-limit behaviour here
-        firstpage_result = scrape_request(
-            f"{base_url}/{firstpage_path}", f"{name} — FIRSTPAGE URL", save_html=True)
-        results[name] = {"form": form_result, "firstpage": firstpage_result}
-
-    def classify(result):
-        if result.get("error"):
-            return f"FAILED ({result['error']})"
-        if result.get("empty_200"):
-            return "EMPTY 200"
-        if result.get("restriction_hits"):
-            return f"RESTRICTED ({result['restriction_hits']})"
-        if result.get("real_data_hits"):
-            return f"REAL SUCCESS ({result['real_data_hits']})"
-        if result.get("waf_hits"):
-            return f"WAF BLOCKED ({result['waf_hits']})"
-        return "LOADED, no real-data markers"
+        scrape_request(f"{base_url}/{form_path}", f"{name} — FORM URL", save_html=True)
 
     print(f"\n\n{'=' * 70}")
-    print("REAL SUMMARY — judge for yourself from the evidence above:")
+    print("Real form field names printed above for each council — use these to")
+    print("build the equivalent direct request instead of interactive clicking.")
     print("=" * 70)
-    for name, pair in results.items():
-        print(f"\n  {name}")
-        print(f"    Form URL:       {classify(pair['form'])}")
-        print(f"    FirstPage URL:  {classify(pair['firstpage'])}")
-
-    print(f"\n{'-' * 70}")
-    print("If FORM succeeds but FIRSTPAGE fails consistently: firstPage genuinely")
-    print("isn't supported for these councils — a real, council-specific limit.")
-    print("If BOTH fail this run despite one succeeding last run: points toward")
-    print("proxy/session variability between runs as the real explanation.")
 
 
 if __name__ == "__main__":
