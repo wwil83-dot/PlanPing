@@ -41,10 +41,10 @@ structure, identical fa=getApplication&id=X detail-link pattern, and
 #   );
 # ---------------------------------------------------------------------------
 COUNCIL_DB_IDS: dict[str, int | None] = {
-    "Liverpool City Council":                    None,
-    "Warrington Borough Council":                None,
-    "Newcastle City Council":                    None,
-    "Blackburn with Darwen Borough Council":      None,
+    "Liverpool City Council":                    51,
+    "Warrington Borough Council":                182,
+    "Newcastle City Council":                    54,
+    "Blackburn with Darwen Borough Council":      469,
 }
 
 # (council_name_as_in_supabase_db, base_url — host only, no path)
