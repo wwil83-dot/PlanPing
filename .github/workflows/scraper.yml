@@ -725,7 +725,16 @@ jobs:
 
   getapplications_family_recon:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'getapplications_family_recon'
-    runs-on: ubuntu-latest
+    # CHANGED 2026-08-17 — moved from ubuntu-latest to the self-hosted UK
+    # runner after the first real Playwright run got an IDENTICAL block
+    # (same "Error (IDX002)" title, same 7796-char body) as the earlier
+    # plain httpx attempt. A real browser looking exactly like a non-
+    # browser request to the WAF rules out a fingerprint/JS-detection
+    # block — points instead at an IP/datacenter-range block, the exact
+    # thing diagnose_runner_location already confirmed ubuntu-latest
+    # presents as (Azure East US 2, not the UK). Testing the free,
+    # already-built fix before reaching for anything paid.
+    runs-on: [self-hosted, uk-runner]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
