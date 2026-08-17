@@ -35,7 +35,7 @@
         <div class="hero-trust">
           <span>✓ Free</span>
           <span>✓ No account needed</span>
-          <span>✓ England, Scotland &amp; Wales</span>
+          <span>✓ England, Scotland, Wales &amp; NI</span>
         </div>
       </div>
       <div class="hero-image">
@@ -88,7 +88,7 @@
     <div class="feature">
       <div class="feature-icon">📍</div>
       <h3>Growing coverage</h3>
-      <p>{{ council_count|default(0) }}+ councils across England, Scotland and Wales — from Cornwall to Shetland — with new councils added weekly.</p>
+      <p>{{ council_count|default(0) }}+ councils across England, Scotland, Wales and Northern Ireland — from Cornwall to Shetland to Belfast — with new councils added weekly.</p>
     </div>
   </section>
 
@@ -148,7 +148,7 @@
   <div style="background:linear-gradient(135deg, var(--blue-dark) 0%, var(--blue-mid) 60%, #1a7a5e 100%);width:100vw;position:relative;left:50%;right:50%;margin-left:-50vw;margin-right:-50vw;padding:2.5rem 1.5rem">
     <div class="coverage-map-section" style="max-width:1100px;margin:0 auto">
       <h2 style="font-family:'Fraunces', serif;font-size:2.2rem;font-weight:700;color:#fff;line-height:1.15;margin-bottom:.4rem">Where we <em style="font-style:italic;color:#7dd98a">cover</em></h2>
-      <p style="font-size:.88rem;color:rgba(255,255,255,.8);margin-bottom:1rem">{{ council_count|default(0) }}+ UK planning authorities — England, Scotland &amp; Wales. More being added every week.</p>
+      <p style="font-size:.88rem;color:rgba(255,255,255,.8);margin-bottom:1rem">{{ council_count|default(0) }}+ UK planning authorities — England, Scotland, Wales &amp; Northern Ireland. More being added every week.</p>
       <div id="coverage-map" style="height:640px;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:#000;position:relative"></div>
       <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.75rem;font-size:.78rem;color:rgba(255,255,255,.75)">
         <span><span style="display:inline-block;width:12px;height:12px;background:var(--green);border-radius:3px;margin-right:.4rem;vertical-align:middle"></span>Live</span>
@@ -161,7 +161,7 @@
 
   <div class="coverage-note" style="margin-top:2.5rem">
     <strong>Coverage is growing.</strong>
-    We currently cover {{ council_count|default(0) }}+ councils across England, Scotland and Wales — including major cities, coastal towns and rural districts — with more being added weekly.
+    We currently cover {{ council_count|default(0) }}+ councils across England, Scotland, Wales and Northern Ireland — including major cities, coastal towns and rural districts — with more being added weekly.
     <a href="/councils">See full coverage →</a>
   </div>
 </main>
@@ -378,22 +378,20 @@
       // fitBounds(), calculated from the REAL loaded boundary data
       // rather than a guess, zooms and pans to precisely fill the
       // available space with Britain's actual extent.
-      // CHANGED (2026-08-13) — a real, direct request: widen the map's
-      // framing to include the whole of Ireland geographically, so it
-      // reads as a properly framed "British Isles" view rather than
-      // cropped tight to just the loaded UK boundary data. Worth being
-      // precise about what this does and doesn't do: we have no
-      // planning-application coverage in Ireland at all (the site's
-      // own copy says "England, Scotland & Wales"), and the actual
-      // boundary SHAPES for Ireland come from a completely different
-      // data source (Ordnance Survey Ireland, not the UK's ONS) that
-      // hasn't been sourced or integrated. This widens the VIEWPORT
-      // only — Ireland will show as the same dark background as the
-      // sea, giving proper geographic context, not outlined shapes or
-      // coverage data. A fixed bounding box (not derived from the
-      // loaded UK-only data) is used deliberately, so the framing
-      // stays consistent regardless of exactly what boundary data
-      // happens to load.
+      // CHANGED (2026-08-17) — copy above updated to include Northern
+      // Ireland (real NI application data now live, 10 councils via the
+      // shared planningsystemni.gov.uk portal). This viewport widening
+      // still matters for a DIFFERENT reason now: the coloured council
+      // BOUNDARY SHAPES on this map come from the ONS Open Geography
+      // FeatureServer, which only covers Great Britain — NI's 10
+      // councils have NO boundary shape data sourced yet (a separate
+      // dataset, Ordnance Survey Ireland or similar, not yet
+      // integrated). So NI will correctly show real search results
+      // and coverage-status text everywhere else on the site, but on
+      // THIS specific map it'll render as plain background, not a
+      // coloured/interactive shape — real known gap, not a bug, worth
+      // fixing as its own real piece of work rather than assuming this
+      // copy update covers it.
       var BRITISH_ISLES_BOUNDS = [
         [49.8, -11.0],  /* south-west: south of Ireland, west of its coast */
         [61.0, 2.0],    /* north-east: north of Shetland, east of Norfolk */
