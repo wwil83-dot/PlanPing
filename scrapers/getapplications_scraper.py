@@ -9,30 +9,47 @@ platform: Liverpool, Warrington, Newcastle, Blackburn with Darwen. See
 getapplications_councils.py for the council list and confirmed base
 URLs.
 
-ARCHITECTURE — CONFIRMED, real evidence trail:
-  - The weekly-received-applications list is reached via a real POST to
-    "{base_url}/planning/index.html", body
-    "fa=getReceivedWeeklyList&week=DD-MM-YYYY" (week = the Monday of
-    the target week — CONFIRMED via a real Console fetch() test that
-    returned 222KB of real, current HTML with no CAPTCHA and no
-    session/auth required at all).
-  - Individual application detail pages are reached via
-    "{base_url}/planning/index.html?fa=getApplication&id=N" — CONFIRMED
-    real via recon, contains real fields including applicant/agent name
-    and a distinct real Decision field (unlike NI's platform, this one
-    DOES expose the actual approve/refuse outcome, not just "a decision
-    happened").
-  - CONFIRMED (2026-08-17, real evidence): a real Chromium browser
-    (Playwright) run from GitHub's standard ubuntu-latest hosted runner
-    got an IDENTICAL WAF block ("Error (IDX002)", same exact byte
-    length) as a plain httpx request — ruling out a browser-fingerprint
-    block. The SAME run from the self-hosted UK runner succeeded
-    completely, real content, every council. This is an IP/datacenter-
-    range block, not a bot-detection block — meaning a plain httpx
-    client (no browser needed) works fine, AS LONG AS IT RUNS FROM THE
-    UK RUNNER. Every job in scrape.yml for this scraper MUST use
-    [self-hosted, uk-runner], never ubuntu-latest, or it will get
-    blocked identically to the first two recon attempts.
+ARCHITECTURE — REVISED 2026-08-17, after the first two real production
+runs. CORRECTION to an earlier assumption in this file: the previous
+version of this scraper used plain httpx with no browser at all,
+reasoning that the earlier Playwright-vs-httpx WAF test (which found
+identical blocks from ubuntu-latest, resolved by switching to the UK
+runner) proved a browser wasn't needed here. That reasoning was wrong —
+every single test that ever confirmed this endpoint working (the real
+DevTools Console fetch() test, and the Playwright-based recon run) ALSO
+had a real browser already open and already past a SEPARATE challenge
+that was never isolated as its own variable. Real evidence from this
+scraper's first two production runs (both zero results, no errors,
+every response looking superficially fine) revealed what that separate
+layer actually is: an AWS WAF JAVASCRIPT CHALLENGE
+(window.awsWafCookieDomainList, window.gokuProps present in the real
+response body) — a bot-detection mechanism that requires a real JS
+engine to execute a challenge script before real content is released.
+A plain httpx client cannot pass this under any combination of headers
+or cookies; it fundamentally requires JavaScript execution.
+
+So this platform has (at least) TWO separate protective layers,
+confirmed as genuinely distinct:
+  1. An IP/datacenter-range block (the "Error IDX002" page seen during
+     recon) — solved by running from the UK runner, unrelated to
+     browser vs non-browser.
+  2. An AWS WAF JS challenge — solved only by a real browser actually
+     executing JavaScript, regardless of which network it runs from.
+
+CURRENT REAL DESIGN: one Playwright browser page per council, used ONCE
+to load the real search page (letting the browser solve the WAF
+challenge exactly the way any normal page load would — no special
+handling needed, Playwright does this automatically). Every subsequent
+weekly-list search and detail-page recheck for that council then runs
+as a real fetch() call EXECUTED INSIDE that same already-challenge-
+passed page via page.evaluate() — this is a direct, mechanical
+replication of the real, confirmed-working DevTools Console test
+earlier in this project's development, just automated. This keeps the
+per-request overhead close to the original lightweight httpx design
+(no repeated full page navigations, no simulated clicks) while still
+genuinely solving the WAF challenge via a real browser, which a bare
+HTTP client structurally cannot do.
+
 
 HONEST LIMITATIONS in this v1, worth remembering:
   - CAPTCHA CONFIRMED on the separate "Determined" weekly list
@@ -102,6 +119,19 @@ from urllib.parse import urljoin, parse_qs, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
+from playwright.async_api import async_playwright, Browser, TimeoutError as PlaywrightTimeout
+
+BROWSER_ARGS = ["--no-sandbox", "--disable-dev-shm-usage"]
+CONTEXT_OPTIONS = {
+    "user_agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "viewport": {"width": 1280, "height": 900},
+    "locale": "en-GB",
+    "ignore_https_errors": True,
+}
 
 # ---------------------------------------------------------------------------
 # Config
@@ -128,16 +158,6 @@ def elapsed_minutes() -> float:
 
 def should_stop() -> bool:
     return elapsed_minutes() >= MAX_MINUTES - 2
-
-
-HTTP_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-GB,en;q=0.9",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -460,28 +480,29 @@ class GetApplicationsPortal:
     def _log(self, msg: str) -> None:
         print(f"    [{self.council_name}] {msg}")
 
-    async def scrape_weekly_lists(self, client: httpx.AsyncClient, weeks_back: int) -> list[dict]:
+    async def scrape_weekly_lists(self, browser: Browser, weeks_back: int) -> list[dict]:
         all_apps: list[dict] = []
         seen_ids: set[str] = set()
 
-        # ESTABLISH A REAL SESSION FIRST — real evidence, not a guess:
-        # the first production run against all 4 councils returned 0
-        # applications across every week, with no error anywhere (every
-        # request got a normal-looking response). The one confirmed-
-        # working test (a real DevTools Console fetch()) used
-        # credentials: "same-origin", meaning it reused cookies from a
-        # normal page load that happened first. This scraper's client
-        # previously POSTed cold, no prior page visit, no cookies. A
-        # plain GET here (using the SAME client instance, which keeps
-        # cookies automatically) tests that theory directly rather than
-        # guessing blind a second time.
+        context = await browser.new_context(**CONTEXT_OPTIONS)
+        page = await context.new_page()
+
+        # Load the real search page ONCE — a normal Playwright
+        # navigation executes real JavaScript exactly like a real
+        # browser, which is what actually solves the AWS WAF challenge
+        # (see module docstring). Every subsequent request for this
+        # council reuses this same already-challenge-passed page via
+        # page.evaluate(fetch), never a fresh httpx client.
         search_page_url = f"{self.base_url}/planning/index.html?fa=getApplications"
         try:
-            await client.get(search_page_url, headers=HTTP_HEADERS, timeout=30,
-                              follow_redirects=True)
+            await page.goto(search_page_url, wait_until="domcontentloaded", timeout=45_000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=15_000)
+            except PlaywrightTimeout:
+                pass
         except Exception as e:
-            self._log(f"⚠ Could not load search page first (continuing anyway, "
-                      f"may affect results): {e}")
+            self._log(f"⚠ Could not load search page (WAF challenge may not be "
+                      f"solved, subsequent requests likely to fail): {e}")
 
         for monday in _mondays_back(weeks_back):
             if should_stop():
@@ -489,24 +510,36 @@ class GetApplicationsPortal:
                 break
 
             week_str = monday.strftime("%d-%m-%Y")
-            url = f"{self.base_url}/planning/index.html"
+            # Real fetch() executed INSIDE the browser page — mechanical
+            # replication of the confirmed-working DevTools Console
+            # test, just automated. Inherits the page's real cookies/
+            # WAF-challenge state automatically, the same way any
+            # same-origin fetch() from a real page would.
             try:
-                r = await client.post(
-                    url,
-                    data={"fa": "getReceivedWeeklyList", "week": week_str},
-                    headers=HTTP_HEADERS,
-                    timeout=30,
-                    follow_redirects=True,
+                result = await page.evaluate(
+                    """async ({url, week}) => {
+                        const r = await fetch(url, {
+                            method: "POST",
+                            headers: {"Content-Type": "application/x-www-form-urlencoded"},
+                            body: `fa=getReceivedWeeklyList&week=${week}`,
+                            credentials: "same-origin"
+                        });
+                        const text = await r.text();
+                        return {status: r.status, text: text};
+                    }""",
+                    {"url": f"{self.base_url}/planning/index.html", "week": week_str},
                 )
             except Exception as e:
-                self._log(f"⚠ Request error for week {week_str}: {e}")
+                self._log(f"⚠ In-page fetch error for week {week_str}: {e}")
                 continue
 
-            if r.status_code >= 400:
-                self._log(f"⚠ HTTP {r.status_code} for week {week_str}: {r.text[:200]}")
+            status = result.get("status")
+            html = result.get("text", "")
+            if status is not None and status >= 400:
+                self._log(f"⚠ HTTP {status} for week {week_str}: {html[:200]}")
                 continue
 
-            week_apps = _parse_weekly_list(r.text, self.base_url, self.council_name, week_str)
+            week_apps = _parse_weekly_list(html, self.base_url, self.council_name, week_str)
             for a in week_apps:
                 a["week_monday"] = monday.isoformat()  # real evidence of WHEN this
                                                           # was received, from the
@@ -519,15 +552,28 @@ class GetApplicationsPortal:
                       f"({len(new_apps)} new)")
             all_apps.extend(new_apps)
 
+        await context.close()
         return all_apps
 
-    async def recheck_pending(self, client: httpx.AsyncClient,
+    async def recheck_pending(self, browser: Browser,
                                pending: list[dict]) -> list[dict]:
         """Revisits a bounded batch of previously-pending applications'
         real detail pages to check for a real Decision. See module
         docstring — this is the ONLY route to decided-outcome data,
-        since the Determined weekly list is CAPTCHA-protected."""
+        since the Determined weekly list is CAPTCHA-protected. Uses the
+        same real-browser-page approach as scrape_weekly_lists, for the
+        same WAF-challenge reason — a detail page is a different URL,
+        so it may or may not need its own fresh challenge solve; using
+        a real page.goto() per application (rather than assuming the
+        challenge carries over from an unrelated page) is the safe,
+        confirmed-working approach even though it's heavier per
+        request. RECHECK_LIMIT exists specifically to bound this cost.
+        """
+        if not pending:
+            return []
         updates = []
+        context = await browser.new_context(**CONTEXT_OPTIONS)
+        page = await context.new_page()
         for p in pending:
             if should_stop():
                 self._log(f"⚠ Time budget reached mid-recheck, stopping")
@@ -537,13 +583,17 @@ class GetApplicationsPortal:
                 continue
             url = f"{self.base_url}/planning/index.html?fa=getApplication&id={app_id}"
             try:
-                r = await client.get(url, headers=HTTP_HEADERS, timeout=30,
-                                      follow_redirects=True)
+                response = await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=10_000)
+                except PlaywrightTimeout:
+                    pass
             except Exception:
                 continue
-            if r.status_code >= 400:
+            if response is not None and response.status >= 400:
                 continue
-            fields = _parse_detail_page(r.text)
+            html = await page.content()
+            fields = _parse_detail_page(html)
             decision = fields.get("Decision", "").strip()
             if decision:
                 updates.append({
@@ -551,6 +601,7 @@ class GetApplicationsPortal:
                     "status": _normalise_status(decision),
                     "decision_date": _parse_uk_date(fields.get("Decision Issued Date", "")),
                 })
+        await context.close()
         if updates:
             self._log(f"Recheck: {len(updates)} of {len(pending)} previously-pending "
                       f"application(s) now have a real decision")
@@ -560,7 +611,7 @@ class GetApplicationsPortal:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-async def process_council(portal: GetApplicationsPortal, client: httpx.AsyncClient,
+async def process_council(portal: GetApplicationsPortal, browser: Browser,
                            sem: asyncio.Semaphore, weeks_back: int,
                            pending_recheck: Optional[list[dict]] = None) -> int:
     async with sem:
@@ -573,7 +624,7 @@ async def process_council(portal: GetApplicationsPortal, client: httpx.AsyncClie
             return "TIME_BUDGET_SKIP"
 
         try:
-            raw_apps = await portal.scrape_weekly_lists(client, weeks_back)
+            raw_apps = await portal.scrape_weekly_lists(browser, weeks_back)
         except Exception as e:
             print(f"    [{portal.council_name}] ✗ Error: {e}")
             return 0
@@ -584,7 +635,7 @@ async def process_council(portal: GetApplicationsPortal, client: httpx.AsyncClie
         recheck_updates = []
         if pending_recheck:
             try:
-                recheck_updates = await portal.recheck_pending(client, pending_recheck)
+                recheck_updates = await portal.recheck_pending(browser, pending_recheck)
             except Exception as e:
                 print(f"    [{portal.council_name}] ⚠ Recheck error: {e}")
 
@@ -722,7 +773,7 @@ async def process_council(portal: GetApplicationsPortal, client: httpx.AsyncClie
 
 
 async def main():
-    print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind getApplications-family scraper (direct API)")
+    print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind getApplications-family scraper (Playwright)")
     print(f"Weeks back:  {WEEKS_BACK}")
     print(f"Concurrency: {CONCURRENCY}")
     print(f"Budget:      {MAX_MINUTES} minutes")
@@ -776,18 +827,24 @@ async def main():
     except Exception as e:
         print(f"⚠ Failed to fetch pending recheck list (continuing without it): {e}\n")
 
-    print(f"Scraping {len(to_scrape)} councils via direct API "
-          f"(no browser needed — MUST run on the UK runner, see module "
-          f"docstring)…\n")
+    print(f"Scraping {len(to_scrape)} councils via a real browser "
+          f"(REQUIRED — see module docstring: an AWS WAF JS challenge "
+          f"cannot be passed by a plain HTTP client) — MUST run on the "
+          f"UK runner too, for the separate IP-range block…\n")
 
-    async with httpx.AsyncClient() as client:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
+        print(f"Chromium launched: {browser.version}\n")
+
         sem = asyncio.Semaphore(CONCURRENCY)
         results = await asyncio.gather(
-            *[process_council(p, client, sem, WEEKS_BACK,
+            *[process_council(p, browser, sem, WEEKS_BACK,
                                pending_recheck=pending_by_council.get(p.db_council_id))
               for p in to_scrape],
             return_exceptions=True,
         )
+
+        await browser.close()
 
     total = sum(r for r in results if isinstance(r, int))
     time_skipped = sum(1 for r in results if r == "TIME_BUDGET_SKIP")
