@@ -732,7 +732,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install httpx
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright
+      - run: playwright install --with-deps chromium
       - name: Run getApplications-family recon (Liverpool, Warrington, Newcastle, Blackburn & Darwen)
         run: cd scrapers && python getapplications_family_recon.py
       - name: Upload recon artifacts
