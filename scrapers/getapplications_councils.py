@@ -57,7 +57,7 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     "Warrington Borough Council":                182,
     "Newcastle City Council":                    54,
     "Blackburn with Darwen Borough Council":      469,
-    "London Borough of Waltham Forest":          None,
+    "London Borough of Waltham Forest":          224,
 }
 
 # (council_name_as_in_supabase_db, base_url — host only, no path)
