@@ -759,13 +759,15 @@ jobs:
           retention-days: 14
 
   scrape_getapplications:
-    # DELIBERATELY on the UK runner from the START, not manual-testing
-    # on ubuntu-latest first the way scrape_ni was — real evidence
-    # already confirms ubuntu-latest gets an identical WAF block on
-    # this platform whether the request comes from plain httpx OR a
-    # real Playwright browser (see getapplications_scraper.py's module
-    # docstring). Running this from ubuntu-latest would just reproduce
-    # a known, already-diagnosed failure.
+    # DELIBERATELY on the UK runner from the START — that solves ONE of
+    # two SEPARATE protective layers this platform has (an IP/
+    # datacenter-range block). The OTHER layer, an AWS WAF JavaScript
+    # challenge, needs a real browser regardless of which network the
+    # request comes from — see getapplications_scraper.py's module
+    # docstring for the full real-evidence trail (an earlier version of
+    # this comment incorrectly said a browser wasn't needed at all;
+    # corrected after two real production runs returned an AWS WAF
+    # challenge page instead of real content).
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_getapplications'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 25
@@ -774,10 +776,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      # NO Playwright here — CONFIRMED not needed once running from the
-      # UK runner (the WAF block was IP-based, not a browser-fingerprint
-      # check). Plain httpx + beautifulsoup4 for real HTML parsing.
-      - run: pip install httpx beautifulsoup4
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright beautifulsoup4 httpx
+      - run: playwright install --with-deps chromium
       - name: Run getApplications-family scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
