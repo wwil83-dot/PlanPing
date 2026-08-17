@@ -20,7 +20,19 @@ Warrington's system directly "resembles the one used by Liverpool City
 Council" — and all 4 councils' recon output showed identical page
 structure, identical fa=getApplication&id=X detail-link pattern, and
 (before the UK-runner fix) an identical WAF block signature.
+
+ADDED 2026-08-17 — a 5th council: London Borough of Waltham Forest.
+This closes a real, previously-unsolved mystery from an earlier
+session: Waltham Forest's OLD Idox entry was already found and
+disabled after being caught silently saving LEWISHAM's real data
+mislabeled as Waltham Forest (see idox_councils.py's own detailed
+comment trail) — but Waltham Forest itself was left with no working
+config at all, pending finding its real portal. It was never an Idox
+council to begin with; it's on this platform
+(placehub.walthamforest.gov.uk), found directly by the user, not
+guessed.
 """
+
 
 # ---------------------------------------------------------------------------
 # Hardcoded correct council IDs from the database.
@@ -45,6 +57,7 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     "Warrington Borough Council":                182,
     "Newcastle City Council":                    54,
     "Blackburn with Darwen Borough Council":      469,
+    "London Borough of Waltham Forest":          None,
 }
 
 # (council_name_as_in_supabase_db, base_url — host only, no path)
@@ -53,6 +66,7 @@ GETAPPLICATIONS_COUNCILS = [
     ("Warrington Borough Council",           "https://online.warrington.gov.uk"),
     ("Newcastle City Council",               "https://portal.newcastle.gov.uk"),
     ("Blackburn with Darwen Borough Council", "https://online.blackburn.gov.uk"),
+    ("London Borough of Waltham Forest",     "https://placehub.walthamforest.gov.uk"),
 ]
 
 
@@ -70,7 +84,8 @@ VALUES
   ('Liverpool City Council','liverpool-city-council','getapplications','england','https://lar.liverpool.gov.uk/planning/index.html','pending',true),
   ('Warrington Borough Council','warrington-borough-council','getapplications','england','https://online.warrington.gov.uk/planning/index.html','pending',true),
   ('Newcastle City Council','newcastle-city-council','getapplications','england','https://portal.newcastle.gov.uk/planning/index.html','pending',true),
-  ('Blackburn with Darwen Borough Council','blackburn-with-darwen-borough-council','getapplications','england','https://online.blackburn.gov.uk/planning/index.html','pending',true)
+  ('Blackburn with Darwen Borough Council','blackburn-with-darwen-borough-council','getapplications','england','https://online.blackburn.gov.uk/planning/index.html','pending',true),
+  ('London Borough of Waltham Forest','london-borough-of-waltham-forest','getapplications','england','https://placehub.walthamforest.gov.uk/planning/index.html','pending',true)
 ON CONFLICT (name) DO UPDATE SET
   system = 'getapplications',
   active = true,
