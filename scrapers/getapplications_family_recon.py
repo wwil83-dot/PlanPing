@@ -39,13 +39,28 @@ the 2022 snapshot) or could mean something real (e.g. a required header
 this recon needs to send). Both need checking with real, current,
 uncached requests — which is what this script does.
 
-ARCHITECTURE — CONFIRMED server-rendered HTML (not a JS SPA like the NI
-platform), so httpx alone should be enough, no Playwright/browser
-required — but this recon deliberately checks that assumption directly
-(prints the raw response) rather than assuming it holds for every
-council in the family, since Playwright would still be needed if any
-one of these turns out to require JS execution or session cookies
-despite the others not needing them.
+ARCHITECTURE — REVISED 2026-08-17, after the first real recon run: a
+plain httpx GET (no browser, no JS execution, no real browser TLS/HTTP
+fingerprint) got an IDENTICAL 406 "Error (IDX002)" response — same
+error code, same exact byte length (1782 chars) — across all 4 councils
+on 2 completely different real domains each. That's not 8 separate
+coincidental failures; it's one shared error page, which is itself real
+evidence FOR the shared-platform theory (on top of the Warrington/
+Liverpool news article) — these sites are very likely fronted by a
+common WAF/CDN layer that blocks non-browser requests uniformly. The
+blocked page itself is a giveaway: it calls api.ipify.org client-side to
+show the visitor their own IP — a classic "you've been blocked, here's
+your IP" WAF interstitial, not a genuine content-negotiation failure
+despite the literal 406 status. Same category of problem as the
+existing ~13-council Idox WAF-blocked group, just presenting
+differently (a branded error page instead of "429 Too Many Requests").
+
+Given that, this recon now uses PLAYWRIGHT (real Chromium) instead of
+httpx — the same tool that already gets past equivalent blocks for
+Idox/Arcus/Civica/Northgate. Whether a real browser is enough on its
+own, or whether this specific WAF needs more (residential IP, specific
+cookies, etc. — the same open question as the parked proxy
+investigation), is exactly what this run will show.
 
 HONEST LIMITATIONS in this recon's own design, worth remembering:
   - Real evidence review found (a 2022 comment on the Place North West
@@ -65,9 +80,23 @@ HONEST LIMITATIONS in this recon's own design, worth remembering:
     than guessing one and building a scraper against a guess.
 """
 import asyncio
+import re
 from datetime import datetime, timezone
+from urllib.parse import urljoin
 
-import httpx
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
+
+BROWSER_ARGS = ["--no-sandbox", "--disable-dev-shm-usage"]
+CONTEXT_OPTIONS = {
+    "user_agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "viewport": {"width": 1280, "height": 900},
+    "locale": "en-GB",
+    "ignore_https_errors": True,
+}
 
 TARGETS = [
     ("Liverpool City Council",
@@ -88,69 +117,84 @@ TARGETS = [
      "https://online.blackburn.gov.uk/planning/index.html?fa=getReceivedWeeklyList"),
 ]
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-GB,en;q=0.9",
-}
-
-
 def slug(name: str) -> str:
     return name.lower().replace(" ", "_").replace("—", "").replace("&", "and").replace(",", "")
 
 
-async def recon_one(client: httpx.AsyncClient, name: str, url: str):
+async def recon_one(browser, name: str, url: str):
     print(f"\n{'=' * 70}")
     print(f"GETAPPLICATIONS-FAMILY RECON: {name}")
     print(f"URL: {url}")
     print("=" * 70)
 
+    context = await browser.new_context(**CONTEXT_OPTIONS)
+    page = await context.new_page()
+
     try:
-        r = await client.get(url, headers=HEADERS, timeout=30, follow_redirects=True)
+        response = await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
     except Exception as e:
-        print(f"  ⚠ Request error: {e}")
-        return
+        print(f"  ⚠ Navigation error: {e}")
+        await context.close()
+        return None
 
-    print(f"  HTTP status: {r.status_code}")
-    print(f"  Final URL after redirects: {r.url}")
-    print(f"  Content-Type: {r.headers.get('content-type', '(none)')}")
-    print(f"  Response length: {len(r.text)} chars")
+    status = response.status if response else None
+    print(f"  HTTP status: {status}")
+    print(f"  Final URL after redirects: {page.url}")
 
-    if r.status_code != 200:
-        print(f"  ⚠ Non-200 response — body preview: {r.text[:500]!r}")
-        return
+    try:
+        await page.wait_for_load_state("networkidle", timeout=15_000)
+    except PlaywrightTimeout:
+        pass
+    await asyncio.sleep(1)
 
-    html = r.text
+    title = await page.title()
+    html = await page.content()
+    print(f"  Real page title: {title!r}")
+    print(f"  Response length: {len(html)} chars")
+
+    if status is not None and status >= 400:
+        print(f"  ⚠ Non-200 response — body preview: {html[:500]!r}")
+        out_path = f"/tmp/getapps_recon_{slug(name)}_blocked.html"
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(html)
+        print(f"  Saved (even though blocked, for direct inspection): {out_path}")
+        await context.close()
+        return None
 
     # Real, direct evidence check: does this look like a genuinely
     # current response, or something suspicious (empty table, error
     # page dressed as 200, JS-shell like the NI platform)?
     lowered = html.lower()
     if "enable javascript" in lowered or "you need to enable" in lowered:
-        print("  ⚠ FLAG: page mentions needing JavaScript — may be a client-"
-              "rendered SPA after all, not the confirmed server-rendered "
-              "shape seen in Warrington's stale cached fetch. Check the "
-              "saved HTML directly.")
+        print("  ⚠ FLAG: page mentions needing JavaScript even after real "
+              "browser rendering — check the saved HTML directly.")
+    if "error (idx" in lowered or "ipify.org" in lowered:
+        print("  ⚠ FLAG: still looks like the same WAF interstitial seen "
+              "in the httpx run, despite a real browser and a 2xx/OK "
+              "status this time — worth checking the saved HTML/"
+              "screenshot directly rather than trusting the status code "
+              "alone.")
 
     # Count of application-reference-shaped tokens as a rough sanity
     # check on real row count — not a real parser, just a first signal
-    import re
     ref_like = re.findall(r"\b(20\d{2}/\d{3,6}(?:/[A-Z]{1,6})?|\d{2}[A-Z]{1,3}/\d{3,6})\b", html)
     print(f"  Reference-shaped tokens found: {len(ref_like)}")
     if ref_like:
         print(f"  Sample: {ref_like[:8]}")
 
-    # Save full HTML for direct human inspection — the real structure
-    # (table markup, column headers, pagination links, form field
-    # names) needs eyes on the actual markup, not just this script's
-    # rough regex signal.
-    out_path = f"/tmp/getapps_recon_{slug(name)}.html"
-    with open(out_path, "w", encoding="utf-8") as f:
+    # Save full HTML + a screenshot for direct human inspection — the
+    # real structure (table markup, column headers, pagination links,
+    # form field names) needs eyes on the actual rendered page, not
+    # just this script's rough regex signal.
+    out_html = f"/tmp/getapps_recon_{slug(name)}.html"
+    with open(out_html, "w", encoding="utf-8") as f:
         f.write(html)
-    print(f"  Saved: {out_path}")
+    out_png = f"/tmp/getapps_recon_{slug(name)}.png"
+    try:
+        await page.screenshot(path=out_png, full_page=True)
+        print(f"  Saved: {out_html}, {out_png}")
+    except Exception as e:
+        print(f"  Saved: {out_html} (screenshot failed: {e})")
 
     # Look for real pagination signals — href/query params containing
     # common paging keywords, without assuming which one this platform
@@ -166,7 +210,7 @@ async def recon_one(client: httpx.AsyncClient, name: str, url: str):
     else:
         print("\n  No obvious pagination links found by keyword match — "
               "check the saved HTML directly; may use a POST form instead "
-              "of GET links.")
+              "of GET links, or client-side JS pagination.")
 
     # Look for a real individual-application detail link, so we can
     # recon that page too (fa=getApplication&id=... pattern, per the
@@ -178,6 +222,9 @@ async def recon_one(client: httpx.AsyncClient, name: str, url: str):
     )
     detail_links = [d for d in detail_links if "getApplications" not in d
                      and "getReceivedWeeklyList" not in d]
+
+    await context.close()
+
     if detail_links:
         print(f"\n  Real individual application detail links found "
               f"({len(detail_links)}):")
@@ -191,60 +238,92 @@ async def recon_one(client: httpx.AsyncClient, name: str, url: str):
         return None
 
 
-async def recon_detail_page(client: httpx.AsyncClient, name: str, base_url: str, link: str):
-    from urllib.parse import urljoin
+async def recon_detail_page(browser, name: str, base_url: str, link: str):
     full_url = urljoin(base_url, link)
     print(f"\n{'-' * 70}")
     print(f"DETAIL PAGE RECON: {name}")
     print(f"URL: {full_url}")
     print("-" * 70)
+
+    context = await browser.new_context(**CONTEXT_OPTIONS)
+    page = await context.new_page()
+
     try:
-        r = await client.get(full_url, headers=HEADERS, timeout=30, follow_redirects=True)
+        response = await page.goto(full_url, wait_until="domcontentloaded", timeout=45_000)
     except Exception as e:
-        print(f"  ⚠ Request error: {e}")
+        print(f"  ⚠ Navigation error: {e}")
+        await context.close()
         return
 
-    print(f"  HTTP status: {r.status_code}")
-    if r.status_code != 200:
-        print(f"  ⚠ Non-200 — body preview: {r.text[:500]!r}")
+    status = response.status if response else None
+    print(f"  HTTP status: {status}")
+
+    try:
+        await page.wait_for_load_state("networkidle", timeout=15_000)
+    except PlaywrightTimeout:
+        pass
+    await asyncio.sleep(1)
+
+    html = await page.content()
+
+    if status is not None and status >= 400:
+        print(f"  ⚠ Non-200 — body preview: {html[:500]!r}")
+        await context.close()
         return
 
     out_path = f"/tmp/getapps_recon_{slug(name)}_detail.html"
     with open(out_path, "w", encoding="utf-8") as f:
-        f.write(r.text)
-    print(f"  Saved: {out_path}")
+        f.write(html)
+    out_png = f"/tmp/getapps_recon_{slug(name)}_detail.png"
+    try:
+        await page.screenshot(path=out_png, full_page=True)
+        print(f"  Saved: {out_path}, {out_png}")
+    except Exception as e:
+        print(f"  Saved: {out_path} (screenshot failed: {e})")
 
     # Look for real status/decision keywords directly in the page text
     # — tells us whether the DETAIL page (unlike the list view) exposes
     # a real approve/refuse outcome, worth knowing before assuming this
     # platform has the same "list view never shows outcome" limitation
     # Civica and (partially) NI both turned out to have.
-    lowered = r.text.lower()
+    lowered = html.lower()
     for kw in ("approved", "refused", "granted", "permitted", "withdrawn",
                "decision date", "status", "applicant", "agent"):
         if kw in lowered:
             print(f"  Contains real text matching {kw!r}: yes")
 
+    await context.close()
+
 
 async def main():
-    print(f"[{datetime.now(timezone.utc).isoformat()}] getApplications-family recon — "
-          f"{len(TARGETS)} real target URLs across 4 suspected-shared-platform councils\n")
+    print(f"[{datetime.now(timezone.utc).isoformat()}] getApplications-family recon "
+          f"(Playwright — see module docstring for why this replaced the first, "
+          f"httpx-based attempt) — {len(TARGETS)} real target URLs across 4 "
+          f"suspected-shared-platform councils\n")
 
     detail_candidates = []
-    async with httpx.AsyncClient() as client:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
+        print(f"Chromium launched: {browser.version}\n")
+
         for name, url in TARGETS:
-            link = await recon_one(client, name, url)
+            link = await recon_one(browser, name, url)
             if link:
                 detail_candidates.append((name, url, link))
 
         for name, base_url, link in detail_candidates:
-            await recon_detail_page(client, name, base_url, link)
+            await recon_detail_page(browser, name, base_url, link)
+
+        await browser.close()
 
     print(f"\n{'=' * 70}")
     print("RECON COMPLETE")
     print("=" * 70)
-    print("Download the workflow artifact and read the saved HTML files")
-    print("directly before writing any scraper code. In particular, check:")
+    print("Download the workflow artifact and read the saved HTML/screenshot")
+    print("files directly before writing any scraper code. In particular, check:")
+    print("  0. Whether a real browser actually got past the WAF this time —")
+    print("     look for a real HTTP status per council above, and check any")
+    print("     '_blocked.html' files saved if it didn't.")
     print("  1. Whether Newcastle's REAL current portal is this")
     print("     getApplications URL, or the different Lotus-Notes-style URL")
     print("     already stored in its DB row (see module docstring) — a")
