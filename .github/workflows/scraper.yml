@@ -19,7 +19,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, scrape_ni, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test, brightdata_browser_api_test, ni_planningsystemni_recon, getapplications_family_recon]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, scrape_ni, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test, brightdata_browser_api_test, ni_planningsystemni_recon, getapplications_family_recon, scrape_getapplications]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -757,6 +757,35 @@ jobs:
           name: getapplications-family-recon-output
           path: /tmp/getapps_recon_*
           retention-days: 14
+
+  scrape_getapplications:
+    # DELIBERATELY on the UK runner from the START, not manual-testing
+    # on ubuntu-latest first the way scrape_ni was — real evidence
+    # already confirms ubuntu-latest gets an identical WAF block on
+    # this platform whether the request comes from plain httpx OR a
+    # real Playwright browser (see getapplications_scraper.py's module
+    # docstring). Running this from ubuntu-latest would just reproduce
+    # a known, already-diagnosed failure.
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_getapplications'
+    runs-on: [self-hosted, uk-runner]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # NO Playwright here — CONFIRMED not needed once running from the
+      # UK runner (the WAF block was IP-based, not a browser-fingerprint
+      # check). Plain httpx + beautifulsoup4 for real HTML parsing.
+      - run: pip install httpx beautifulsoup4
+      - name: Run getApplications-family scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_MINUTES: "20"
+          CONCURRENCY: "2"
+          WEEKS_BACK: "2"
+        run: cd scrapers && python getapplications_scraper.py
 
   northgate_url_healthcheck:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_url_healthcheck'
