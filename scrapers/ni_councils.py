@@ -40,16 +40,16 @@ don't just flip it on.
 # rather than silently skipping it — see ni_scraper.py's startup check.
 # ---------------------------------------------------------------------------
 COUNCIL_DB_IDS: dict[str, int | None] = {
-    "Antrim and Newtownabbey Borough Council":              None,
-    "Ards and North Down Borough Council":                  None,
-    "Armagh City, Banbridge and Craigavon Borough Council": None,
-    "Belfast City Council":                                 None,
-    "Causeway Coast and Glens Borough Council":              None,
-    "Derry City and Strabane District Council":              None,
-    "Fermanagh and Omagh District Council":                  None,
-    "Lisburn and Castlereagh City Council":                  None,
-    "Mid and East Antrim Borough Council":                   None,
-    "Newry, Mourne and Down District Council":               None,
+    "Antrim and Newtownabbey Borough Council":              456,
+    "Ards and North Down Borough Council":                  457,
+    "Armagh City, Banbridge and Craigavon Borough Council": 458,
+    "Belfast City Council":                                 459,
+    "Causeway Coast and Glens Borough Council":              460,
+    "Derry City and Strabane District Council":              461,
+    "Fermanagh and Omagh District Council":                  462,
+    "Lisburn and Castlereagh City Council":                  463,
+    "Mid and East Antrim Borough Council":                   464,
+    "Newry, Mourne and Down District Council":               465,
 }
 
 # (council_name_as_in_supabase_db, real confirmed authority_id)
@@ -80,7 +80,7 @@ NI_COUNCILS = [
 # itself flips coverage_source once it successfully saves data).
 # ---------------------------------------------------------------------------
 INSERT_SQL = """
-INSERT INTO councils (name, slug, system, country, portal_url, coverage_source, active)
+INSERT INTO councils (name, slug, system, region, portal_url, coverage_source, active)
 VALUES
   ('Antrim and Newtownabbey Borough Council','antrim-and-newtownabbey-borough-council','ni_planning_portal','northern_ireland','https://planningregister.planningsystemni.gov.uk/list-search','pending',true),
   ('Ards and North Down Borough Council','ards-and-north-down-borough-council','ni_planning_portal','northern_ireland','https://planningregister.planningsystemni.gov.uk/list-search','pending',true),
