@@ -10,6 +10,8 @@ on:
     - cron: '20 7 * * *'  # arcus nightly scrape
     - cron: '35 7 * * *'  # civica nightly scrape (St Albans)
     - cron: '50 7 * * *'  # northgate nightly scrape (Runnymede)
+    - cron: '5 8 * * *'   # NI Planning Portal nightly scrape
+    - cron: '15 8 * * *'  # getApplications-family nightly scrape (Liverpool, Warrington, Newcastle, Blackburn & Darwen)
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
   workflow_dispatch:
@@ -676,12 +678,13 @@ jobs:
         run: cd scrapers && python northgate_scraper.py
 
   scrape_ni:
-    # DELIBERATELY manual-trigger only for now, same as every other
-    # platform's first job (scrape_civica, scrape_northgate) before it
-    # had a single confirmed real run to check the output against. Once
-    # a real run is confirmed clean, promote this to the schedule list
-    # at the top of the file the same way those were.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_ni'
+    # PROMOTED to the nightly schedule (2026-08-17) after a confirmed
+    # clean first production run — 290 real applications saved across
+    # all 10 councils, no errors. Manual trigger kept available too,
+    # same as every other platform's job, for ad-hoc reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_ni') ||
+      (github.event_name == 'schedule' && github.event.schedule == '5 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 25
     steps:
@@ -759,6 +762,10 @@ jobs:
           retention-days: 14
 
   scrape_getapplications:
+    # PROMOTED to the nightly schedule (2026-08-17) after a confirmed
+    # clean first production run — 194 real applications saved across
+    # all 4 councils, no errors.
+    #
     # DELIBERATELY on the UK runner from the START — that solves ONE of
     # two SEPARATE protective layers this platform has (an IP/
     # datacenter-range block). The OTHER layer, an AWS WAF JavaScript
@@ -768,7 +775,9 @@ jobs:
     # this comment incorrectly said a browser wasn't needed at all;
     # corrected after two real production runs returned an AWS WAF
     # challenge page instead of real content).
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_getapplications'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_getapplications') ||
+      (github.event_name == 'schedule' && github.event.schedule == '15 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 25
     steps:
