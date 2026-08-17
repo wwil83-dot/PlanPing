@@ -49,16 +49,24 @@ HONEST LIMITATIONS in this v1, worth remembering:
     This v1 queries SearchStatus=valid only. A real decided-status
     recheck pass (mirroring idox_scraper.py's pending_recheck
     mechanism) is real future work, not guessed here.
-  - _normalise_ni_status()'s keyword matching is reused directly from
-    idox_scraper.py's proven _normalise_status() — but it was only
-    ever tested here against the real status strings actually observed
-    during recon ("Consultation Open", "Valid", "Site Inspection
-    Complete" — all correctly falling through to "pending", which is
-    honest since none are a real decided outcome). Any genuinely new
-    status text this normaliser hasn't seen before triggers a one-time
-    diagnostic print (see _STATUS_DIAGNOSED below) rather than silently
-    miscategorizing it — the same discipline as every WAF/decision-date
-    diagnostic elsewhere in this project.
+  - CONFIRMED 2026-08-17 (first real production run + a direct
+    SearchStatus=decided test against Antrim & Newtownabbey's full real
+    decided-application history): the API's applicationStatus field for
+    a decided application is ALWAYS the literal string "Determined" —
+    never "Approved"/"Refused"/"Granted"/anything outcome-specific. This
+    is a genuine platform limitation, not a scraper gap: decision_date
+    IS captured correctly (real evidence: 3 real applications found with
+    status='pending' but a real, non-null decision_date on the first
+    production run, which is exactly what surfaced this), but the
+    ACTUAL outcome (approved vs refused vs withdrawn) is not recoverable
+    from the list API at all. _normalise_ni_status() correctly falls
+    through to "pending" for "Determined" rather than guessing an
+    outcome — guessing "approved" would be actively wrong for every real
+    refused/withdrawn application, worse than the honest default. Same
+    category of constraint as civica_scraper.py's documented status
+    limitation. Getting the real outcome would need each application's
+    own detail page (recon step 4 was never completed) — real future
+    work, not guessed here.
   - No application_type field exists anywhere in the API response.
     Deliberately left as None here rather than guessed — main.py's own
     _type_badge()/_is_major() already fall back to the reference
@@ -153,15 +161,31 @@ _STATUS_DIAGNOSED: set[str] = set()
 def _diagnose_unrecognised_status(raw_status: str, council_name: str):
     """Real evidence, not a guess — every status string this normaliser
     hasn't seen before during recon prints once, so a real run surfaces
-    genuinely new NI-specific status text (e.g. a real decided outcome,
-    since SearchStatus=decided was never tested) rather than silently
-    filing it under 'pending' forever."""
+    genuinely new NI-specific status text rather than silently filing it
+    under 'pending' forever.
+
+    CONFIRMED 2026-08-17, first real production run: 'Determined' is the
+    ONLY status text the API ever returns for a decided application —
+    tested directly via SearchStatus=decided against Antrim &
+    Newtownabbey's full real decided-application history, one distinct
+    value returned. This is a genuine PLATFORM LIMITATION, not a gap in
+    this normaliser: NI's list API confirms a decision was made
+    (decision_date IS populated correctly) but never says what that
+    decision WAS. Mapping 'Determined' to 'approved' would be actively
+    wrong for every real refused/withdrawn application — worse than the
+    honest 'pending' default this falls through to. Same category of
+    constraint as civica_scraper.py's documented status limitation: the
+    real outcome would need each application's own detail page, not yet
+    investigated (recon step 4 was never completed — real future work,
+    not guessed here)."""
     key = (raw_status or "").strip().lower()
     if not key or key in _STATUS_DIAGNOSED:
         return
     known_substrings = ("approv", "grant", "permit", "allow", "no objection",
                          "refus", "reject", "dismiss", "not permit", "withdraw",
-                         "consultation open", "valid", "site inspection")
+                         "consultation open", "valid", "site inspection",
+                         "determined",  # CONFIRMED 2026-08-17 — see docstring above
+                         "under consideration", "decision pending")
     if not any(k in key for k in known_substrings):
         _STATUS_DIAGNOSED.add(key)
         print(f"    ⚠ [{council_name}] STATUS DIAGNOSTIC: unrecognised "
