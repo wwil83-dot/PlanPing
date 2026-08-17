@@ -19,7 +19,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test, brightdata_browser_api_test]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, scrape_ni, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test, brightdata_browser_api_test, ni_planningsystemni_recon]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -675,7 +675,55 @@ jobs:
           CONCURRENCY: "2"
         run: cd scrapers && python northgate_scraper.py
 
-  northgate_url_healthcheck:
+  scrape_ni:
+    # DELIBERATELY manual-trigger only for now, same as every other
+    # platform's first job (scrape_civica, scrape_northgate) before it
+    # had a single confirmed real run to check the output against. Once
+    # a real run is confirmed clean, promote this to the schedule list
+    # at the top of the file the same way those were.
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_ni'
+    runs-on: [self-hosted, uk-runner]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # NO Playwright install/cache here — CONFIRMED not needed. This
+      # platform's real data comes from a direct REST API that accepts
+      # plain httpx requests with no session/auth, unlike every other
+      # scraper in this project. See ni_scraper.py's module docstring.
+      - run: pip install httpx
+      - name: Run NI Planning Portal scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_MINUTES: "20"
+          CONCURRENCY: "3"
+        run: cd scrapers && python ni_scraper.py
+
+  ni_planningsystemni_recon:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ni_planningsystemni_recon'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install playwright
+      - run: playwright install --with-deps chromium
+      - name: Run NI Planning Portal recon
+        run: cd recon && python ni_planningsystemni_recon.py
+      - name: Upload recon artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ni-recon-output
+          path: /tmp/ni_recon_*
+          retention-days: 14
+
+
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_url_healthcheck'
     runs-on: ubuntu-latest
     timeout-minutes: 10
