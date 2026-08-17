@@ -14,6 +14,7 @@ sys.path.insert(0, ".")
 from getapplications_scraper import (
     _parse_weekly_list, _parse_detail_page, _normalise_status,
     _extract_id_from_url, _mondays_back, _extract_postcode,
+    _diagnose_empty_response, _EMPTY_RESPONSE_DIAGNOSED,
 )
 
 WEEKLY_LIST_HTML = """
@@ -125,6 +126,16 @@ def run():
     checks.append(("id extraction: malformed input handled safely", _extract_id_from_url("no id here") is None))
 
     checks.append(("postcode extraction: real address", _extract_postcode("22 Druids Cross Road, Liverpool, L18 3HW") == "L18 3HW"))
+
+    # A week with genuinely zero application links should trigger the
+    # diagnostic once, then stay quiet for that same council
+    empty_html = "<html><body><p>No results</p></body></html>"
+    apps_empty = _parse_weekly_list(empty_html, "https://example.gov.uk", "Empty Test Council", "01-06-2026")
+    checks.append(("empty response: zero apps returned, no crash", apps_empty == []))
+    checks.append(("empty response: diagnostic fired exactly once", "Empty Test Council" in _EMPTY_RESPONSE_DIAGNOSED))
+    before = len(_EMPTY_RESPONSE_DIAGNOSED)
+    _parse_weekly_list(empty_html, "https://example.gov.uk", "Empty Test Council", "08-06-2026")
+    checks.append(("empty response: does not re-fire for the same council", len(_EMPTY_RESPONSE_DIAGNOSED) == before))
 
     all_ok = True
     for label, ok in checks:
