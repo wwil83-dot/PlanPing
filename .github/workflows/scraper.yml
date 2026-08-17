@@ -228,7 +228,15 @@ jobs:
   scrape_idox_targeted:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_targeted'
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 40
+    # CHANGED 2026-08-17 — real evidence: a full run against all 13
+    # councils only reached 5 of them before the old 30-minute budget
+    # ran out (Wakefield/Maidstone/Dover/Swale/Chichester all
+    # succeeded, real data saved, real 429s handled correctly via
+    # retry — genuinely not still-blocked, just ran out of time at
+    # ~5-6 real minutes/council including backoff waits). 13 councils
+    # at that observed pace needs ~65-70 minutes; budgeted generously
+    # above that rather than risk the same shortfall again.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -245,7 +253,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          MAX_MINUTES: "30"
+          MAX_MINUTES: "80"
           DAYS_BACK: "14"
           CONCURRENCY: "1"
           REQUEST_DELAY_SECONDS: "5"
@@ -797,7 +805,20 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MAX_MINUTES: "20"
-          CONCURRENCY: "2"
+          # CHANGED 2026-08-17 — real evidence: at CONCURRENCY=2, the
+          # first 2 councils (Liverpool, Warrington) succeeded cleanly,
+          # but everything queued in right after started failing with
+          # a NEW real signal (HTTP 405 "Human Verification") — a
+          # different block than the AWS WAF JS challenge already
+          # solved, and one Newcastle even passed on its FIRST request
+          # before failing on later ones. That shape (fine, then
+          # degrading) points at rate/behavioural detection tied to
+          # request volume from this one shared runner IP, not a real
+          # per-council block. Same category of problem the Idox
+          # targeted group already solved by dropping to CONCURRENCY=1
+          # — applying the same fix here rather than guessing at
+          # something new.
+          CONCURRENCY: "1"
           WEEKS_BACK: "2"
         run: cd scrapers && python getapplications_scraper.py
 
