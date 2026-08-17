@@ -723,7 +723,7 @@ jobs:
           path: /tmp/ni_recon_*
           retention-days: 14
 
-
+  northgate_url_healthcheck:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_url_healthcheck'
     runs-on: ubuntu-latest
     timeout-minutes: 10
