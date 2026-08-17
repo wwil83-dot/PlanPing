@@ -230,12 +230,32 @@ _HEADER_KEYWORDS = {
 }
 
 
-def _parse_weekly_list(html: str, base_url: str, council_name: str) -> list[dict]:
+_EMPTY_RESPONSE_DIAGNOSED: set[str] = set()
+
+
+def _diagnose_empty_response(council_name: str, week_str: str, html: str):
+    """Real evidence, once per council per run — a week with ZERO
+    fa=getApplication links found could genuinely mean no applications
+    that week, or could mean we got served a different/blocked/empty
+    page despite a 200 status. Print enough of the real response to
+    tell the difference, rather than silently treating both cases the
+    same way forever."""
+    if council_name in _EMPTY_RESPONSE_DIAGNOSED:
+        return
+    _EMPTY_RESPONSE_DIAGNOSED.add(council_name)
+    print(f"    [{council_name}] EMPTY RESPONSE DIAGNOSTIC (week {week_str}): "
+          f"0 real application links found. Response length: {len(html)} chars. "
+          f"First 500 chars: {html[:500]!r}")
+
+
+def _parse_weekly_list(html: str, base_url: str, council_name: str,
+                        week_str: str = "") -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     apps = []
 
     detail_links = soup.find_all("a", href=re.compile(r"fa=getApplication&(?:amp;)?id="))
     if not detail_links:
+        _diagnose_empty_response(council_name, week_str, html)
         return apps
 
     for link in detail_links:
@@ -444,6 +464,25 @@ class GetApplicationsPortal:
         all_apps: list[dict] = []
         seen_ids: set[str] = set()
 
+        # ESTABLISH A REAL SESSION FIRST — real evidence, not a guess:
+        # the first production run against all 4 councils returned 0
+        # applications across every week, with no error anywhere (every
+        # request got a normal-looking response). The one confirmed-
+        # working test (a real DevTools Console fetch()) used
+        # credentials: "same-origin", meaning it reused cookies from a
+        # normal page load that happened first. This scraper's client
+        # previously POSTed cold, no prior page visit, no cookies. A
+        # plain GET here (using the SAME client instance, which keeps
+        # cookies automatically) tests that theory directly rather than
+        # guessing blind a second time.
+        search_page_url = f"{self.base_url}/planning/index.html?fa=getApplications"
+        try:
+            await client.get(search_page_url, headers=HTTP_HEADERS, timeout=30,
+                              follow_redirects=True)
+        except Exception as e:
+            self._log(f"⚠ Could not load search page first (continuing anyway, "
+                      f"may affect results): {e}")
+
         for monday in _mondays_back(weeks_back):
             if should_stop():
                 self._log(f"⚠ Time budget reached, stopping at week {monday}")
@@ -467,7 +506,7 @@ class GetApplicationsPortal:
                 self._log(f"⚠ HTTP {r.status_code} for week {week_str}: {r.text[:200]}")
                 continue
 
-            week_apps = _parse_weekly_list(r.text, self.base_url, self.council_name)
+            week_apps = _parse_weekly_list(r.text, self.base_url, self.council_name, week_str)
             for a in week_apps:
                 a["week_monday"] = monday.isoformat()  # real evidence of WHEN this
                                                           # was received, from the
