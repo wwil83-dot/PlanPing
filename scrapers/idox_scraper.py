@@ -308,11 +308,13 @@ async def _supa_upsert(records: list) -> bool:
                 json=records, headers=headers,
             )
             if r.status_code not in (200, 201, 204):
-                print(f"    ✗ Upsert HTTP {r.status_code}: {r.text[:300]}")
+                cid_hint = records[0].get("council_id") if records else "?"
+                print(f"    ✗ Upsert HTTP {r.status_code} (council_id={cid_hint}): {r.text[:300]}")
                 return False
             return True
     except Exception as e:
-        print(f"    ✗ Upsert exception: {e}")
+        cid_hint = records[0].get("council_id") if records else "?"
+        print(f"    ✗ Upsert exception (council_id={cid_hint}): {e}")
         return False
 
 
@@ -344,7 +346,7 @@ async def _supa_increment_empty_runs(council_id: int):
                 headers={**_h(), "Prefer": "return=minimal"},
             )
         except Exception as e:
-            print(f"    ⚠ Failed to increment empty-run counter: {e}")
+            print(f"    ⚠ Failed to increment empty-run counter (council_id={council_id}): {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -868,6 +870,22 @@ class IdoxPortal:
         parsed = urlparse(self.base_url)
         self.domain_root = f"{parsed.scheme}://{parsed.netloc}"
 
+    def _log(self, msg: str) -> None:
+        """Print with the council name prefixed on every line — NOT just
+        the header. LOGGING FIX (2026-08-17): with concurrency=2, two
+        councils' output interleaves in the real console stream, so a
+        completion line for Council B can print visually underneath
+        Council A's start header. The council_id inside an Upserting/
+        Saved line was always correct (each has its own immutable
+        db_council_id, confirmed by direct code read and a real DB spot
+        check — no data is actually saved under the wrong council), but
+        a HUMAN reading the log has no way to tell that without tracing
+        cid values by hand, which is exactly what made diagnosing which
+        councils were failing, and why, unreasonably slow. Prefixing
+        every line removes the ambiguity at the source.
+        """
+        print(f"    [{self.council_name}] {msg}")
+
     async def scrape(self, browser: Browser, days_back: int = 7,
                       pending_recheck: Optional[list[dict]] = None,
                       budget_minutes: Optional[float] = None) -> list[dict]:
@@ -977,7 +995,7 @@ class IdoxPortal:
                     # whatever it already collected, well before any
                     # external hard-kill is ever reached.
                     if budget_minutes is not None and elapsed_minutes() >= budget_minutes - 3:
-                        print(f"    ⚠ Time budget reached mid-council "
+                        self._log(f"⚠ Time budget reached mid-council "
                               f"({elapsed_minutes():.1f} min elapsed) — "
                               f"stopping at {target_month.strftime('%b %Y')}, "
                               f"keeping {len(all_apps)} already collected")
@@ -992,7 +1010,7 @@ class IdoxPortal:
                             app["_month_fallback"] = today_str
                     all_apps.extend(apps)
         except Exception as e:
-            print(f"    ✗ Context error: {e}")
+            self._log(f"✗ Context error: {e}")
         finally:
             await context.close()
 
@@ -1010,7 +1028,7 @@ class IdoxPortal:
                 app["submitted_date"] = app["_month_fallback"]
             app.pop("_month_fallback", None)  # never send temp field to DB
 
-        print(f"    {len(all_apps)} this month → {len(recent)} in last {days_back} days")
+        self._log(f"{len(all_apps)} this month → {len(recent)} in last {days_back} days")
         return recent
 
     async def _scrape_month(self, page: Page, for_month: date,
@@ -1071,12 +1089,12 @@ class IdoxPortal:
             if (month_index == 0
                     and self.council_name in TRY_FIRSTPAGE_FALLBACK_COUNCILS
                     and not should_stop()):
-                print(f"    ⚠ Page load timeout — trying monthlyListResults.do fallback")
+                self._log(f"⚠ Page load timeout — trying monthlyListResults.do fallback")
                 return await self._scrape_month_firstpage_fallback(page, budget_minutes=budget_minutes)
-            print(f"    ⚠ Page load timeout")
+            self._log(f"⚠ Page load timeout")
             return []
         except Exception as e:
-            print(f"    ⚠ Navigation error: {e}")
+            self._log(f"⚠ Navigation error: {e}")
             return []
 
         # Wait for form or results to appear
@@ -1087,12 +1105,12 @@ class IdoxPortal:
             )
         except PlaywrightTimeout:
             title = await page.title()
-            print(f"    ⚠ Nothing loaded — title: '{title[:60]}'")
+            self._log(f"⚠ Nothing loaded — title: '{title[:60]}'")
             # Try the same fallback if the page loaded but nothing usable appeared
             if (month_index == 0
                     and self.council_name in TRY_FIRSTPAGE_FALLBACK_COUNCILS
                     and not should_stop()):
-                print(f"    ⚠ Trying monthlyListResults.do fallback")
+                self._log(f"⚠ Trying monthlyListResults.do fallback")
                 return await self._scrape_month_firstpage_fallback(page, budget_minutes=budget_minutes)
             return []
 
@@ -1227,13 +1245,13 @@ class IdoxPortal:
             )
         except PlaywrightTimeout:
             title = await _diagnose_results_timeout(page, self.council_name)
-            print(f"    ⚠ Results timeout — title: '{title[:60]}'")
+            self._log(f"⚠ Results timeout — title: '{title[:60]}'")
             # Try the fallback here too — form submission may have hung on a
             # blocked path even though the initial page load succeeded.
             if (month_index == 0
                     and self.council_name in TRY_FIRSTPAGE_FALLBACK_COUNCILS
                     and not should_stop()):
-                print(f"    ⚠ Trying monthlyListResults.do fallback")
+                self._log(f"⚠ Trying monthlyListResults.do fallback")
                 return await self._scrape_month_firstpage_fallback(page, budget_minutes=budget_minutes)
             return []
 
@@ -1260,14 +1278,14 @@ class IdoxPortal:
 
             current_refs = frozenset(a["reference"] for a in apps)
             if page_num > 1 and current_refs and current_refs == previous_refs:
-                print(f"    Page {page_num} identical to previous — portal looped back, stopping")
+                self._log(f"Page {page_num} identical to previous — portal looped back, stopping")
                 break
             previous_refs = current_refs
 
             all_apps.extend(apps)
 
             if page_num == 1 and len(apps) > 0:
-                print(f"    Page 1: {len(apps)} results")
+                self._log(f"Page 1: {len(apps)} results")
 
             # Continue if explicit Next link OR got a full page (try page 2)
             should_continue = has_next or (len(apps) >= 10)
@@ -1290,7 +1308,7 @@ class IdoxPortal:
             # before external cancellation hit, since most runs never
             # even reach a second month.
             if budget_minutes is not None and elapsed_minutes() >= budget_minutes - 3:
-                print(f"    ⚠ Time budget reached mid-pagination "
+                self._log(f"⚠ Time budget reached mid-pagination "
                       f"({elapsed_minutes():.1f} min elapsed) — stopping at "
                       f"page {page_num}, keeping {len(all_apps)} already collected")
                 break
@@ -1304,11 +1322,11 @@ class IdoxPortal:
                 # as it can time out on pages that use non-standard selectors
                 await asyncio.sleep(2)
             except Exception as e:
-                print(f"    Page {page_num} nav error: {e}")
+                self._log(f"Page {page_num} nav error: {e}")
                 break
 
         if page_num > 1:
-            print(f"    Total across {page_num} pages: {len(all_apps)}")
+            self._log(f"Total across {page_num} pages: {len(all_apps)}")
         return all_apps
 
     async def _scrape_month_firstpage_fallback(self, page: Page,
@@ -1324,10 +1342,10 @@ class IdoxPortal:
         try:
             response = await goto_with_backoff(page, fallback_url, self.council_name, timeout=45_000)
         except PlaywrightTimeout:
-            print(f"    ⚠ Fallback page load timeout")
+            self._log(f"⚠ Fallback page load timeout")
             return []
         except Exception as e:
-            print(f"    ⚠ Fallback navigation error: {e}")
+            self._log(f"⚠ Fallback navigation error: {e}")
             return []
 
         try:
@@ -1338,7 +1356,7 @@ class IdoxPortal:
             )
         except PlaywrightTimeout:
             title = await page.title()
-            print(f"    ⚠ Fallback results timeout — title: '{title[:60]}'")
+            self._log(f"⚠ Fallback results timeout — title: '{title[:60]}'")
             return []
 
         all_apps: list[dict] = []
@@ -1353,14 +1371,14 @@ class IdoxPortal:
 
             current_refs = frozenset(a["reference"] for a in apps)
             if page_num > 1 and current_refs and current_refs == previous_refs:
-                print(f"    Fallback page {page_num} identical to previous — portal looped back, stopping")
+                self._log(f"Fallback page {page_num} identical to previous — portal looped back, stopping")
                 break
             previous_refs = current_refs
 
             all_apps.extend(apps)
 
             if page_num == 1 and len(apps) > 0:
-                print(f"    Fallback page 1: {len(apps)} results")
+                self._log(f"Fallback page 1: {len(apps)} results")
 
             should_continue = has_next or (len(apps) >= 10)
             if not should_continue or not apps or page_num >= 50:
@@ -1368,7 +1386,7 @@ class IdoxPortal:
 
             page_num += 1
             if budget_minutes is not None and elapsed_minutes() >= budget_minutes - 3:
-                print(f"    ⚠ Time budget reached mid-pagination "
+                self._log(f"⚠ Time budget reached mid-pagination "
                       f"({elapsed_minutes():.1f} min elapsed) — stopping at "
                       f"page {page_num}, keeping {len(all_apps)} already collected")
                 break
@@ -1380,11 +1398,11 @@ class IdoxPortal:
                 response = await goto_with_backoff(page, next_url, self.council_name, timeout=15_000)
                 await asyncio.sleep(2)
             except Exception as e:
-                print(f"    Fallback page {page_num} nav error: {e}")
+                self._log(f"Fallback page {page_num} nav error: {e}")
                 break
 
         if page_num > 1:
-            print(f"    Fallback total across {page_num} pages: {len(all_apps)}")
+            self._log(f"Fallback total across {page_num} pages: {len(all_apps)}")
         return all_apps
 
     async def _scrape_week(self, page: Page, week_offset: int = 0,
@@ -1416,10 +1434,10 @@ class IdoxPortal:
         try:
             response = await goto_with_backoff(page, weekly_url, self.council_name, timeout=45_000)
         except PlaywrightTimeout:
-            print(f"    ⚠ Page load timeout (week -{week_offset})")
+            self._log(f"⚠ Page load timeout (week -{week_offset})")
             return []
         except Exception as e:
-            print(f"    ⚠ Navigation error: {e}")
+            self._log(f"⚠ Navigation error: {e}")
             return []
 
         # Wait for results
@@ -1431,7 +1449,7 @@ class IdoxPortal:
             )
         except PlaywrightTimeout:
             title = await _diagnose_results_timeout(page, self.council_name)
-            print(f"    ⚠ Results timeout — title: '{title[:60]}'")
+            self._log(f"⚠ Results timeout — title: '{title[:60]}'")
             return []
 
         # Collect all pages (same logic as _scrape_month)
@@ -1447,14 +1465,14 @@ class IdoxPortal:
 
             current_refs = frozenset(a["reference"] for a in apps)
             if page_num > 1 and current_refs and current_refs == previous_refs:
-                print(f"    Week -{week_offset} page {page_num} identical to previous — portal looped back, stopping")
+                self._log(f"Week -{week_offset} page {page_num} identical to previous — portal looped back, stopping")
                 break
             previous_refs = current_refs
 
             all_apps.extend(apps)
 
             if page_num == 1 and len(apps) > 0:
-                print(f"    Week -{week_offset} page 1: {len(apps)} results")
+                self._log(f"Week -{week_offset} page 1: {len(apps)} results")
 
             should_continue = has_next or (len(apps) >= 10)
             if not should_continue or not apps or page_num >= 50:
@@ -1462,7 +1480,7 @@ class IdoxPortal:
 
             page_num += 1
             if budget_minutes is not None and elapsed_minutes() >= budget_minutes - 3:
-                print(f"    ⚠ Time budget reached mid-pagination "
+                self._log(f"⚠ Time budget reached mid-pagination "
                       f"({elapsed_minutes():.1f} min elapsed) — stopping at "
                       f"page {page_num}, keeping {len(all_apps)} already collected")
                 break
@@ -1474,11 +1492,11 @@ class IdoxPortal:
                 response = await goto_with_backoff(page, next_url, self.council_name, timeout=15_000)
                 await asyncio.sleep(2)
             except Exception as e:
-                print(f"    Page {page_num} nav error: {e}")
+                self._log(f"Page {page_num} nav error: {e}")
                 break
 
         if page_num > 1:
-            print(f"    Week -{week_offset} total across {page_num} pages: {len(all_apps)}")
+            self._log(f"Week -{week_offset} total across {page_num} pages: {len(all_apps)}")
         return all_apps
 
 
@@ -1561,7 +1579,7 @@ async def process_council(
             apps = await portal.scrape(browser, days_back, pending_recheck=pending_recheck,
                                         budget_minutes=budget_minutes)
         except Exception as e:
-            print(f"    ✗ Error: {e}")
+            print(f"    [{portal.council_name}] ✗ Error: {e}")
             return 0
 
         if not apps:
@@ -1579,7 +1597,7 @@ async def process_council(
         # Geocode missing coordinates — step 1: postcodes.io (fast, batched)
         need = [a["postcode"] for a in apps if not a.get("lat") and a.get("postcode")]
         if need:
-            print(f"    Geocoding {len(set(need))} postcodes…")
+            print(f"    [{portal.council_name}] Geocoding {len(set(need))} postcodes…")
             coords = await geocode(need)
             for app in apps:
                 if not app.get("lat") and app.get("postcode"):
@@ -1591,7 +1609,7 @@ async def process_council(
         # Only in bulk mode — Nominatim is rate-limited (1 req/sec) so too slow for daily
         still_missing = [a for a in apps if not a.get("lat") and a.get("address")]
         if still_missing and bulk_mode:
-            print(f"    Address geocoding {len(still_missing)} ungeocodable apps via Nominatim…")
+            print(f"    [{portal.council_name}] Address geocoding {len(still_missing)} ungeocodable apps via Nominatim…")
             addr_coords = await geocode_addresses(still_missing)
             for app in apps:
                 if not app.get("lat") and app["reference"] in addr_coords:
@@ -1612,7 +1630,7 @@ async def process_council(
                     app["geocode_quality"] = "centroid"
                     fallback_count += 1
             if fallback_count:
-                print(f"    Council centroid fallback for {fallback_count} apps")
+                print(f"    [{portal.council_name}] Council centroid fallback for {fallback_count} apps")
 
         # Build upsert records — cid is captured from portal object, not the parameter
         records = [{
@@ -1641,7 +1659,7 @@ async def process_council(
                 unique_records.append(r)
         records = unique_records
 
-        print(f"    Upserting {len(records)} records with council_id={cid}")
+        print(f"    [{portal.council_name}] Upserting {len(records)} records with council_id={cid}")
 
         # Upsert in small batches — one bad record kills a whole batch
         # so keep batches small to isolate failures
@@ -1662,9 +1680,9 @@ async def process_council(
                 "consecutive_empty_runs": 0,
                 "active": True,
             })
-            print(f"    ✓ Saved {saved}")
+            print(f"    [{portal.council_name}] ✓ Saved {saved}")
         else:
-            print(f"    ⚠ Partial save: {saved} of {len(apps)} (see upsert errors above)")
+            print(f"    [{portal.council_name}] ⚠ Partial save: {saved} of {len(apps)} (see upsert errors above)")
             if saved > 0:
                 # Some real data landed even though the run wasn't fully
                 # clean — still counts as "not silent", so reset the streak.
