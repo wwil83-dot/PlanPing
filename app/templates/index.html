@@ -205,9 +205,34 @@
   // prefixes ("City of X" -> "x"), and ONS's own comma-inverted style
   // ("X, City of" -> "x") so both sides collapse to the same core name
   // wherever reasonably possible.
+  //
+  // CONFIRMED GAP (2026-08-17), found via real testing after
+  // Newcastle City Council went live and failed to show green on this
+  // map despite having real, correctly-saved application data (verified
+  // separately on /councils and the coverage tallies — this map was the
+  // ONLY place it was wrong). Our own DB stores "Newcastle City
+  // Council" as the name; ONS's real official LAD25NM value is
+  // "Newcastle upon Tyne" — genuinely no suffix/prefix relationship
+  // between the two for the generic regex below to bridge, since "upon
+  // Tyne" was never part of our own stored string to begin with. A
+  // small, explicit alias table (checked BEFORE the generic
+  // normalizer) is the safe fix — it doesn't touch the regex logic
+  // every other already-working council relies on, and each entry is
+  // itself a real, confirmed correction rather than a speculative
+  // guess at other councils that MIGHT have the same issue. Add
+  // entries here only after confirming the real ONS name via the
+  // unmatched-name console warning below, the same way this one was
+  // found — not preemptively for names that merely look unusual.
+  var COUNCIL_NAME_ALIASES = {
+    'newcastle city council': 'newcastle upon tyne',
+  };
+
   function normalizeCouncilName(raw) {
     if (!raw) return '';
     var s = raw.toLowerCase().trim();
+    if (COUNCIL_NAME_ALIASES.hasOwnProperty(s)) {
+      return COUNCIL_NAME_ALIASES[s];
+    }
     // BUG FIX (2026-08-13), found via real testing before deploy — our
     // own internal disambiguation suffixes (e.g. "Cumberland Council
     // (Carlisle)", used elsewhere in this project to distinguish a
