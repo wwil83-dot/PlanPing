@@ -361,19 +361,22 @@ IDOX_COUNCILS = [
     # ("Dudley Metropolitan Borough Council",
     #  "https://www.dudley.gov.uk/online-applications"),
 
-    # BROKEN — Solihull confirmed persistently unreachable (2026-07-23).
-    # net::ERR_CONNECTION_REFUSED on every single attempt — not a WAF
-    # challenge page, not a timeout, an active TCP-level connection
-    # refusal — consistent across many independent observations this
-    # entire session (every nightly Idox batch run it appeared in, plus
-    # a dedicated isolated recon run with zero concurrency pressure from
-    # other councils). council_health_check.py showed 9 consecutive
-    # empty runs before this was investigated. Same evidence tier as
-    # Tonbridge and Malling above — a real, persistent block, not
-    # something worth continuing to retry. coverage_source manually set
-    # to 'manual_link' in Supabase to match.
-    # ("Solihull Metropolitan Borough Council",
-    #  "https://publicaccess.solihull.gov.uk/online-applications"),
+    # RE-ENABLED 2026-08-17 — confirmed via idox_waf_recheck.py, run
+    # from the self-hosted UK runner: real 200 status, real "Weekly
+    # List" title, no block. The original block was a raw TCP-level
+    # net::ERR_CONNECTION_REFUSED (not a WAF challenge page) — arguably
+    # the single most likely of these 4 to be a pure IP-based network
+    # block, exactly the category the UK proxy would fix directly.
+    # NOTE: the URL below (publicaccess.solihull.gov.uk) is what was
+    # actually tested and confirmed — the DB's own INSERT_SQL stores a
+    # DIFFERENT, stale URL (eservices.solihull.gov.uk) from an even
+    # earlier attempt; publicaccess is correct going forward. NOT YET
+    # run through a real data-producing scrape — worth one confirmed
+    # real run before trusting it nightly. coverage_source needs a
+    # manual Supabase reset from 'manual_link' back to 'pending' (see
+    # accompanying SQL).
+    ("Solihull Metropolitan Borough Council",
+     "https://publicaccess.solihull.gov.uk/online-applications"),
 
     ("South Staffordshire District Council",
      "https://planning.sstaffs.gov.uk/online-applications"),
@@ -840,20 +843,19 @@ IDOX_COUNCILS = [
     ("Dover District Council",
      "https://publicaccess.dover.gov.uk/online-applications"),
 
-    # BROKEN — Tonbridge and Malling confirmed blocked (2026-07-20), not
-    # off-Idox like Warrington/Liverpool/Medway above. This one IS a real
-    # Idox portal at this URL — a real browser from a normal residential
-    # connection loads it cleanly (confirmed via screenshot). But our
-    # scraper gets net::ERR_CONNECTION_RESET on every single attempt from
-    # GitHub Actions, reproduced identically across 3 independent runs
-    # (2 nightly batches + a dedicated idox_multi_recon.py pass with zero
-    # concurrency pressure). That combination — clean for a normal
-    # browser, consistently reset for automated traffic — is the
-    # signature of a working anti-bot measure, not a broken site.
-    # coverage_source manually set to 'manual_link' in Supabase to match;
-    # see other 'manual_link' councils for the same pattern.
-    # ("Tonbridge and Malling Borough Council",
-    #  "https://publicaccess.tmbc.gov.uk/online-applications"),
+    # RE-ENABLED 2026-08-17 — confirmed via idox_waf_recheck.py, run
+    # from the self-hosted UK runner (introduced last week, after this
+    # council was originally disabled 2026-07-20 from a US IP): real
+    # 200 status, real "Weekly List" page title, no known WAF/block
+    # signature present. Matches the original diagnosis exactly — this
+    # was a working anti-bot measure against non-UK automated traffic,
+    # not a broken site. NOT YET run through a real data-producing
+    # scrape — worth one confirmed real run before fully trusting it on
+    # the nightly schedule, same discipline as every other addition
+    # this session. coverage_source needs a manual Supabase reset from
+    # 'manual_link' back to 'pending' to match (see accompanying SQL).
+    ("Tonbridge and Malling Borough Council",
+     "https://publicaccess.tmbc.gov.uk/online-applications"),
 
     # NOTE: twbcpa.midkent.gov.uk is Tunbridge Wells' partition of the shared midkent server.
     ("Tunbridge Wells Borough Council",
@@ -1100,25 +1102,31 @@ IDOX_COUNCILS = [
     ("Chesterfield Borough Council",
      "https://publicaccess.chesterfield.gov.uk/online-applications"),
 
-    # BROKEN — North East Derbyshire confirmed real Cloudflare WAF block
-    # (2026-07-23). Confirmed via idox_recon_round2.py replicating the
-    # REAL production form-submit flow (not just an initial page load) —
-    # a genuine "Performing security verification... Ray ID... Performance
-    # and Security by Cloudflare" challenge page, not a recon-script
-    # artifact or a generic timeout. 19 consecutive empty runs before
-    # investigation. coverage_source manually set to 'manual_link' in
-    # Supabase to match.
-    # ("North East Derbyshire District Council",
-    #  "https://planapps-online.ne-derbyshire.gov.uk/online-applications"),
+    # RE-ENABLED 2026-08-17 — confirmed via idox_waf_recheck.py, run
+    # from the self-hosted UK runner: real 200 status, real "Weekly
+    # List" title, none of the original "Performing security
+    # verification... Cloudflare" challenge text found anywhere in the
+    # response. Worth one honest caveat: the original block was
+    # confirmed via a full production FORM-SUBMIT replication
+    # (idox_recon_round2.py), while this recheck loaded the same
+    # weekly-list URL directly rather than simulating the click —
+    # functionally equivalent in almost every real case, but not
+    # byte-for-byte the same test. NOT YET run through a real data-
+    # producing scrape — worth one confirmed real run before trusting
+    # it nightly. coverage_source needs a manual Supabase reset from
+    # 'manual_link' back to 'pending' (see accompanying SQL).
+    ("North East Derbyshire District Council",
+     "https://planapps-online.ne-derbyshire.gov.uk/online-applications"),
 
-    # BROKEN — Bolsover confirmed real Cloudflare WAF block (2026-07-23).
-    # Same evidence tier as North East Derbyshire above — identical
-    # "Performing security verification... Cloudflare" challenge,
-    # confirmed via the real form-submit flow, not just a page load.
-    # 19 consecutive empty runs before investigation. coverage_source
-    # manually set to 'manual_link' in Supabase to match.
-    # ("Bolsover District Council",
-    #  "https://publicaccess.bolsover.gov.uk/online-applications"),
+    # RE-ENABLED 2026-08-17 — same evidence and same honest caveat as
+    # North East Derbyshire directly above (identical original
+    # Cloudflare challenge, identical recheck result: real 200, real
+    # "Weekly List" title, no challenge text present). NOT YET run
+    # through a real data-producing scrape. coverage_source needs a
+    # manual Supabase reset from 'manual_link' back to 'pending' (see
+    # accompanying SQL).
+    ("Bolsover District Council",
+     "https://publicaccess.bolsover.gov.uk/online-applications"),
 
     ("Derbyshire Dales District Council",
      "https://planning.derbyshiredales.gov.uk/online-applications"),
