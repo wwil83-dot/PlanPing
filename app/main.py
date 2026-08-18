@@ -701,7 +701,32 @@ async def council_page(request: Request, slug: str):
 
 @app.get("/about", response_class=HTMLResponse)
 async def about(request: Request):
-    return render("about.html", {"request": request})
+    # CHANGED 2026-08-18 — real evidence: about.html was found to be
+    # badly stale (named 4 specific councils as "current coverage" —
+    # Camden, Wigan, Canterbury, South Lakeland — with nothing dynamic
+    # backing that claim, and no way for it to have stayed accurate as
+    # coverage grew). Reusing the exact same council_count/app_count
+    # query the homepage already uses, rather than inventing a new one
+    # or hardcoding numbers here, which would just go stale the same
+    # way again.
+    async with get_db() as db:
+        council_count = await db.fetchval("""
+            SELECT COUNT(*) FROM councils c
+            WHERE c.active = true
+            AND c.coverage_source NOT IN ('pending', 'none', 'manual_link')
+            AND EXISTS (
+                SELECT 1 FROM planning_applications pa
+                WHERE pa.council_id = c.id
+            )
+        """)
+        app_count = await db.fetchval(
+            "SELECT COUNT(*) FROM planning_applications"
+        )
+    return render("about.html", {
+        "request": request,
+        "council_count": council_count,
+        "app_count": app_count,
+    })
 
 
 @app.get("/activity", response_class=HTMLResponse)
