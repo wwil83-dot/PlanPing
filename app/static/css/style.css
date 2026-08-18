@@ -176,7 +176,18 @@ h1 em { font-style: italic; color: #7dd98a; }
   transition: box-shadow .2s;
 }
 .feature:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
-.feature-icon { font-size: 1.6rem; margin-bottom: .7rem; }
+.feature-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: .9rem;
+}
+.feature-icon svg { width: 22px; height: 22px; }
+.feature-icon-blue  { background: var(--blue-light);  color: var(--blue); }
+.feature-icon-green { background: var(--green-light); color: var(--green); }
 .feature h3 { font-size: .95rem; font-weight: 600; margin-bottom: .35rem; color: var(--blue-dark); }
 .feature p { font-size: .85rem; color: var(--muted); line-height: 1.6; }
 
@@ -197,7 +208,7 @@ h1 em { font-style: italic; color: #7dd98a; }
 }
 .step-num {
   width: 36px; height: 36px;
-  background: var(--blue);
+  background: linear-gradient(135deg, var(--blue-dark) 0%, var(--blue-mid) 60%, #1a7a5e 100%);
   color: #fff;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
