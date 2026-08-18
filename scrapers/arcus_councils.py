@@ -320,6 +320,16 @@ ARCUS_COUNCILS = [
                                    # render immediately off the tab
                                    # click alone, no category dropdown
                                    # needed.
+    # FLAGGED 2026-08-18 — a completely different real URL was found
+    # for this same council: planning-public-register.anglesey.gov.wales
+    # /prIoA/s/register-view (still a genuine Arcus signature, just a
+    # different domain). Has the shape of a migration from Salesforce's
+    # generic my.site.com domain to a proper branded one — meaning the
+    # NEW url may now be current and this one stale, or both may still
+    # work in parallel. Not swapped out here without real evidence
+    # either way (this one IS confirmed working, per its active
+    # coverage_source) — worth checking directly on the next real Arcus
+    # run before deciding whether to change it.
     ("Isle of Anglesey County Council",
      "https://ioacc.my.site.com/s/pr-english",
      "tabbed_weekly_list", "Planning applications valid this week"),
