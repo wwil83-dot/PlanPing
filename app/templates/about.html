@@ -1,64 +1,57 @@
 {% extends "base.html" %}
 {% block title %}About PlanFind — Planning Application Search Made Easy{% endblock %}
-
 {% block content %}
 <main class="main" style="max-width:720px">
-
   <div style="margin-bottom:2rem">
     <h1 style="font-size:2rem;font-weight:700;color:var(--blue-dark);margin-bottom:.5rem">About PlanFind</h1>
     <p style="font-size:1.05rem;color:var(--muted)">Planning Application Search Made Easy</p>
   </div>
-
   <div class="about-card">
     <h2>What is PlanFind?</h2>
     <p>PlanFind is a free service that helps homeowners, landlords and local residents stay informed about planning applications submitted near their property.</p>
-    <p>We collect planning application data from council open data portals across England and Wales, making it easy to search by postcode and set up email alerts for your local area.</p>
+    <p>We collect planning application data directly from council planning registers across England, Scotland, Wales and Northern Ireland, making it easy to search by postcode and set up email alerts for your local area.</p>
   </div>
-
   <div class="about-card">
     <h2>Why did we build it?</h2>
     <p>Finding out about planning applications near your home is surprisingly difficult. Councils publish the information, but it's buried in hard-to-navigate portals — and by the time you get a neighbour's letter, the consultation window may already be closing.</p>
     <p>PlanFind fixes that. Search your postcode, see what's been submitted nearby, and get notified the moment something new appears.</p>
   </div>
-
+  <div class="about-card">
+    <h2>What else can I do on PlanFind?</h2>
+    <p>Beyond postcode search and alerts, a few other tools worth knowing about:</p>
+    <ul style="margin:.75rem 0 .75rem 1.25rem;color:var(--muted);font-size:.92rem;line-height:1.9">
+      <li><strong><a href="/activity">Today's Activity</a></strong> — a live look at what's happened just today: new applications submitted, decisions made, appeals lodged.</li>
+      <li><strong><a href="/trends">Trends</a></strong> — see which councils approve or refuse planning applications at the highest rates, based on real decided outcomes.</li>
+      <li><strong><a href="/street-history">Street History</a></strong> — search any street or road to see its full planning history: every extension, conversion or new build ever submitted there.</li>
+      <li><strong><a href="/bulk-search">Bulk Search</a></strong> — paste up to 50 postcodes at once and get results for all of them together, useful if you're checking several properties — agents, surveyors and other professionals use this most.</li>
+      <li><strong><a href="/large-sites">Large Sites</a></strong>, <strong><a href="/farm-diversification">Farm Diversification</a></strong> and <strong><a href="/commercial-conversion">Commercial Conversion</a></strong> — filtered views for major developments, agricultural land being converted to other uses, and commercial-to-residential (or similar) conversions specifically.</li>
+    </ul>
+  </div>
   <div class="about-card">
     <h2>Where does the data come from?</h2>
-    <p>We collect planning application data from two sources:</p>
-    <ul style="margin:.75rem 0 .75rem 1.25rem;color:var(--muted);font-size:.92rem;line-height:1.9">
-      <li><strong>Council open data portals</strong> — many councils publish planning application data as open datasets under the Open Government Licence</li>
-      <li><strong>planning.data.gov.uk</strong> — the government's national planning data platform, which is growing in coverage as more councils adopt the standard</li>
-    </ul>
-    <p>We update our data nightly. All data is used under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open Government Licence v3.0</a>.</p>
+    <p>We connect directly to each council's own online planning register — the same public system your council already publishes applications through — and check it on a regular schedule so new applications show up here without you needing to visit dozens of different council websites yourself.</p>
+    <p>Most areas are checked nightly. A small number of sources are checked slightly less often, based on how each individual council's system responds to automated requests — we'd rather check a source reliably every few days than risk it becoming unavailable by checking too aggressively.</p>
+    <p>Where a council doesn't yet publish through a format we can connect to directly, we also draw on <a href="https://www.planning.data.gov.uk" target="_blank" rel="noopener">planning.data.gov.uk</a>, the government's national planning data platform. All data is used under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open Government Licence v3.0</a>.</p>
   </div>
-
   <div class="about-card">
     <h2>Current coverage</h2>
-    <p>We currently cover planning applications from:</p>
-    <ul style="margin:.75rem 0 .75rem 1.25rem;color:var(--muted);font-size:.92rem;line-height:1.9">
-      <li><strong>Camden LBC</strong> — London Borough of Camden</li>
-      <li><strong>Wigan Metropolitan Borough Council</strong> — Greater Manchester</li>
-      <li><strong>Canterbury City Council</strong> — Kent</li>
-      <li><strong>South Lakeland District Council</strong> — Cumbria</li>
-    </ul>
-    <p>Coverage is expanding weekly as we add more council data feeds. If your council isn't covered yet, you can <a href="/councils">join the waitlist</a> and we'll notify you when it's added.</p>
+    <p>We currently cover {{ council_count|default(0) }}+ councils across England, Scotland, Wales and Northern Ireland — from major cities to coastal towns and rural districts — with new councils added regularly. That's {{ "{:,}".format(app_count|default(0)) }}+ planning applications tracked so far. You can see the full, up-to-date list, including which areas are live right now, on our <a href="/councils">councils page</a>.</p>
+    <p>If your council isn't covered yet, you can join the waitlist on that same page and we'll notify you as soon as it's added.</p>
+    <p>We'd also rather be upfront than quietly let something go stale: if a council that was working stops returning new data, our <a href="/coverage-gaps">Coverage Gaps</a> page names exactly which one, and since when — rather than leaving you to notice the silence yourself.</p>
   </div>
-
   <div class="about-card">
     <h2>Is it really free?</h2>
     <p>Yes — searching and basic weekly email alerts are completely free. No account needed to search. Just enter your postcode and go.</p>
     <p>We plan to introduce optional paid tiers for instant alerts and wider radius searches in the future, but the core service will always be free.</p>
   </div>
-
   <div class="about-card">
     <h2>How do I object to a planning application?</h2>
-    <p>Every application on PlanFind links directly to the council's planning portal where you can view the full documents and submit a formal comment or objection. Planning applications typically have a 21-day consultation window from the date of validation.</p>
+    <p>Every application on PlanFind links directly to the council's planning portal where you can view the full documents and submit a formal comment or objection. Consultation windows typically run around 21 days from validation, though the exact period varies by council, application type, and nation — always check the specific dates shown on the council's own page for that application.</p>
   </div>
-
   <div class="about-card">
     <h2>Contact</h2>
     <p>PlanFind is an independent service. We're not affiliated with any council or government body.</p>
     <p>For data accuracy issues or general enquiries, the best way to reach us is via the feedback link on any search result page.</p>
   </div>
-
 </main>
 {% endblock %}
