@@ -11,9 +11,23 @@ on:
     - cron: '35 7 * * *'  # civica nightly scrape (St Albans)
     - cron: '50 7 * * *'  # northgate nightly scrape (Runnymede)
     - cron: '5 8 * * *'   # NI Planning Portal nightly scrape
-    - cron: '15 8 * * *'  # getApplications-family nightly scrape (Liverpool, Warrington, Newcastle, Blackburn & Darwen)
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
+    # CHANGED 2026-08-18 — both moved to a shared every-5-days cadence
+    # (real evidence: repeated frequent runs during development caused
+    # real, observed issues on both — getApplications got a
+    # vendor-wide bot-reputation flag after repeated testing, and the
+    # Idox targeted group's whole reason for existing is that it's the
+    # most WAF-sensitive part of the whole project). Deliberately
+    # placed at 10am, well clear of the 9am alerts job and the whole
+    # 3am-8:15am regular pipeline — scrape_idox_targeted alone can now
+    # take up to ~90 minutes, which wouldn't safely fit in the old
+    # tight pre-alerts slot. cron's day-of-month */5 isn't a perfectly
+    # even 5-day gap across month boundaries, but that's fine here —
+    # exact timing matters far less than just not hammering these
+    # sensitive endpoints daily.
+    - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
+    - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
   workflow_dispatch:
     inputs:
       job:
@@ -226,7 +240,9 @@ jobs:
         run: cd scrapers && python idox_scraper.py --batch=4 --total-batches=4
 
   scrape_idox_targeted:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_targeted'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_targeted') ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 10 */5 * *')
     runs-on: [self-hosted, uk-runner]
     # CHANGED 2026-08-17 — real evidence: a full run against all 13
     # councils only reached 5 of them before the old 30-minute budget
@@ -785,7 +801,7 @@ jobs:
     # challenge page instead of real content).
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_getapplications') ||
-      (github.event_name == 'schedule' && github.event.schedule == '15 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '20 10 */5 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 25
     steps:
