@@ -33,11 +33,24 @@ NOT YET ADDED — investigated today, real but unresolved:
 
 NORTHGATE_COUNCILS = [
     ("Runnymede Borough Council", "https://planning.runnymede.gov.uk/Northgate/PlanningExplorer/GeneralSearch.aspx"),
+
+    # ADDED 2026-08-18 — real URL supplied directly, matches Runnymede's
+    # exact GeneralSearch.aspx pattern, so the existing scraper logic
+    # should work unmodified (unlike Staffordshire Moorlands, found in
+    # the same batch — that one uses a DIFFERENT Northgate sub-variant,
+    # ApplicationSearchServlet, matching South Tyneside/Hartlepool/High
+    # Peak's still-unbuilt bespoke flow, NOT this GeneralSearch.aspx
+    # pattern — deliberately not added here, needs its own real build).
+    ("Conwy County Borough Council", "https://npe.conwy.gov.uk/Northgate/EnglishPlanningExplorer/generalsearch.aspx"),
 ]
 
 # Hardcoded IDs — set once a real councils-table row exists (see the
 # INSERT SQL delivered alongside this file). Runnymede has no existing
 # Idox/Arcus/Civica row to reuse — genuinely new to the whole system.
+# Conwy likewise genuinely new — no COUNCIL_DB_IDS entry yet, relies on
+# northgate_scraper.py's live name-match fallback until a real id is
+# confirmed and added explicitly (same approach as this session's new
+# Idox additions).
 COUNCIL_DB_IDS: dict[str, int] = {
     "Runnymede Borough Council": 404,
 }
