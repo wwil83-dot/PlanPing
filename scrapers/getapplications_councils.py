@@ -31,6 +31,17 @@ config at all, pending finding its real portal. It was never an Idox
 council to begin with; it's on this platform
 (placehub.walthamforest.gov.uk), found directly by the user, not
 guessed.
+
+ADDED 2026-08-18 — 4 more councils: Wirral, Cheshire East, Denbighshire,
+Stoke-on-Trent. All 4 had existing Idox entries CONFIRMED via direct
+SQL to have NEVER actually succeeded (coverage_source still 'pending',
+last_saved_at still null, despite being configured for weeks) — not
+"already working, leave alone" the way an earlier assumption about 3 of
+these initially, wrongly, suggested. Real getApplications URLs supplied
+directly by the user. Their existing Idox entries are commented out in
+idox_councils.py with a note explaining why, same resolution shape as
+Waltham Forest. These 4 REUSE their existing DB rows (real ids already
+known — 179, 184, 250, 321) rather than needing a fresh INSERT.
 """
 
 
@@ -58,6 +69,10 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     "Newcastle City Council":                    54,
     "Blackburn with Darwen Borough Council":      469,
     "London Borough of Waltham Forest":          224,
+    "Wirral Metropolitan Borough Council":        179,
+    "Cheshire East Council":                      184,
+    "Denbighshire County Council":                321,
+    "Stoke-on-Trent City Council":                250,
 }
 
 # (council_name_as_in_supabase_db, base_url — host only, no path)
@@ -67,6 +82,10 @@ GETAPPLICATIONS_COUNCILS = [
     ("Newcastle City Council",               "https://portal.newcastle.gov.uk"),
     ("Blackburn with Darwen Borough Council", "https://online.blackburn.gov.uk"),
     ("London Borough of Waltham Forest",     "https://placehub.walthamforest.gov.uk"),
+    ("Wirral Metropolitan Borough Council",  "https://online.wirral.gov.uk"),
+    ("Cheshire East Council",                "https://pa.cheshireeast.gov.uk"),
+    ("Denbighshire County Council",          "https://planningandpublicprotection.denbighshire.gov.uk"),
+    ("Stoke-on-Trent City Council",          "https://development.stoke.gov.uk"),
 ]
 
 
@@ -85,7 +104,11 @@ VALUES
   ('Warrington Borough Council','warrington-borough-council','getapplications','england','https://online.warrington.gov.uk/planning/index.html','pending',true),
   ('Newcastle City Council','newcastle-city-council','getapplications','england','https://portal.newcastle.gov.uk/planning/index.html','pending',true),
   ('Blackburn with Darwen Borough Council','blackburn-with-darwen-borough-council','getapplications','england','https://online.blackburn.gov.uk/planning/index.html','pending',true),
-  ('London Borough of Waltham Forest','london-borough-of-waltham-forest','getapplications','england','https://placehub.walthamforest.gov.uk/planning/index.html','pending',true)
+  ('London Borough of Waltham Forest','london-borough-of-waltham-forest','getapplications','england','https://placehub.walthamforest.gov.uk/planning/index.html','pending',true),
+  ('Wirral Metropolitan Borough Council','wirral-metropolitan-borough-council','getapplications','england','https://online.wirral.gov.uk/planning/index.html','pending',true),
+  ('Cheshire East Council','cheshire-east-council','getapplications','england','https://pa.cheshireeast.gov.uk/planning/index.html','pending',true),
+  ('Denbighshire County Council','denbighshire-county-council','getapplications','wales','https://planningandpublicprotection.denbighshire.gov.uk/planning/index.html','pending',true),
+  ('Stoke-on-Trent City Council','stoke-on-trent-city-council','getapplications','england','https://development.stoke.gov.uk/planning/index.html','pending',true)
 ON CONFLICT (name) DO UPDATE SET
   system = 'getapplications',
   active = true,
