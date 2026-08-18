@@ -308,12 +308,19 @@ IDOX_COUNCILS = [
     # ("Liverpool City Council",
     #  "https://planning.liverpool.gov.uk/online-applications"),
 
+    # MOVED 2026-08-18 — the "confirmed working" note below was wrong,
+    # or became stale: a real SQL check showed coverage_source still
+    # 'pending' and last_saved_at still null, meaning this Idox entry
+    # never actually saved a single real application despite being
+    # configured for weeks. Real getApplications platform URL found
+    # directly instead — see getapplications_councils.py. Old note kept
+    # below for context, not because it's still trusted.
     # CORRECTED Jul 2026 — Wirral RE-CONFIRMED as Idox. Old note below said
     # "LAR/Built ID system, not Idox" — that may have been true once, or
     # Wirral runs both in parallel, but planning.wirral.gov.uk/online-applications
     # directly matches the classic search.do pattern and is confirmed working.
-    ("Wirral Metropolitan Borough Council",
-     "https://planning.wirral.gov.uk/online-applications"),
+    # ("Wirral Metropolitan Borough Council",
+    #  "https://planning.wirral.gov.uk/online-applications"),
 
     ("Knowsley Metropolitan Borough Council",
      "https://planapp.knowsley.gov.uk/online-applications"),
@@ -330,8 +337,12 @@ IDOX_COUNCILS = [
     ("Cheshire West and Chester Council",
      "https://pa.cheshirewestandchester.gov.uk/online-applications"),
 
-    ("Cheshire East Council",
-     "https://planning.cheshireeast.gov.uk/online-applications"),
+    # MOVED 2026-08-18 — confirmed via direct SQL: coverage_source still
+    # 'pending', last_saved_at still null, never actually succeeded on
+    # Idox despite being configured. Real getApplications URL found
+    # directly instead — see getapplications_councils.py.
+    # ("Cheshire East Council",
+    #  "https://planning.cheshireeast.gov.uk/online-applications"),
 
     # Sefton's own Idox portal (confirmed — shows "Sefton Council" branding).
     ("Sefton Metropolitan Borough Council",
@@ -637,8 +648,12 @@ IDOX_COUNCILS = [
     ("Rutland County Council",
      "https://publicaccess.rutland.gov.uk/online-applications"),
 
-    ("Stoke-on-Trent City Council",
-     "https://planning.stoke.gov.uk/online-applications"),
+    # MOVED 2026-08-18 — confirmed via direct SQL: coverage_source still
+    # 'pending', last_saved_at still null, never actually succeeded on
+    # Idox despite being configured. Real getApplications URL found
+    # directly instead — see getapplications_councils.py.
+    # ("Stoke-on-Trent City Council",
+    #  "https://planning.stoke.gov.uk/online-applications"),
 
     ("Blackpool Council",
      "https://idoxpa.blackpool.gov.uk/online-applications"),
@@ -1195,8 +1210,12 @@ IDOX_COUNCILS = [
     ("Neath Port Talbot County Borough Council",
      "https://planningonline.npt.gov.uk/online-applications"),
 
-    ("Denbighshire County Council",
-     "https://planning.denbighshire.gov.uk/online-applications"),
+    # MOVED 2026-08-18 — confirmed via direct SQL: coverage_source still
+    # 'pending', last_saved_at still null, never actually succeeded on
+    # Idox despite being configured. Real getApplications URL found
+    # directly instead — see getapplications_councils.py.
+    # ("Denbighshire County Council",
+    #  "https://planning.denbighshire.gov.uk/online-applications"),
 
     ("Carmarthenshire County Council",
      "https://planning.carmarthenshire.gov.uk/online-applications"),
@@ -1704,6 +1723,35 @@ IDOX_COUNCILS = [
 
     # West Dunbartonshire CONFIRMED not Idox — bespoke ASP system at
     # apps.west-dunbarton.gov.uk/dcsearch_simple.asp. Skip permanently.
+
+    # -------------------------------------------------------------------------
+    # ADDED 2026-08-18 — 5 genuinely new councils, real URLs supplied
+    # directly (not guessed), matching the confirmed weeklyList Idox
+    # pattern. None had any existing DB row on any platform. Run this
+    # file's real INSERT SQL (delivered alongside) to create their rows
+    # — no COUNCIL_DB_IDS entry added yet, since idox_scraper.py falls
+    # back to a live name-match against the real councils table when an
+    # explicit hardcoded ID is missing (see idox_scraper.py's council_id
+    # resolution logic), so these will actually work on the very next
+    # batch run once the INSERT has been run — but send the real id
+    # back once known, for an explicit hardcoded entry same as every
+    # other council, since that's more reliable than relying on the
+    # name-match fallback long-term.
+    # -------------------------------------------------------------------------
+    ("East Riding of Yorkshire Council",
+     "https://newplanningaccess.eastriding.gov.uk/newplanningaccess"),
+
+    ("Stafford Borough Council",
+     "https://www12.staffordbc.gov.uk/online-applications"),
+
+    ("Lichfield District Council",
+     "https://planning.lichfielddc.gov.uk/online-applications"),
+
+    ("North Kesteven District Council",
+     "https://planningonline.n-kesteven.gov.uk/online-applications"),
+
+    ("South Kesteven District Council",
+     "https://prod.publicaccess.southkesteven.gov.uk/online-applications"),
 
 ]
 
