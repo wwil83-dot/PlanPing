@@ -101,7 +101,7 @@ RECHECK_LIMIT = int(os.environ.get("RECHECK_LIMIT", "50"))
 # The real, actual DB council_id for South Tyneside — needs a real row
 # created first via the INSERT_SQL below, same pattern as every other
 # new council this session.
-COUNCIL_DB_ID: Optional[int] = None
+COUNCIL_DB_ID: Optional[int] = 484
 
 INSERT_SQL = """
 INSERT INTO councils (name, slug, system, region, portal_url, coverage_source, active)
