@@ -209,85 +209,92 @@ async def recon_one(browser, council_name: str, primary_url: str, secondary_url:
     # common name patterns, without assuming one specific name works
     # for all 4 (these might differ council to council even within the
     # same platform).
+    # REAL FIX (2026-08-19, round 3) — real evidence from the previous
+    # run: filling ALL FOUR date-range pairs simultaneously (Valid,
+    # Decision, AppealLodged, AppealDecision) produced a genuine, honest
+    # "did not return any results" response from all 3 simple-servlet
+    # councils — not a broken search, just an unrealistic combination
+    # almost no real application would ever satisfy (validated AND
+    # decided AND appeal-lodged AND appeal-decided, all within the same
+    # 30 days). Confirmed by directly reading the real saved HTML, not
+    # assumed from a results-page title alone (a real, separate mistake
+    # in the previous round — a non-empty title on High Peak/
+    # Staffordshire Moorlands turned out to still be the same "no
+    # results" message, just with a different page title than
+    # Hartlepool's identical empty-results response).
+    #
+    # Real fix: fill ONLY ONE canonical date-range pair, matching what
+    # an actual production scraper needs (recently SUBMITTED
+    # applications) — "Received" if the council's form has it (High
+    # Peak, Staffordshire Moorlands both do), falling back to "Valid"
+    # where it doesn't (Hartlepool has no separate ReceivedDate field
+    # at all — Valid is the closest real equivalent on its own form).
+    # Every other date-range field is left deliberately blank.
     print(f"\n  Attempting a real search — looking for date input fields…")
     today = date.today()
     month_ago = today - timedelta(days=30)
-    date_candidates_from = [month_ago.strftime(fmt) for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d")]
-    date_candidates_to = [today.strftime(fmt) for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d")]
+    date_from_str = month_ago.strftime("%d/%m/%Y")
+    date_to_str = today.strftime("%d/%m/%Y")
 
-    date_field_patterns = ["date", "From", "To", "Received", "Valid", "Submit"]
+    async def _real_field_names() -> set[str]:
+        names = set()
+        try:
+            inputs = page.locator("input[type='text'], input[type='date'], input:not([type])")
+            count = await inputs.count()
+            for i in range(count):
+                name = await inputs.nth(i).get_attribute("name")
+                if name:
+                    names.add(name)
+        except Exception:
+            pass
+        return names
+
+    real_names = await _real_field_names()
+    target_prefix = None
+    if "ReceivedDateFrom" in real_names and "ReceivedDateTo" in real_names:
+        target_prefix = "ReceivedDate"
+    elif "ValidDateFrom" in real_names and "ValidDateTo" in real_names:
+        target_prefix = "ValidDate"
+
     filled_any = False
     fill_errors = []
-    try:
-        inputs = page.locator("input[type='text'], input[type='date'], input:not([type])")
-        count = await inputs.count()
-        for i in range(count):
-            el = inputs.nth(i)
-            try:
-                name = (await el.get_attribute("name") or "").lower()
-                el_id = (await el.get_attribute("id") or "").lower()
-                haystack = f"{name} {el_id}"
-                if any(p.lower() in haystack for p in ["from", "start"]):
-                    try:
-                        await el.fill(date_candidates_from[0], timeout=1500)
-                        print(f"    Filled 'from'-looking field (name={name!r}) with {date_candidates_from[0]!r}")
-                        filled_any = True
-                    except Exception as fill_e:
-                        # REAL FIX (2026-08-19, round 2) — the first fix
-                        # (printing real errors instead of swallowing
-                        # them) revealed the actual cause: these fields
-                        # are readonly="true" — classic date-picker-
-                        # triggered inputs, meant to be clicked to open a
-                        # calendar widget, not typed into. Playwright's
-                        # fill() correctly refuses this (real, safe
-                        # behaviour on Playwright's part, not a bug).
-                        # Real, standard workaround: set .value directly
-                        # via JS and dispatch a genuine 'change' event,
-                        # so whatever the site's own JS listens for still
-                        # fires, without needing to reverse-engineer the
-                        # actual calendar widget's UI.
-                        try:
-                            await el.evaluate(
-                                "(el, val) => { el.value = val; "
-                                "el.dispatchEvent(new Event('change', {bubbles: true})); "
-                                "el.dispatchEvent(new Event('blur', {bubbles: true})); }",
-                                date_candidates_from[0],
-                            )
-                            print(f"    Field name={name!r} is a readonly date-picker "
-                                  f"field — set via JS + change event instead: "
-                                  f"{date_candidates_from[0]!r}")
-                            filled_any = True
-                        except Exception as js_e:
-                            print(f"    ⚠ Field name={name!r} MATCHED, fill() failed "
-                                  f"(readonly), AND JS value-set also failed: {js_e}")
-                            fill_errors.append((name, str(js_e)))
-                elif any(p.lower() in haystack for p in ["to", "end"]) and "postcode" not in haystack:
-                    try:
-                        await el.fill(date_candidates_to[0], timeout=1500)
-                        print(f"    Filled 'to'-looking field (name={name!r}) with {date_candidates_to[0]!r}")
-                        filled_any = True
-                    except Exception as fill_e:
-                        try:
-                            await el.evaluate(
-                                "(el, val) => { el.value = val; "
-                                "el.dispatchEvent(new Event('change', {bubbles: true})); "
-                                "el.dispatchEvent(new Event('blur', {bubbles: true})); }",
-                                date_candidates_to[0],
-                            )
-                            print(f"    Field name={name!r} is a readonly date-picker "
-                                  f"field — set via JS + change event instead: "
-                                  f"{date_candidates_to[0]!r}")
-                            filled_any = True
-                        except Exception as js_e:
-                            print(f"    ⚠ Field name={name!r} MATCHED, fill() failed "
-                                  f"(readonly), AND JS value-set also failed: {js_e}")
-                            fill_errors.append((name, str(js_e)))
-            except Exception as e:
-                print(f"    ⚠ Could not read field {i}: {e}")
-    except Exception as e:
-        print(f"    ⚠ Date field locator error: {e}")
 
-    if fill_errors:
+    async def _fill_one(field_name: str, value: str) -> bool:
+        el = page.locator(f"input[name='{field_name}']").first
+        if await el.count() == 0:
+            return False
+        try:
+            await el.fill(value, timeout=1500)
+            print(f"    Filled real field name={field_name!r} with {value!r}")
+            return True
+        except Exception:
+            try:
+                await el.evaluate(
+                    "(el, val) => { el.value = val; "
+                    "el.dispatchEvent(new Event('change', {bubbles: true})); "
+                    "el.dispatchEvent(new Event('blur', {bubbles: true})); }",
+                    value,
+                )
+                print(f"    Field name={field_name!r} is a readonly date-picker "
+                      f"field — set via JS + change event instead: {value!r}")
+                return True
+            except Exception as js_e:
+                print(f"    ⚠ Field name={field_name!r} exists but could not be "
+                      f"set at all: {js_e}")
+                fill_errors.append((field_name, str(js_e)))
+                return False
+
+    if target_prefix:
+        print(f"    Using real field '{target_prefix}' ONLY (leaving every other "
+              f"date-range field blank, matching real evidence that filling "
+              f"multiple pairs at once produces a genuine, honest zero-result "
+              f"response, not a broken search)")
+        ok_from = await _fill_one(f"{target_prefix}From", date_from_str)
+        ok_to = await _fill_one(f"{target_prefix}To", date_to_str)
+        filled_any = ok_from or ok_to
+    else:
+        print(f"    ⚠ Neither ReceivedDate nor ValidDate field pair found on "
+              f"this page — real field names were: {sorted(real_names)}")
         print(f"    ⚠ {len(fill_errors)} field(s) matched a real date-field name "
               f"but couldn't actually be filled — see errors above, likely a "
               f"visibility/overlay issue same as the South Tyneside search-"
@@ -368,6 +375,29 @@ async def recon_one(browser, council_name: str, primary_url: str, secondary_url:
         except Exception:
             pass
         print(f"  Saved: {out_html2}, {out_png2}")
+
+        # REAL FIX (2026-08-19, round 3) — a non-empty results title
+        # alone is NOT proof real data came through, confirmed the hard
+        # way: High Peak and Staffordshire Moorlands both had real,
+        # distinct titles last round while their actual body content
+        # was the SAME honest "did not return any results" message as
+        # Hartlepool's empty-titled page. Checking the real body text
+        # directly and explicitly now, not inferring from the title.
+        results_lower = results_html.lower()
+        if "did not return any results" in results_lower or "refine your query" in results_lower:
+            print(f"  ⚠ REAL EMPTY RESULT: the site gave its own honest "
+                  f"'no results' response — the search mechanism itself "
+                  f"worked, but this specific date range/field combination "
+                  f"genuinely found nothing. Not a broken scraper.")
+        else:
+            records_match = re.search(r"records?\s+\d+\s+to\s+\d+\s+of\s+(\d+)", results_html, re.I)
+            if records_match:
+                print(f"  ✓ REAL DATA CONFIRMED: {records_match.group(0)!r} — "
+                      f"genuine populated results, not just a page that loaded.")
+            else:
+                print(f"  ⚠ No explicit 'no results' message found, but also no "
+                      f"real record-count pattern recognised — check the saved "
+                      f"HTML/screenshot directly to see what's actually there.")
 
         # Real, direct check on the South Tyneside dynamic-XML-path
         # concern — does the real results URL contain anything that
