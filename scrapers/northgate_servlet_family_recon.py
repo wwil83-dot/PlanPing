@@ -229,30 +229,59 @@ async def recon_one(browser, council_name: str, primary_url: str, secondary_url:
                 haystack = f"{name} {el_id}"
                 if any(p.lower() in haystack for p in ["from", "start"]):
                     try:
-                        await el.fill(date_candidates_from[0], timeout=5000)
+                        await el.fill(date_candidates_from[0], timeout=1500)
                         print(f"    Filled 'from'-looking field (name={name!r}) with {date_candidates_from[0]!r}")
                         filled_any = True
                     except Exception as fill_e:
-                        # REAL FIX (2026-08-19) — the previous version of
-                        # this script silently swallowed fill() failures
-                        # here, which is exactly why Hartlepool/High Peak
-                        # were wrongly reported as "no date fields found"
-                        # despite genuinely having ValidDateFrom/To fields
-                        # with matching names — the fill() call itself was
-                        # failing (likely hidden/covered/not-yet-visible
-                        # at the moment of the attempt) and the real error
-                        # was never shown. Printing it now instead of
-                        # hiding it.
-                        print(f"    ⚠ Field name={name!r} MATCHED but fill() failed: {fill_e}")
-                        fill_errors.append((name, str(fill_e)))
+                        # REAL FIX (2026-08-19, round 2) — the first fix
+                        # (printing real errors instead of swallowing
+                        # them) revealed the actual cause: these fields
+                        # are readonly="true" — classic date-picker-
+                        # triggered inputs, meant to be clicked to open a
+                        # calendar widget, not typed into. Playwright's
+                        # fill() correctly refuses this (real, safe
+                        # behaviour on Playwright's part, not a bug).
+                        # Real, standard workaround: set .value directly
+                        # via JS and dispatch a genuine 'change' event,
+                        # so whatever the site's own JS listens for still
+                        # fires, without needing to reverse-engineer the
+                        # actual calendar widget's UI.
+                        try:
+                            await el.evaluate(
+                                "(el, val) => { el.value = val; "
+                                "el.dispatchEvent(new Event('change', {bubbles: true})); "
+                                "el.dispatchEvent(new Event('blur', {bubbles: true})); }",
+                                date_candidates_from[0],
+                            )
+                            print(f"    Field name={name!r} is a readonly date-picker "
+                                  f"field — set via JS + change event instead: "
+                                  f"{date_candidates_from[0]!r}")
+                            filled_any = True
+                        except Exception as js_e:
+                            print(f"    ⚠ Field name={name!r} MATCHED, fill() failed "
+                                  f"(readonly), AND JS value-set also failed: {js_e}")
+                            fill_errors.append((name, str(js_e)))
                 elif any(p.lower() in haystack for p in ["to", "end"]) and "postcode" not in haystack:
                     try:
-                        await el.fill(date_candidates_to[0], timeout=5000)
+                        await el.fill(date_candidates_to[0], timeout=1500)
                         print(f"    Filled 'to'-looking field (name={name!r}) with {date_candidates_to[0]!r}")
                         filled_any = True
                     except Exception as fill_e:
-                        print(f"    ⚠ Field name={name!r} MATCHED but fill() failed: {fill_e}")
-                        fill_errors.append((name, str(fill_e)))
+                        try:
+                            await el.evaluate(
+                                "(el, val) => { el.value = val; "
+                                "el.dispatchEvent(new Event('change', {bubbles: true})); "
+                                "el.dispatchEvent(new Event('blur', {bubbles: true})); }",
+                                date_candidates_to[0],
+                            )
+                            print(f"    Field name={name!r} is a readonly date-picker "
+                                  f"field — set via JS + change event instead: "
+                                  f"{date_candidates_to[0]!r}")
+                            filled_any = True
+                        except Exception as js_e:
+                            print(f"    ⚠ Field name={name!r} MATCHED, fill() failed "
+                                  f"(readonly), AND JS value-set also failed: {js_e}")
+                            fill_errors.append((name, str(js_e)))
             except Exception as e:
                 print(f"    ⚠ Could not read field {i}: {e}")
     except Exception as e:
