@@ -3,32 +3,42 @@
 PlanFind — ScraperAPI test, Derby + North East Lincolnshire only
 (2026-08-19).
 
-DELIBERATELY MINIMAL, unlike the earlier scraperapi_test.py (round 7)
-this reuses none of — that script solved a genuinely harder problem
-(a CSRF-protected Idox form needing a real two-step session dance, for
-3 different WAF-blocked councils). Derby and NE Lincolnshire don't have
-that problem at all — real, direct evidence this session confirmed
-both load completely normally for an ordinary residential/VPN
-connection (no CAPTCHA, no CSRF dance, no security warning). The ONLY
-confirmed variable is IP origin: both hang with zero network activity
-from a DigitalOcean-hosted runner, specifically, but work identically
-from a home ISP AND from Surfshark VPN in two different countries (UK
-and France) — pointing at ASN-based datacenter blocking, not a
-country-based or session-based block. So this test only needs to
-answer one question: does ScraperAPI's proxy pool look "residential
-enough" to get past that same check? Nothing more complex than that.
+UPDATED after a real first run: a standard-tier GET to the monthly-list
+URL genuinely succeeded for both councils — real 200, real page title
+"Monthly List", a real monthlyListForm present, no WAF signature at
+all. That confirms ScraperAPI's cheapest tier gets past whatever blocks
+the DigitalOcean-hosted runner specifically (real, separate evidence
+this session: both councils load fine from a home ISP and from
+Surfshark VPN in two different countries, but hang with zero network
+activity from DigitalOcean — pointing at ASN-based datacenter blocking,
+not country or session-based blocking).
+
+What that first run's own marker-check got wrong: it only looked for
+POPULATED-RESULTS text (column headers like "date received"), which
+can never appear on the initial form page — a real, standard Idox
+monthly-list flow always serves the search FORM first, and needs an
+actual form submission to reach real results. Real form structure
+extracted directly from both councils' actual successful responses
+(not guessed): a CSRF token, a dateType radio (DC_Validated/
+DC_Decided), a month select, POSTed to
+monthlyListResults.do?action=firstPage — the exact same URL path
+already known to idox_scraper.py's own TRY_FIRSTPAGE_FALLBACK_COUNCILS
+mechanism.
+
+This version does the real two-step flow: fetch the form (fresh CSRF
+token, since a token from an old saved file would be stale), then POST
+it back with the real session cookies explicitly forwarded — applying
+the hard-won lesson from the earlier scraperapi_test.py (round 7),
+which found session_number alone wasn't reliably enough to carry
+session state across two separate API calls.
 
 BUDGET, explicit and respected: real, current ScraperAPI pricing
-(checked directly before writing this, not assumed) — a standard
-request costs 1 credit; premium=true costs 10; ultra_premium=true
-costs 30 AND ISN'T EVEN AVAILABLE on the free tier at all. The person
-running this is on the free tier (1,000 credits total). This script
-ONLY sends standard-tier requests (2 total, 1 per council) — no
-premium/ultra_premium escalation happens automatically. If both fail,
-the real, honest next question (worth deciding deliberately, not
-auto-spent) is whether premium=true (10 credits each, 20 total) is
-worth trying — that decision is intentionally left to a human, not
-made by this script.
+(checked directly, not assumed) — a standard request costs 1 credit;
+premium=true costs 10; ultra_premium=true costs 30 AND ISN'T EVEN
+AVAILABLE on the free tier at all. The person running this is on the
+free tier (1,000 credits total). This script sends 4 requests total
+(2 per council, standard tier only) — 4 credits worst case. No
+premium/ultra_premium escalation happens automatically.
 
 Also deliberately NOT testing Sheffield or Bassetlaw — their confirmed
 real problem is a broken TLS certificate on their own server (NET::
@@ -62,75 +72,151 @@ REAL_DATA_MARKERS = ["application type", "date received", "ref. no"]
 WAF_BLOCK_MARKERS = ["429 too many requests", "too many requests",
                       "unusual traffic", "access denied", "cloudflare"]
 
+# REAL field structure, extracted directly from both councils' actual
+# successful standard-tier responses (2026-08-19) — not guessed. Both
+# councils share the identical standard Idox monthly-list form shape:
+# CSRF token + dateType radio (DC_Validated/DC_Decided) + month select
+# + searchType, POSTed to monthlyListResults.do?action=firstPage. This
+# exact URL path is already a known quantity in idox_scraper.py's own
+# TRY_FIRSTPAGE_FALLBACK_COUNCILS mechanism — nothing exotic here.
+
 
 def slug(name: str) -> str:
     return name.lower().replace(" ", "_")
 
 
-def test_standard_tier(name: str, url: str) -> dict:
+def get_real_form(name: str, url: str) -> dict:
+    """Step 1 — fetch the real form page and extract its real, live
+    CSRF token + real cookies for this specific session. A FRESH
+    request each time this runs — a CSRF token from an old saved file
+    would already be stale/expired."""
     print(f"\n{'-' * 70}")
-    print(f"{name} — standard tier (1 credit if successful)")
-    print(f"URL: {url}")
+    print(f"{name} — Step 1: fetch real form (1 credit)")
     print("-" * 70)
 
-    # Deliberately NO premium/ultra_premium params — cheapest possible
-    # real test, matching the budget discipline in the module docstring.
     params = {"api_key": API_KEY, "url": url}
-
     try:
         response = requests.get(API_ENDPOINT, params=params, timeout=70)
     except requests.exceptions.RequestException as e:
-        print(f"  ⚠ Request itself failed: {e}")
-        return {"name": name, "error": str(e)}
+        print(f"  ⚠ Request failed: {e}")
+        return {"error": str(e)}
 
-    print(f"  HTTP status from ScraperAPI: {response.status_code}")
-
+    print(f"  HTTP status: {response.status_code}")
     if response.status_code != 200:
-        print(f"  Response body (first 500 chars): {response.text[:500]!r}")
-        return {"name": name, "status": response.status_code,
-                "error": f"non-200: {response.status_code}"}
+        return {"error": f"non-200: {response.status_code}"}
+
+    real_cookies = dict(response.cookies)
+    print(f"  Real cookies received: {real_cookies if real_cookies else 'NONE'}")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(response.text, "html.parser")
+    form = soup.find("form", id="monthlyListForm") or soup.find("form")
+    if not form:
+        print(f"  ⚠ No form found in this response.")
+        return {"error": "no form found"}
+
+    csrf_token = None
+    for el in form.find_all("input"):
+        if el.get("name") == "_csrf":
+            csrf_token = el.get("value")
+            break
+
+    if not csrf_token:
+        print(f"  ⚠ No _csrf token found.")
+        return {"error": "no csrf token"}
+
+    print(f"  Real, fresh CSRF token: {csrf_token}")
+    action = form.get("action", "")
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    post_target = f"{parsed.scheme}://{parsed.netloc}{action}" if action.startswith("/") else action
+
+    return {
+        "csrf": csrf_token,
+        "cookies": real_cookies,
+        "post_target": post_target,
+    }
+
+
+def submit_real_form(name: str, step1: dict) -> dict:
+    """Step 2 — POST the real form fields back, explicitly forwarding
+    the real cookies from Step 1 (the lesson learned the hard way in
+    the earlier round-7 script: don't just trust session_number alone
+    to carry session state invisibly)."""
+    print(f"\n{'-' * 70}")
+    print(f"{name} — Step 2: submit real form (1 credit)")
+    print(f"POST target: {step1['post_target']}")
+    print("-" * 70)
+
+    post_data = {
+        "_csrf": step1["csrf"],
+        "month": "0",
+        "dateType": "DC_Validated",
+        "searchType": "Application",
+    }
+    print(f"  POST body: {post_data}")
+
+    cookie_header = "; ".join(f"{k}={v}" for k, v in step1["cookies"].items())
+    headers = {"Cookie": cookie_header} if cookie_header else {}
+    params = {"api_key": API_KEY, "url": step1["post_target"], "keep_headers": "true"}
+
+    try:
+        response = requests.post(API_ENDPOINT, params=params, data=post_data,
+                                  headers=headers, timeout=70)
+    except requests.exceptions.RequestException as e:
+        print(f"  ⚠ Request failed: {e}")
+        return {"error": str(e)}
+
+    print(f"  HTTP status: {response.status_code}")
+    if response.status_code != 200:
+        print(f"  Body (first 500 chars): {response.text[:500]!r}")
+        return {"error": f"non-200: {response.status_code}"}
 
     html = response.text
     html_lower = html.lower()
     real_data_hits = [m for m in REAL_DATA_MARKERS if m in html_lower]
     waf_hits = [m for m in WAF_BLOCK_MARKERS if m in html_lower]
+    has_results = "searchresults" in html_lower
 
     print(f"  Real content length: {len(html):,} chars")
-    title_start = html_lower.find("<title>")
-    title_end = html_lower.find("</title>")
-    title = html[title_start+7:title_end] if title_start >= 0 and title_end > title_start else "(no title found)"
-    print(f"  Real page title: {title!r}")
     print(f"  Real Idox data markers found: {real_data_hits if real_data_hits else 'NONE'}")
-    print(f"  WAF/block markers found: {waf_hits if waf_hits else 'none'}")
+    print(f"  'searchresults' container present: {has_results}")
+    print(f"  WAF markers found: {waf_hits if waf_hits else 'none'}")
 
-    out_path = f"/tmp/scraperapi_standard_{slug(name)}.html"
+    out_path = f"/tmp/scraperapi_step2_{slug(name)}.html"
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"  Full HTML saved: {out_path}")
 
     return {
-        "name": name,
         "status": response.status_code,
-        "length": len(html),
         "real_data_hits": real_data_hits,
-        "waf_hits": waf_hits,
-        "success": bool(real_data_hits),
+        "has_results": has_results,
+        "success": bool(real_data_hits) or has_results,
     }
 
 
 def main():
-    print("SCRAPERAPI TEST — Derby + North East Lincolnshire, standard tier only")
-    print("Budget: 2 requests max, 1 credit each if successful (free-tier-safe,")
-    print("no premium/ultra_premium — ultra_premium isn't even available on")
-    print("the free tier). Sheffield/Bassetlaw deliberately NOT tested — their")
-    print("confirmed problem is a broken certificate on their own server, not")
-    print("something a proxy can fix.\n")
+    print("SCRAPERAPI TEST — Derby + North East Lincolnshire, real two-step flow")
+    print("Budget: 4 requests max (2 per council), standard tier only, 1 credit")
+    print("each if successful — 4 credits total worst case. Step 1 (fetch form)")
+    print("already confirmed working in the previous run; this run adds Step 2")
+    print("(submit the real form) to confirm real application data comes back,")
+    print("not just that the form page loads.\n")
 
     if not API_KEY:
         print("ERROR: Set SCRAPERAPI_KEY as an environment variable first.")
         sys.exit(1)
 
-    results = [test_standard_tier(name, url) for name, url in TARGETS]
+    results = []
+    for name, url in TARGETS:
+        step1 = get_real_form(name, url)
+        if step1.get("error"):
+            results.append({"name": name, "error": f"Step 1 failed: {step1['error']}"})
+            continue
+        step2 = submit_real_form(name, step1)
+        step2["name"] = name
+        results.append(step2)
 
     print(f"\n\n{'=' * 70}")
     print("SUMMARY")
@@ -139,24 +225,11 @@ def main():
         if r.get("error"):
             print(f"  {r['name']}: FAILED — {r['error']}")
         elif r.get("success"):
-            print(f"  {r['name']}: REAL SUCCESS — genuine Idox data came through "
-                  f"on the standard tier alone")
+            print(f"  {r['name']}: REAL SUCCESS — genuine results came through "
+                  f"the full two-step flow on the standard tier")
         else:
-            print(f"  {r['name']}: loaded but no real Idox data found — "
+            print(f"  {r['name']}: form submitted but no real results found — "
                   f"check the saved HTML directly")
-
-    any_failed = any(not r.get("success") for r in results)
-    if any_failed:
-        print("\nAt least one council did not succeed on the standard tier.")
-        print("Before spending anything more: check the saved HTML for what")
-        print("actually came back (a real WAF page? empty? something else?).")
-        print("If it's worth it, the next real step would be premium=true")
-        print("(10 credits per request, 20 total for both) — a deliberate")
-        print("decision to make with real evidence in hand, not automatic.")
-    else:
-        print("\nBoth succeeded on the standard tier alone — no need to spend")
-        print("anything more. This confirms ScraperAPI's base proxy pool is")
-        print("enough for these two specifically.")
 
 
 if __name__ == "__main__":
