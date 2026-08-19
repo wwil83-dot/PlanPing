@@ -42,7 +42,21 @@ from datetime import datetime, timezone
 
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
 
-BROWSER_ARGS = ["--no-sandbox", "--disable-dev-shm-usage"]
+BROWSER_ARGS = [
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    # ADDED 2026-08-19 — real evidence: a direct browser test on Sheffield's
+    # real site showed NET::ERR_CERT_AUTHORITY_INVALID under active HSTS
+    # enforcement (confirmed via a real screenshot — "You cannot visit...
+    # because the website uses HSTS", no "proceed anyway" option offered
+    # at all). HSTS can enforce certificate validation at a deeper level
+    # in the browser's network stack than context-level
+    # ignore_https_errors reaches — this flag disables certificate
+    # validation at the actual Chromium PROCESS level instead, a
+    # genuinely different, more forceful mechanism. Testing directly
+    # rather than assuming it fixes anything.
+    "--ignore-certificate-errors",
+]
 CONTEXT_OPTIONS = {
     "user_agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -123,6 +137,16 @@ async def diagnose_one(browser, name: str, base_url: str):
         timed_out = True
     except Exception as e:
         error = str(e)
+        # Real evidence check: does this look like the same certificate
+        # problem confirmed directly via a real browser test on
+        # Sheffield (NET::ERR_CERT_AUTHORITY_INVALID under HSTS)? If the
+        # --ignore-certificate-errors launch flag is working, this
+        # exception should NOT appear at all — printing it explicitly
+        # either way, rather than only inferring from a bare timeout.
+        if "CERT" in error.upper() or "SSL" in error.upper() or "TLS" in error.upper():
+            print(f"CERTIFICATE-RELATED ERROR CAUGHT: {error}")
+            print("(This means --ignore-certificate-errors did NOT fully "
+                  "suppress it — worth reading the exact message above.)")
 
     elapsed = (datetime.now(timezone.utc) - start).total_seconds()
     print(f"Elapsed: {elapsed:.1f}s (long timeout ceiling: {LONG_TIMEOUT_MS/1000:.0f}s)")
