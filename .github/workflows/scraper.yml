@@ -989,7 +989,13 @@ jobs:
   northgate_servlet_family_recon:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_servlet_family_recon'
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 15
+    # CHANGED 2026-08-19 — real evidence: the first run got cut off
+    # before Staffordshire Moorlands even started, likely because South
+    # Tyneside's blocked-overlay click retried 58 times before giving
+    # up, burning real time. Now fixed at the script level (real
+    # overlay dismissal added), but keeping a generous timeout anyway
+    # in case another council hits something similar.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
