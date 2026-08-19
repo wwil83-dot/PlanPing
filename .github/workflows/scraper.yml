@@ -35,7 +35,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, scrape_ni, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test, brightdata_browser_api_test, ni_planningsystemni_recon, getapplications_family_recon, scrape_getapplications, idox_waf_recheck, priority1_diagnostic]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, scrape_ni, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test, brightdata_browser_api_test, ni_planningsystemni_recon, getapplications_family_recon, scrape_getapplications, idox_waf_recheck, priority1_diagnostic, scraperapi_priority1_test]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -888,6 +888,33 @@ jobs:
         with:
           name: priority1-diagnostic-output
           path: /tmp/priority1_diag_*
+          retention-days: 14
+
+  scraperapi_priority1_test:
+    # ubuntu-latest is fine here (unlike every Playwright-based job in
+    # this file) — the whole point of this test is that ScraperAPI's
+    # OWN proxy IP is what reaches Derby/NE Lincolnshire, not whichever
+    # runner sends the API call to ScraperAPI itself. No Playwright
+    # needed either — this is a plain HTTP request to ScraperAPI's API.
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scraperapi_priority1_test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - name: Test ScraperAPI standard tier against Derby + NE Lincolnshire
+        env:
+          SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
+        run: cd scrapers && python scraperapi_priority1_test.py
+      - name: Upload saved HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraperapi-priority1-output
+          path: /tmp/scraperapi_standard_*
           retention-days: 14
 
   northgate_url_healthcheck:
