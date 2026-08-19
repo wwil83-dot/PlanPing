@@ -11,6 +11,7 @@ on:
     - cron: '35 7 * * *'  # civica nightly scrape (St Albans)
     - cron: '50 7 * * *'  # northgate nightly scrape (Runnymede)
     - cron: '55 7 * * *'  # northgate servlet-family nightly scrape (Hartlepool, High Peak, Staffordshire Moorlands)
+    - cron: '0 8 * * *'   # northgate South Tyneside nightly scrape
     - cron: '5 8 * * *'   # NI Planning Portal nightly scrape
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
@@ -1052,10 +1053,14 @@ jobs:
         run: cd scrapers && python northgate_servlet_scraper.py
 
   northgate_south_tyneside_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live, matching every other new platform's first job
-    # this session before a confirmed clean production run.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_south_tyneside_scraper'
+    # PROMOTED to the nightly schedule (2026-08-19) after a confirmed
+    # clean first production run — 40 real applications saved across
+    # all 4 pages, no errors, 0.2 minutes total. Manual trigger kept
+    # available too, same as every other platform's job, for ad-hoc
+    # reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_south_tyneside_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
