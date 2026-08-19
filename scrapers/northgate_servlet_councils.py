@@ -55,9 +55,9 @@ session history:
 """
 
 COUNCIL_DB_IDS: dict[str, int | None] = {
-    "Hartlepool Borough Council":                None,
-    "High Peak Borough Council":                 None,
-    "Staffordshire Moorlands District Council":  None,
+    "Hartlepool Borough Council":                481,
+    "High Peak Borough Council":                 482,
+    "Staffordshire Moorlands District Council":  483,
 }
 
 # (council_name, base_url — host only, no path, date_field prefix)
