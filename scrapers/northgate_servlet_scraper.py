@@ -540,8 +540,16 @@ async def process_council(portal: NorthgateServletPortal, browser: Browser,
                 "submitted_date": a.get("submitted_date"),
                 "decision_date": a.get("decision_date"),
                 "council_url": a.get("council_url"),
-                "latitude": lat,
-                "longitude": lng,
+                "lat": lat,
+                "lng": lng,
+                # NOTE: no "application_type" here — deliberately, not an
+                # oversight. Real, confirmed column headers for this
+                # platform (Application number | Received date | Valid
+                # date | Site location | Proposal | Decision | Decision
+                # date) have no application-type field at all, unlike
+                # Idox's real data. Leaving this unset (NULL/default)
+                # rather than guessing a value with no real source.
+                "source": "northgate_servlet_scraper",
             })
 
         if fallback_count:
