@@ -36,9 +36,17 @@ BUDGET, explicit and respected: real, current ScraperAPI pricing
 (checked directly, not assumed) — a standard request costs 1 credit;
 premium=true costs 10; ultra_premium=true costs 30 AND ISN'T EVEN
 AVAILABLE on the free tier at all. The person running this is on the
-free tier (1,000 credits total). This script sends 4 requests total
-(2 per council, standard tier only) — 4 credits worst case. No
-premium/ultra_premium escalation happens automatically.
+free tier (1,000 credits total). UPDATED after a real second run: the
+standard-tier POST (Step 2) failed with ScraperAPI's own explicit
+error — "Protected domains may require adding premium=true OR
+ultra_premium=true" — and confirmed NOT charged for that failure
+(stated directly in the same error response). Given that specific,
+real instruction from ScraperAPI itself, Step 2 now uses premium=true
+— explicitly approved by the person running this before making the
+change, not a silent escalation. Step 1 stays on the free standard
+tier, since it already works there. Worst case this run: 22 credits
+(2 x 1 for Step 1, 2 x 10 for Step 2) — failed requests still aren't
+charged either way.
 
 Also deliberately NOT testing Sheffield or Bassetlaw — their confirmed
 real problem is a broken TLS certificate on their own server (NET::
@@ -144,7 +152,7 @@ def submit_real_form(name: str, step1: dict) -> dict:
     the earlier round-7 script: don't just trust session_number alone
     to carry session state invisibly)."""
     print(f"\n{'-' * 70}")
-    print(f"{name} — Step 2: submit real form (1 credit)")
+    print(f"{name} — Step 2: submit real form (premium=true, 10 credits)")
     print(f"POST target: {step1['post_target']}")
     print("-" * 70)
 
@@ -158,7 +166,16 @@ def submit_real_form(name: str, step1: dict) -> dict:
 
     cookie_header = "; ".join(f"{k}={v}" for k, v in step1["cookies"].items())
     headers = {"Cookie": cookie_header} if cookie_header else {}
-    params = {"api_key": API_KEY, "url": step1["post_target"], "keep_headers": "true"}
+    # CHANGED 2026-08-19 — real evidence: the standard-tier POST failed
+    # with a real, explicit ScraperAPI error message: "Protected domains
+    # may require adding premium=true OR ultra_premium=true parameter to
+    # your request." Not charged for that failure (per ScraperAPI's own
+    # stated policy, confirmed in the same error body). Escalating ONLY
+    # this step to premium=true (10 credits) — Step 1 stays on the free
+    # standard tier since it already works there, no reason to pay more
+    # for something that isn't the problem.
+    params = {"api_key": API_KEY, "url": step1["post_target"],
+              "keep_headers": "true", "premium": "true"}
 
     try:
         response = requests.post(API_ENDPOINT, params=params, data=post_data,
@@ -198,11 +215,13 @@ def submit_real_form(name: str, step1: dict) -> dict:
 
 def main():
     print("SCRAPERAPI TEST — Derby + North East Lincolnshire, real two-step flow")
-    print("Budget: 4 requests max (2 per council), standard tier only, 1 credit")
-    print("each if successful — 4 credits total worst case. Step 1 (fetch form)")
-    print("already confirmed working in the previous run; this run adds Step 2")
-    print("(submit the real form) to confirm real application data comes back,")
-    print("not just that the form page loads.\n")
+    print("Budget: Step 1 (fetch form) on standard tier, 1 credit each if")
+    print("successful — already confirmed working. Step 2 (submit form) now on")
+    print("premium=true, 10 credits each if successful, per ScraperAPI's own")
+    print("explicit error message on the standard tier: 'Protected domains may")
+    print("require adding premium=true'. Worst case: 22 credits total (2x1 +")
+    print("2x10) — failed requests aren't charged, per ScraperAPI's own stated")
+    print("policy, confirmed directly in the previous run's error response.\n")
 
     if not API_KEY:
         print("ERROR: Set SCRAPERAPI_KEY as an environment variable first.")
