@@ -10,6 +10,7 @@ on:
     - cron: '20 7 * * *'  # arcus nightly scrape
     - cron: '35 7 * * *'  # civica nightly scrape (St Albans)
     - cron: '50 7 * * *'  # northgate nightly scrape (Runnymede)
+    - cron: '55 7 * * *'  # northgate servlet-family nightly scrape (Hartlepool, High Peak, Staffordshire Moorlands)
     - cron: '5 8 * * *'   # NI Planning Portal nightly scrape
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
@@ -35,7 +36,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, scrape_ni, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test, brightdata_browser_api_test, ni_planningsystemni_recon, getapplications_family_recon, scrape_getapplications, idox_waf_recheck, priority1_diagnostic, scraperapi_priority1_test, priority1_diagnostic_us_runner, derby_results_page_test, northgate_servlet_family_recon, northgate_servlet_scraper]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, scrape_ni, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test, brightdata_browser_api_test, ni_planningsystemni_recon, getapplications_family_recon, scrape_getapplications, idox_waf_recheck, priority1_diagnostic, scraperapi_priority1_test, priority1_diagnostic_us_runner, derby_results_page_test, northgate_servlet_family_recon, northgate_servlet_scraper, northgate_south_tyneside_scraper]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -1019,12 +1020,14 @@ jobs:
           retention-days: 14
 
   northgate_servlet_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live, matching every other new platform's first job
-    # this session (scrape_ni, scrape_getapplications) before a
-    # confirmed clean production run. Promote to the schedule list at
-    # the top of the file once that's confirmed.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_servlet_scraper'
+    # PROMOTED to the nightly schedule (2026-08-19) after a confirmed
+    # clean first production run — 60 real applications saved across
+    # all 3 councils, no errors, 0.5 minutes total. Manual trigger kept
+    # available too, same as every other platform's job, for ad-hoc
+    # reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_servlet_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '55 7 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 20
     steps:
@@ -1047,6 +1050,33 @@ jobs:
           CONCURRENCY: "1"
           DAYS_BACK: "30"
         run: cd scrapers && python northgate_servlet_scraper.py
+
+  northgate_south_tyneside_scraper:
+    # DELIBERATELY manual-trigger only for now — brand new platform,
+    # never run live, matching every other new platform's first job
+    # this session before a confirmed clean production run.
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_south_tyneside_scraper'
+    runs-on: [self-hosted, uk-runner]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright beautifulsoup4 httpx
+      - run: playwright install --with-deps chromium
+      - name: Run South Tyneside scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_MINUTES: "15"
+          DAYS_BACK: "31"
+        run: cd scrapers && python northgate_south_tyneside_scraper.py
 
   northgate_url_healthcheck:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_url_healthcheck'
