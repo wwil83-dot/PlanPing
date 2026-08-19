@@ -169,6 +169,40 @@ async def recon_one(browser, council_name: str, primary_url: str, secondary_url:
 
     await dump_form_fields(page, council_name, "step1")
 
+    # REAL FIX (2026-08-19) — South Tyneside's search button click failed
+    # 58 times in a row, every attempt blocked by the same real, named
+    # overlay: <div id="ivcb-overlay">. Near-certainly a cookie-consent
+    # banner sitting on top of the page. Try common real dismissal
+    # patterns before attempting any further interaction, rather than
+    # let the same real obstacle block every subsequent step.
+    print(f"\n  Checking for a blocking overlay/cookie banner…")
+    for selector in ["#ivcb-overlay button", "#ivcb-overlay .accept",
+                      "button:has-text('Accept')", "button:has-text('I agree')",
+                      "button:has-text('Close')", "[id*='cookie'] button"]:
+        try:
+            el = page.locator(selector).first
+            if await el.count() > 0 and await el.is_visible(timeout=2000):
+                await el.click(timeout=3000)
+                print(f"    Dismissed an overlay via selector {selector!r}")
+                await asyncio.sleep(1)
+                break
+        except Exception:
+            continue
+    # Last resort — if a real overlay is still present and blocking
+    # clicks after trying real dismissal buttons, just remove it
+    # directly. This is diagnostic tooling, not the real production
+    # scraper — acceptable here specifically to see what's actually
+    # behind it; a real scraper would need a properly targeted fix,
+    # not this blunt approach.
+    try:
+        overlay = page.locator("#ivcb-overlay")
+        if await overlay.count() > 0 and await overlay.is_visible(timeout=1000):
+            await page.evaluate("document.getElementById('ivcb-overlay')?.remove()")
+            print(f"    Real overlay #ivcb-overlay still present — force-removed via JS "
+                  f"(diagnostic-only workaround, not how the real scraper should handle it)")
+    except Exception:
+        pass
+
     # Try a real, plausible search — a date range covering roughly the
     # last month, since we don't yet know the real expected format for
     # any of these 4 councils. Look for real date input fields by
@@ -183,6 +217,7 @@ async def recon_one(browser, council_name: str, primary_url: str, secondary_url:
 
     date_field_patterns = ["date", "From", "To", "Received", "Valid", "Submit"]
     filled_any = False
+    fill_errors = []
     try:
         inputs = page.locator("input[type='text'], input[type='date'], input:not([type])")
         count = await inputs.count()
@@ -193,17 +228,72 @@ async def recon_one(browser, council_name: str, primary_url: str, secondary_url:
                 el_id = (await el.get_attribute("id") or "").lower()
                 haystack = f"{name} {el_id}"
                 if any(p.lower() in haystack for p in ["from", "start"]):
-                    await el.fill(date_candidates_from[0])
-                    print(f"    Filled 'from'-looking field (name={name!r}) with {date_candidates_from[0]!r}")
-                    filled_any = True
+                    try:
+                        await el.fill(date_candidates_from[0], timeout=5000)
+                        print(f"    Filled 'from'-looking field (name={name!r}) with {date_candidates_from[0]!r}")
+                        filled_any = True
+                    except Exception as fill_e:
+                        # REAL FIX (2026-08-19) — the previous version of
+                        # this script silently swallowed fill() failures
+                        # here, which is exactly why Hartlepool/High Peak
+                        # were wrongly reported as "no date fields found"
+                        # despite genuinely having ValidDateFrom/To fields
+                        # with matching names — the fill() call itself was
+                        # failing (likely hidden/covered/not-yet-visible
+                        # at the moment of the attempt) and the real error
+                        # was never shown. Printing it now instead of
+                        # hiding it.
+                        print(f"    ⚠ Field name={name!r} MATCHED but fill() failed: {fill_e}")
+                        fill_errors.append((name, str(fill_e)))
                 elif any(p.lower() in haystack for p in ["to", "end"]) and "postcode" not in haystack:
-                    await el.fill(date_candidates_to[0])
-                    print(f"    Filled 'to'-looking field (name={name!r}) with {date_candidates_to[0]!r}")
-                    filled_any = True
-            except Exception:
-                pass
+                    try:
+                        await el.fill(date_candidates_to[0], timeout=5000)
+                        print(f"    Filled 'to'-looking field (name={name!r}) with {date_candidates_to[0]!r}")
+                        filled_any = True
+                    except Exception as fill_e:
+                        print(f"    ⚠ Field name={name!r} MATCHED but fill() failed: {fill_e}")
+                        fill_errors.append((name, str(fill_e)))
+            except Exception as e:
+                print(f"    ⚠ Could not read field {i}: {e}")
     except Exception as e:
-        print(f"    ⚠ Date field fill error: {e}")
+        print(f"    ⚠ Date field locator error: {e}")
+
+    if fill_errors:
+        print(f"    ⚠ {len(fill_errors)} field(s) matched a real date-field name "
+              f"but couldn't actually be filled — see errors above, likely a "
+              f"visibility/overlay issue same as the South Tyneside search-"
+              f"button block, not a genuine 'field doesn't exist' situation.")
+
+    if not filled_any:
+        print(f"    No text-based date fields filled — trying a real "
+              f"days-back/preset dropdown instead (South Tyneside's own "
+              f"real UI paradigm — a 'vrDays' select, not free-text dates).")
+        try:
+            for select_name in ["vrDays", "days", "Days"]:
+                sel = page.locator(f"select[name='{select_name}']")
+                if await sel.count() > 0:
+                    # Real, visible option text unknown without a fresh
+                    # dump — try selecting by a plausible label first,
+                    # falling back to the LAST option (often "31", the
+                    # widest real range, per the recon note "goes back
+                    # 31 days") if no label match is found.
+                    try:
+                        await sel.select_option(label="31")
+                        print(f"    Selected '31' in real dropdown name={select_name!r}")
+                        filled_any = True
+                    except Exception:
+                        try:
+                            options = await sel.locator("option").all_text_contents()
+                            if options:
+                                await sel.select_option(label=options[-1])
+                                print(f"    Selected last real option {options[-1]!r} "
+                                      f"in dropdown name={select_name!r} (options were: {options})")
+                                filled_any = True
+                        except Exception as e2:
+                            print(f"    ⚠ Could not select any option in {select_name!r}: {e2}")
+                    break
+        except Exception as e:
+            print(f"    ⚠ Days-back dropdown handling error: {e}")
 
     if not filled_any:
         print(f"    ⚠ No obvious date fields found/filled — check the real form "
