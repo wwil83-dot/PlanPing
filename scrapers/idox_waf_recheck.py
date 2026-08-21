@@ -87,6 +87,25 @@ TARGETS = [
     ("Bolsover District Council",
      "https://publicaccess.bolsover.gov.uk/online-applications/search.do?action=weeklyList",
      "incapsula"),
+    # ADDED 2026-08-21 — real, concrete gap found: Highland and
+    # Edinburgh were confirmed "genuinely stuck at zero" way back in
+    # the original Scotland batch investigation, and separately
+    # referenced as the "same Cloudflare-style category" as Dumfries
+    # and Galloway in a comment dated 2026-07-07/09 — genuinely BEFORE
+    # the UK proxy was introduced (~2026-08-10). That's the exact same
+    # situation Tonbridge/Solihull/NE Derbyshire/Bolsover were all in,
+    # and all 4 turned out to be stale, no-longer-valid blocks once
+    # actually re-tested. Neither Highland nor Edinburgh was ever
+    # included in this recheck before now — a real gap, not a
+    # deliberate omission. Real, confirmed URL paths used (NOT the
+    # standard /online-applications — both use different real paths,
+    # confirmed directly from idox_councils.py's own active config).
+    ("Highland Council",
+     "https://wam.highland.gov.uk/wam/search.do?action=weeklyList",
+     None),
+    ("City of Edinburgh Council",
+     "https://citydev-portal.edinburgh.gov.uk/idoxpa-web/search.do?action=weeklyList",
+     "cloudflare"),
 ]
 
 # Real, known WAF/block-page signatures — extend this list with real
