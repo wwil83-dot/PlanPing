@@ -299,8 +299,24 @@ class StatmapPortal:
         except Exception:
             pass
 
-        await asyncio.sleep(1.5)  # real, deliberate pause for React
-                                    # rendering to finish
+        # REAL FIX (2026-08-21) — confirmed directly: East Staffordshire's
+        # real server is genuinely slower to render than West Lindsey's
+        # (same platform, different real backend instance) — a fixed
+        # 1.5s sleep worked for one and captured a completely empty
+        # HTML shell for the other (confirmed via the real "ROW PARSE
+        # DIAGNOSTIC" showing zero data-fields and just Font Awesome CSS
+        # variables — React hadn't rendered anything at all yet).
+        # Actively waiting for a real row to exist, with a generous cap,
+        # rather than trusting a fixed delay is always enough.
+        try:
+            await page.wait_for_selector("[role='row']", timeout=10_000)
+        except PlaywrightTimeout:
+            self._log(f"⚠ No real row appeared within 10s for week — "
+                      f"either genuinely empty, or this council is even "
+                      f"slower than East Staffordshire's own real timing")
+        await asyncio.sleep(0.5)  # small, real buffer for the LAST row's
+                                    # own content to finish populating
+                                    # after the first one appears
 
         # REAL FIX (2026-08-21) — confirmed directly from captured
         # markup: standard MUI DataGrid pagination, aria-label="next"
