@@ -104,7 +104,17 @@ async def recon_agile_plain_http(name: str, council_slug: str):
 
     body_lower = r.text.lower()
     looks_like_json = r.text.strip().startswith(("{", "["))
+    # REAL FIX, based on actual evidence from the first run: a 200
+    # status + real content length is NOT proof of real data — this
+    # platform serves an empty React/Angular SPA shell (confirmed via
+    # the real CSP headers referencing azurewebsites.net) regardless
+    # of the URL's own criteria, and only a real browser executing that
+    # SPA's JS actually reaches real application data. Checking for a
+    # real, distinctive marker from the SPA's own confirmed rendered
+    # output ("results" count text) rather than trusting status alone.
+    has_real_data = "results" in body_lower and "citizen portal" not in body_lower[:200]
     print(f"  Looks like raw JSON: {looks_like_json}")
+    print(f"  Contains real application data (not just the SPA shell): {has_real_data}")
 
     if r.status_code == 200 and len(r.text) > 200:
         out_path = f"/tmp/agile_recon_{slug(name)}_plain_http.txt"
