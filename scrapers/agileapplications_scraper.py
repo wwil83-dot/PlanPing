@@ -369,40 +369,58 @@ class AgilePortal:
         clicks = 0
         while clicks < MAX_SHOW_MORE_CLICKS:
             try:
-                # REAL FIX (2026-08-21, round 3) — confirmed directly:
-                # the link genuinely exists in the DOM every single time
-                # (count=1, all 3 councils) but a single instant
-                # is_visible() check reported False consistently. Real
-                # markup confirms why: the wrapping element uses
-                # ng-show="params.count() <= params.total()" — a real
-                # AngularJS conditional that starts hidden by default
-                # until Angular's own digest cycle evaluates and updates
-                # it, which can genuinely take longer than an instant
-                # check allows. Using wait_for_selector's real, active
-                # polling (proper waiting, not just a point-in-time
-                # check) instead — same successful fix pattern just
-                # applied to statmap's East Staffordshire timing issue.
                 more_link = page.locator("a.sas-table-pagination-moreresults")
                 if await more_link.count() == 0:
                     if clicks == 0:
                         self._log(f"'Show more results' link not present at all "
                                   f"— all real results already fit on one page")
                     break
-                try:
-                    await page.wait_for_selector(
-                        "a.sas-table-pagination-moreresults",
-                        state="visible", timeout=8_000,
-                    )
-                except PlaywrightTimeout:
+
+                # REAL FIX (2026-08-21, round 5) — confirmed decisively:
+                # the real total (25/18/20) matches recon exactly, so
+                # the data genuinely exists and Angular's own count
+                # text already reflects it — this was never about stale
+                # data. The link's real DOM presence was also already
+                # confirmed (count=1) — Playwright's own strict
+                # visibility check was the only thing blocking progress,
+                # even after 8s of active waiting. Bypassing it
+                # entirely with a raw JS click, same successful pattern
+                # already used for Northgate's readonly-field fix
+                # earlier this session, since we know for certain the
+                # real element and its real click handler both exist.
+                clicked_via_js = await page.evaluate(
+                    """() => {
+                        const el = document.querySelector('a.sas-table-pagination-moreresults');
+                        if (el) { el.click(); return true; }
+                        return false;
+                    }"""
+                )
+                if not clicked_via_js:
                     if clicks == 0:
-                        self._log(f"⚠ 'Show more results' link exists but never "
-                                  f"became visible within 8s — genuinely no more "
-                                  f"real results to load, or a real rendering "
-                                  f"problem worth a closer look")
+                        self._log(f"⚠ Raw JS click found no element to click "
+                                  f"(inconsistent with the earlier count() "
+                                  f"check — worth a closer look if this happens "
+                                  f"again)")
                     break
-                await more_link.first.click(timeout=3000)
                 clicks += 1
                 await asyncio.sleep(1.5)
+
+                # Real, direct confirmation this click actually did
+                # something — check if the row count genuinely grew,
+                # not just that a click event fired. Scoped to the
+                # FIRST table only — this page has two confirmed
+                # duplicate <table> elements (a real responsive-view
+                # pattern), and an unscoped count would double-count
+                # every row.
+                real_row_count = await page.locator("table").first.locator("tr.animate-repeat").count()
+                if clicks == 1:
+                    self._log(f"After 1st JS click: {real_row_count} real "
+                              f"rows now in DOM (was 10)")
+                if real_row_count <= 10 and clicks >= 2:
+                    self._log(f"⚠ Row count still not growing after "
+                              f"{clicks} JS clicks — stopping, something "
+                              f"deeper than visibility is blocking this")
+                    break
             except Exception as e:
                 if clicks == 0:
                     self._log(f"⚠ 'Show more results' click attempt failed with "
