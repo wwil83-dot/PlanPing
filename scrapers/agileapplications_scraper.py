@@ -347,6 +347,21 @@ class AgilePortal:
         # results loaded) or a real safety cap is hit — same pagination
         # safety-net discipline as every other platform in this
         # project.
+        # REAL DIAGNOSTIC (2026-08-21, round 4) — before assuming this is
+        # still a rendering bug, get direct evidence of the REAL total
+        # count text already on the page at this exact moment. If it
+        # genuinely says "10 of 10" (not "10 of 25"), the show-more
+        # link correctly staying hidden is CORRECT behaviour — there's
+        # nothing more to load — not a bug at all.
+        try:
+            body_text = await page.locator("body").inner_text()
+            count_match = re.search(r"(\d+)\s+of\s+(\d+)\s+results", body_text)
+            if count_match:
+                shown, total = count_match.groups()
+                self._log(f"Real results count on page right now: {shown} of {total}")
+        except Exception:
+            pass
+
         MAX_SHOW_MORE_CLICKS = 20  # real safety cap — 20 clicks = up to
                                      # 200+10 initial = 210 real results,
                                      # comfortably above anything seen
