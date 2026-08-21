@@ -140,13 +140,82 @@ async def recon_one(browser, name: str, url: str):
         except Exception:
             continue
 
-    # Real, direct click on the confirmed "Weekly Lists" button
+    # REAL FIX (round 2 of round 2) — the first attempt's
+    # get_by_role("button", name="Weekly Lists") timed out completely,
+    # even though round 1's plain page.locator("button") DID find and
+    # print this exact button. Re-scanning real, current button state
+    # right before attempting anything, rather than trusting round 1's
+    # now-possibly-stale picture of the page.
+    print(f"\n  Real buttons visible right now (after cookie dismissal):")
+    real_button_texts = []
     try:
-        weekly_btn = page.get_by_role("button", name="Weekly Lists", exact=False)
-        await weekly_btn.click(timeout=10_000)
-        print(f"  Clicked 'Weekly Lists' tab")
+        buttons = page.locator("button")
+        count = await buttons.count()
+        for i in range(count):
+            el = buttons.nth(i)
+            try:
+                text = (await el.inner_text()).strip()
+                visible = await el.is_visible()
+                if text:
+                    real_button_texts.append(text)
+                    print(f"    {text!r} (visible={visible})")
+            except Exception:
+                pass
     except Exception as e:
-        print(f"  ⚠ Could not click 'Weekly Lists': {e}")
+        print(f"    ⚠ Real button re-scan error: {e}")
+
+    weekly_lists_present = any("weekly" in t.lower() for t in real_button_texts)
+    print(f"\n  'Weekly Lists' genuinely present right now: {weekly_lists_present}")
+
+    clicked = False
+
+    # Try 1 — a plain CSS/text locator, a different matching mechanism
+    # than get_by_role (which failed) — real, distinct fallback, not
+    # just retrying the same thing.
+    if not clicked:
+        try:
+            btn = page.locator("button", has_text="Weekly Lists")
+            if await btn.count() > 0:
+                await btn.first.click(timeout=8_000)
+                clicked = True
+                print(f"  Clicked 'Weekly Lists' via plain text-filtered locator")
+        except Exception as e:
+            print(f"  ⚠ Plain text-locator click failed: {e}")
+
+    # Try 2 — real possibility: "Weekly Lists" might be a sub-item that
+    # only becomes visible/interactable after expanding "Planning
+    # Applications" first (a common real nav pattern) — worth testing
+    # directly rather than assuming it's a flat, always-visible list.
+    if not clicked:
+        try:
+            print(f"  Trying: click 'Planning Applications' first, in case "
+                  f"'Weekly Lists' is a sub-item hidden until expanded")
+            pa_btn = page.locator("button", has_text="Planning Applications")
+            if await pa_btn.count() > 0:
+                await pa_btn.first.click(timeout=8_000)
+                await asyncio.sleep(1.5)
+                weekly_btn2 = page.locator("button", has_text="Weekly Lists")
+                if await weekly_btn2.count() > 0 and await weekly_btn2.first.is_visible():
+                    await weekly_btn2.first.click(timeout=8_000)
+                    clicked = True
+                    print(f"  Clicked 'Weekly Lists' after expanding "
+                          f"'Planning Applications' first")
+        except Exception as e:
+            print(f"  ⚠ Expand-then-click attempt failed: {e}")
+
+    if not clicked:
+        print(f"  ⚠ Could not click 'Weekly Lists' via any real attempt — "
+              f"saving current page state for direct inspection")
+        html = await page.content()
+        out_html = f"/tmp/statmap_weeklylist_recon_{slug(name)}_FAILED_click.html"
+        with open(out_html, "w", encoding="utf-8") as f:
+            f.write(html)
+        out_png = f"/tmp/statmap_weeklylist_recon_{slug(name)}_FAILED_click.png"
+        try:
+            await page.screenshot(path=out_png, full_page=True)
+        except Exception:
+            pass
+        print(f"  Saved: {out_html}, {out_png}")
         await context.close()
         return
 
