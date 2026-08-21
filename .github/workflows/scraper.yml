@@ -13,6 +13,8 @@ on:
     - cron: '55 7 * * *'  # northgate servlet-family nightly scrape (Hartlepool, High Peak, Staffordshire Moorlands)
     - cron: '0 8 * * *'   # northgate South Tyneside nightly scrape
     - cron: '5 8 * * *'   # NI Planning Portal nightly scrape
+    - cron: '8 8 * * *'   # agileapplications.co.uk nightly scrape (Middlesbrough, Flintshire, Cannock)
+    - cron: '12 8 * * *'  # statmap.co.uk/horizoNext nightly scrape (West Lindsey, East Staffordshire)
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     # CHANGED 2026-08-18 — both moved to a shared every-5-days cadence
@@ -1220,10 +1222,15 @@ jobs:
           retention-days: 14
 
   agileapplications_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live, matching every other new platform's first job
-    # this session before a confirmed clean production run.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'agileapplications_scraper'
+    # PROMOTED to the nightly schedule (2026-08-21) after a confirmed
+    # clean production run — 63 real applications saved across all 3
+    # councils (20+25+18), correct and efficient (0.5 minutes, early-
+    # exit pagination fix confirmed working). Manual trigger kept
+    # available too, same as every other platform's job, for ad-hoc
+    # reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'agileapplications_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '8 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -1248,10 +1255,15 @@ jobs:
         run: cd scrapers && python agileapplications_scraper.py
 
   statmap_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live, matching every other new platform's first job
-    # this session before a confirmed clean production run.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'statmap_scraper'
+    # PROMOTED to the nightly schedule (2026-08-21) after a confirmed
+    # clean production run — 63 real applications saved across both
+    # councils (42+21), both real timing issues (East Staffordshire's
+    # slow-render race, the MUI pagination click) fixed and confirmed
+    # working. Manual trigger kept available too, same as every other
+    # platform's job, for ad-hoc reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'statmap_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '12 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
