@@ -355,12 +355,34 @@ class AgilePortal:
         while clicks < MAX_SHOW_MORE_CLICKS:
             try:
                 more_link = page.locator("a.sas-table-pagination-moreresults")
-                if await more_link.count() == 0 or not await more_link.first.is_visible(timeout=1000):
+                link_count = await more_link.count()
+                if link_count == 0:
+                    if clicks == 0:
+                        self._log(f"⚠ 'Show more results' link not found at all "
+                                  f"(0 matches) — either genuinely all results "
+                                  f"already fit on one page, or the real page "
+                                  f"hadn't finished rendering yet")
+                    break
+                is_visible = await more_link.first.is_visible(timeout=1000)
+                if not is_visible:
+                    if clicks == 0:
+                        self._log(f"⚠ 'Show more results' link exists "
+                                  f"({link_count} match(es)) but is NOT visible — "
+                                  f"real reason unknown, worth checking a "
+                                  f"screenshot if this keeps happening")
                     break
                 await more_link.first.click(timeout=3000)
                 clicks += 1
-                await asyncio.sleep(1)
-            except Exception:
+                await asyncio.sleep(1.5)
+            except Exception as e:
+                # REAL FIX (2026-08-21, round 2) — the previous version
+                # silently swallowed whatever real error occurred here,
+                # which is exactly why the first production run showed
+                # zero "Clicked 'Show more results'" log lines with no
+                # explanation at all. Printing the real exception now.
+                if clicks == 0:
+                    self._log(f"⚠ 'Show more results' click attempt failed with "
+                              f"a real exception: {e}")
                 break
         if clicks > 0:
             self._log(f"Clicked 'Show more results' {clicks} time(s) to load all real rows")
