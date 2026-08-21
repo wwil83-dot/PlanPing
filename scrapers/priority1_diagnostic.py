@@ -83,6 +83,16 @@ TARGETS = [
      "https://planninganddevelopment.nelincs.gov.uk/online-applications"),
     ("Derby City Council",
      "https://eplanning.derby.gov.uk/online-applications"),
+    # ADDED 2026-08-21 — real, direct evidence: a real browser's
+    # DevTools Network tab showed Highland's Remote Address as
+    # 46.249.197.178:443 — the EXACT SAME IP confirmed for Derby
+    # earlier in this investigation. Same real server. Worth testing
+    # directly whether Highland shows the identical zero-network-
+    # activity block signature from this runner, confirming (or
+    # disproving) that this is the same underlying block, not the
+    # separate Cloudflare-category issue an old comment guessed at.
+    ("Highland Council",
+     "https://wam.highland.gov.uk/wam"),
 ]
 
 network_log: list[dict] = []
