@@ -47,8 +47,8 @@ REAL, CONFIRMED (not guessed):
 """
 
 COUNCIL_DB_IDS: dict[str, int | None] = {
-    "West Lindsey District Council":       None,
-    "East Staffordshire Borough Council":  None,
+    "West Lindsey District Council":       489,
+    "East Staffordshire Borough Council":  490,
 }
 
 # (council_name, base_url)
