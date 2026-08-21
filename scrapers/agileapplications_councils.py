@@ -48,9 +48,9 @@ REAL, CONFIRMED (not guessed):
 """
 
 COUNCIL_DB_IDS: dict[str, int | None] = {
-    "Middlesbrough Council":              None,
-    "Flintshire County Council":          None,
-    "Cannock Chase District Council":     None,
+    "Middlesbrough Council":              202,
+    "Flintshire County Council":          487,
+    "Cannock Chase District Council":     488,
 }
 
 # (council_name, agileapplications council-slug)
