@@ -37,7 +37,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, scrape_ni, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test, brightdata_browser_api_test, ni_planningsystemni_recon, getapplications_family_recon, scrape_getapplications, idox_waf_recheck, priority1_diagnostic, scraperapi_priority1_test, priority1_diagnostic_us_runner, derby_results_page_test, northgate_servlet_family_recon, northgate_servlet_scraper, northgate_south_tyneside_scraper]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, scrape_ni, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test, brightdata_browser_api_test, ni_planningsystemni_recon, getapplications_family_recon, scrape_getapplications, idox_waf_recheck, priority1_diagnostic, scraperapi_priority1_test, priority1_diagnostic_us_runner, derby_results_page_test, northgate_servlet_family_recon, northgate_servlet_scraper, northgate_south_tyneside_scraper, webshare_priority1_test]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -1082,6 +1082,36 @@ jobs:
           MAX_MINUTES: "15"
           DAYS_BACK: "31"
         run: cd scrapers && python northgate_south_tyneside_scraper.py
+
+  webshare_priority1_test:
+    # ubuntu-latest is fine here (unlike every other Playwright-based
+    # diagnostic in this file) — the whole point of a proxy is that IT
+    # provides the real exit IP, not whichever machine initiates the
+    # connection. Same reasoning as scraperapi_priority1_test.
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'webshare_priority1_test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install playwright
+      - run: playwright install --with-deps chromium
+      - name: Test Webshare residential proxy against Derby + NE Lincolnshire
+        env:
+          WEBSHARE_PROXY_HOST: ${{ secrets.WEBSHARE_PROXY_HOST }}
+          WEBSHARE_PROXY_PORT: ${{ secrets.WEBSHARE_PROXY_PORT }}
+          WEBSHARE_PROXY_USERNAME: ${{ secrets.WEBSHARE_PROXY_USERNAME }}
+          WEBSHARE_PROXY_PASSWORD: ${{ secrets.WEBSHARE_PROXY_PASSWORD }}
+        run: cd scrapers && python webshare_priority1_test.py
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webshare-priority1-test-output
+          path: /tmp/webshare_proxy_test_*
+          retention-days: 14
 
   northgate_url_healthcheck:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_url_healthcheck'
