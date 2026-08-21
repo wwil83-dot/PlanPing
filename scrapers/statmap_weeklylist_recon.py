@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """
-PlanFind — statmap.co.uk/horizoNext, round 2: real 'Weekly Lists' tab
-recon (2026-08-21).
+PlanFind — statmap.co.uk/horizoNext, round 4: real weeklyListDate URL
+test (2026-08-21).
 
-Round 1 loaded the default Property Search tab (address/postcode/UPRN
-lookup — not useful for us) and only confirmed a real "Weekly Lists"
-button exists, matching the user's own original research note
-("BESPOKE with date range searches and weekly searches"). This round
-clicks through to that real tab specifically and dumps its actual real
-form structure — nothing assumed from round 1's incomplete picture.
+Round 3 revealed the real "Weekly Lists" tab doesn't show application
+data directly at all — it shows a short list of weekly REPORT entries,
+each linking to a real, clean URL:
+  /horizoNext/publicportal/planningapplications/?weeklyListDate=YYYY-MM-DD
+
+That's a genuinely different, more promising lead than the "Download"
+column initially suggested (a worry that this needed real PDF parsing)
+— this URL points at /planningapplications/, the same real search area
+confirmed as its own tab in round 1. Testing directly whether this URL
+returns real, populated individual application data, the same way the
+agileapplications.co.uk family did with a direct URL.
 """
 import asyncio
 from datetime import datetime, timezone
@@ -27,11 +32,13 @@ CONTEXT_OPTIONS = {
     "ignore_https_errors": True,
 }
 
+# Real, confirmed dates from round 3's actual results — using the same
+# week that's already confirmed to exist for each council
 TARGETS = [
     ("West Lindsey District Council",
-     "https://westlindsey-publicportal.statmap.co.uk/horizoNext/publicportal"),
+     "https://westlindsey-publicportal.statmap.co.uk/horizoNext/publicportal/planningapplications/?weeklyListDate=2026-08-17"),
     ("East Staffordshire Borough Council",
-     "https://eaststaffs-publicportal.statmap.co.uk/horizoNext/publicportal"),
+     "https://eaststaffs-publicportal.statmap.co.uk/horizoNext/publicportal/planningapplications/?weeklyListDate=2026-08-17"),
 ]
 
 
@@ -39,77 +46,9 @@ def slug(name: str) -> str:
     return name.lower().replace(" ", "_")
 
 
-async def dump_full_page_structure(page):
-    print(f"\n  Real form fields on THIS tab:")
-    try:
-        inputs = page.locator("input")
-        count = await inputs.count()
-        for i in range(count):
-            el = inputs.nth(i)
-            try:
-                itype = await el.get_attribute("type") or ""
-                name = await el.get_attribute("name") or ""
-                el_id = await el.get_attribute("id") or ""
-                placeholder = await el.get_attribute("placeholder") or ""
-                if itype.lower() not in ("hidden",):
-                    print(f"    <input> type={itype!r} name={name!r} id={el_id!r} placeholder={placeholder!r}")
-            except Exception:
-                pass
-    except Exception as e:
-        print(f"    ⚠ input dump error: {e}")
-
-    try:
-        selects = page.locator("select")
-        count = await selects.count()
-        for i in range(count):
-            el = selects.nth(i)
-            try:
-                name = await el.get_attribute("name") or ""
-                el_id = await el.get_attribute("id") or ""
-                options = await el.locator("option").all_text_contents()
-                print(f"    <select> name={name!r} id={el_id!r} options={options[:15]}")
-            except Exception:
-                pass
-    except Exception as e:
-        print(f"    ⚠ select dump error: {e}")
-
-    # Real, distinctive react/mui-style date pickers often use
-    # role="textbox" or a specific aria-label rather than a plain
-    # <input type=date> — checking broadly rather than assuming one
-    # specific real pattern
-    try:
-        aria_els = page.locator("[aria-label]")
-        count = await aria_els.count()
-        for i in range(min(count, 30)):
-            el = aria_els.nth(i)
-            try:
-                label = await el.get_attribute("aria-label") or ""
-                tag = await el.evaluate("el => el.tagName")
-                if label and "date" in label.lower():
-                    print(f"    <{tag.lower()}> aria-label={label!r}")
-            except Exception:
-                pass
-    except Exception as e:
-        print(f"    ⚠ aria-label dump error: {e}")
-
-    try:
-        buttons = page.locator("button")
-        count = await buttons.count()
-        for i in range(min(count, 20)):
-            el = buttons.nth(i)
-            try:
-                text = (await el.inner_text()).strip()
-                if text:
-                    print(f"    <button> text={text!r}")
-            except Exception:
-                pass
-    except Exception as e:
-        print(f"    ⚠ button dump error: {e}")
-
-
 async def recon_one(browser, name: str, url: str):
     print(f"\n{'=' * 70}")
-    print(f"WEEKLY LISTS RECON: {name}")
+    print(f"WEEKLYLISTDATE URL RECON: {name}")
     print(f"URL: {url}")
     print("=" * 70)
 
@@ -127,66 +66,55 @@ async def recon_one(browser, name: str, url: str):
         await context.close()
         return
 
-    # Real cookie banner confirmed present in round 1 — dismiss it
-    # before any interaction, same discipline as the Northgate recon.
     for label in ["Accept additional cookies", "Accept"]:
         try:
             btn = page.get_by_role("button", name=label, exact=False)
             if await btn.count() > 0 and await btn.first.is_visible(timeout=2000):
                 await btn.first.click()
                 await asyncio.sleep(1)
-                print(f"  Dismissed cookie banner via {label!r}")
                 break
         except Exception:
             continue
 
-    # Real, direct click on the confirmed "Weekly Lists" button
-    try:
-        weekly_btn = page.get_by_role("button", name="Weekly Lists", exact=False)
-        await weekly_btn.click(timeout=10_000)
-        print(f"  Clicked 'Weekly Lists' tab")
-    except Exception as e:
-        print(f"  ⚠ Could not click 'Weekly Lists': {e}")
-        await context.close()
-        return
-
-    try:
-        await page.wait_for_load_state("networkidle", timeout=15_000)
-    except PlaywrightTimeout:
-        pass
     await asyncio.sleep(2)  # real, deliberate pause for any client-side
-                             # panel transition to finish rendering
+                             # rendering to finish
 
     title = await page.title()
-    print(f"  Real page title after click: {title!r}")
-    print(f"  Real URL after click: {page.url}")
+    print(f"  Real page title: {title!r}")
+    print(f"  Real final URL: {page.url}")
 
     html = await page.content()
-    out_html = f"/tmp/statmap_weeklylist_recon_{slug(name)}.html"
+    out_html = f"/tmp/statmap_weeklydate_recon_{slug(name)}.html"
     with open(out_html, "w", encoding="utf-8") as f:
         f.write(html)
-    out_png = f"/tmp/statmap_weeklylist_recon_{slug(name)}.png"
+    out_png = f"/tmp/statmap_weeklydate_recon_{slug(name)}.png"
     try:
         await page.screenshot(path=out_png, full_page=True)
     except Exception:
         pass
     print(f"  Saved: {out_html}, {out_png}")
 
-    await dump_full_page_structure(page)
-
     body_text = ""
     try:
-        body_text = (await page.locator("body").inner_text())[:1500]
+        body_text = (await page.locator("body").inner_text())[:2500]
     except Exception:
         pass
-    print(f"\n  Real visible body text (first 1500 chars): {body_text!r}")
+    print(f"\n  Real visible body text (first 2500 chars): {body_text!r}")
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+    rows = soup.find_all("div", attrs={"role": "row"})
+    print(f"\n  Real MUI DataGrid role=row elements found: {len(rows)}")
+    if len(rows) > 1:
+        print(f"  First real data row (row 2, since row 1 is the header):")
+        print(f"  {str(rows[1])[:1000]}")
 
     await context.close()
 
 
 async def main():
-    print(f"[{datetime.now(timezone.utc).isoformat()}] statmap Weekly Lists "
-          f"round-2 recon — {len(TARGETS)} councils\n")
+    print(f"[{datetime.now(timezone.utc).isoformat()}] statmap weeklyListDate "
+          f"URL recon (round 4) — {len(TARGETS)} councils\n")
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
@@ -200,10 +128,6 @@ async def main():
     print(f"\n{'=' * 70}")
     print("RECON COMPLETE")
     print("=" * 70)
-    print("Download the workflow artifact and read the saved HTML/screenshots")
-    print("directly — particularly whether real date fields appear, and what")
-    print("their actual real field names/interaction pattern is, before writing")
-    print("any scraper code.")
 
 
 if __name__ == "__main__":
