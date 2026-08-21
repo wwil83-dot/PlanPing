@@ -102,9 +102,17 @@ async def recon_one(browser, name: str, url: str):
         print(f"  ⚠ Could not fill date-created-to: {e}")
 
     try:
-        search_btn = page.locator("button", has_text="Search")
+        # REAL FIX: has_text does a SUBSTRING match by default, and
+        # "Property Search" literally contains "Search" as a substring
+        # — the previous version's .first grabbed that nav tab button
+        # instead of the real submit button (it appears earlier in DOM
+        # order), producing Property Search's own form instead of real
+        # Weekly List results. Using an exact regex match this time so
+        # only the literal, standalone "Search" button can match.
+        import re
+        search_btn = page.locator("button").filter(has_text=re.compile(r"^Search$"))
         await search_btn.first.click(timeout=10_000)
-        print(f"  Clicked real 'Search' button")
+        print(f"  Clicked real 'Search' button (exact match, not substring)")
     except Exception as e:
         print(f"  ⚠ Could not click Search: {e}")
         await context.close()
