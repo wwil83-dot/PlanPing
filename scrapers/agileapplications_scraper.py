@@ -355,17 +355,26 @@ class AgilePortal:
         # nothing more to load — not a bug at all.
         try:
             body_text = await page.locator("body").inner_text()
-            count_match = re.search(r"(\d+)\s+of\s+(\d+)\s+results", body_text)
-            if count_match:
-                shown, total = count_match.groups()
-                self._log(f"Real results count on page right now: {shown} of {total}")
         except Exception:
-            pass
+            body_text = ""
+        count_match = re.search(r"(\d+)\s+of\s+(\d+)\s+results", body_text)
+        if count_match:
+            shown, total = count_match.groups()
+            self._log(f"Real results count on page right now: {shown} of {total}")
 
         MAX_SHOW_MORE_CLICKS = 20  # real safety cap — 20 clicks = up to
                                      # 200+10 initial = 210 real results,
                                      # comfortably above anything seen
                                      # in recon (25 was the largest)
+        # Real, direct total already confirmed above (e.g. "25 of 25")
+        # — used as a real early-exit target so the loop doesn't
+        # wastefully click through the full safety cap every time once
+        # all real data is already loaded (confirmed directly: a
+        # single click can jump straight to the full total in one
+        # shot, matching this platform's real "load 10 more" behaviour
+        # sometimes rounding up past the exact requested increment).
+        confirmed_total = int(count_match.group(2)) if count_match else None
+
         clicks = 0
         while clicks < MAX_SHOW_MORE_CLICKS:
             try:
@@ -420,6 +429,12 @@ class AgilePortal:
                     self._log(f"⚠ Row count still not growing after "
                               f"{clicks} JS clicks — stopping, something "
                               f"deeper than visibility is blocking this")
+                    break
+                if confirmed_total is not None and real_row_count >= confirmed_total:
+                    self._log(f"Reached the confirmed real total ({real_row_count} "
+                              f"of {confirmed_total}) after {clicks} click(s) — "
+                              f"stopping early rather than wastefully clicking "
+                              f"through the remaining safety-cap allowance")
                     break
             except Exception as e:
                 if clicks == 0:
