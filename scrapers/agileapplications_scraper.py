@@ -354,32 +354,41 @@ class AgilePortal:
         clicks = 0
         while clicks < MAX_SHOW_MORE_CLICKS:
             try:
+                # REAL FIX (2026-08-21, round 3) — confirmed directly:
+                # the link genuinely exists in the DOM every single time
+                # (count=1, all 3 councils) but a single instant
+                # is_visible() check reported False consistently. Real
+                # markup confirms why: the wrapping element uses
+                # ng-show="params.count() <= params.total()" — a real
+                # AngularJS conditional that starts hidden by default
+                # until Angular's own digest cycle evaluates and updates
+                # it, which can genuinely take longer than an instant
+                # check allows. Using wait_for_selector's real, active
+                # polling (proper waiting, not just a point-in-time
+                # check) instead — same successful fix pattern just
+                # applied to statmap's East Staffordshire timing issue.
                 more_link = page.locator("a.sas-table-pagination-moreresults")
-                link_count = await more_link.count()
-                if link_count == 0:
+                if await more_link.count() == 0:
                     if clicks == 0:
-                        self._log(f"⚠ 'Show more results' link not found at all "
-                                  f"(0 matches) — either genuinely all results "
-                                  f"already fit on one page, or the real page "
-                                  f"hadn't finished rendering yet")
+                        self._log(f"'Show more results' link not present at all "
+                                  f"— all real results already fit on one page")
                     break
-                is_visible = await more_link.first.is_visible(timeout=1000)
-                if not is_visible:
+                try:
+                    await page.wait_for_selector(
+                        "a.sas-table-pagination-moreresults",
+                        state="visible", timeout=8_000,
+                    )
+                except PlaywrightTimeout:
                     if clicks == 0:
-                        self._log(f"⚠ 'Show more results' link exists "
-                                  f"({link_count} match(es)) but is NOT visible — "
-                                  f"real reason unknown, worth checking a "
-                                  f"screenshot if this keeps happening")
+                        self._log(f"⚠ 'Show more results' link exists but never "
+                                  f"became visible within 8s — genuinely no more "
+                                  f"real results to load, or a real rendering "
+                                  f"problem worth a closer look")
                     break
                 await more_link.first.click(timeout=3000)
                 clicks += 1
                 await asyncio.sleep(1.5)
             except Exception as e:
-                # REAL FIX (2026-08-21, round 2) — the previous version
-                # silently swallowed whatever real error occurred here,
-                # which is exactly why the first production run showed
-                # zero "Clicked 'Show more results'" log lines with no
-                # explanation at all. Printing the real exception now.
                 if clicks == 0:
                     self._log(f"⚠ 'Show more results' click attempt failed with "
                               f"a real exception: {e}")
