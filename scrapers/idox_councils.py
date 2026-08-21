@@ -288,8 +288,16 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # YORKSHIRE
     # -------------------------------------------------------------------------
-    ("Sheffield City Council",
-     "https://planningapps.sheffield.gov.uk/online-applications"),
+    # BROKEN — confirmed 2026-08-19: NET::ERR_CERT_AUTHORITY_INVALID under
+    # active HSTS enforcement (verified directly via a real browser — no
+    # "proceed anyway" option offered at all, since HSTS blocks that). A
+    # genuine, broken certificate on Sheffield's own server — not
+    # something any of us can fix, on any infrastructure, with any proxy.
+    # Needs Sheffield's own IT team to renew/reconfigure their cert.
+    # coverage_source set to 'manual_link' in Supabase to match — see
+    # accompanying SQL.
+    # ("Sheffield City Council",
+    #  "https://planningapps.sheffield.gov.uk/online-applications"),
 
     ("Bradford Metropolitan District Council",
      "https://planning.bradford.gov.uk/online-applications"),
@@ -615,8 +623,20 @@ IDOX_COUNCILS = [
     # ("Leicester City Council",
     #  "https://publicaccess.leicester.gov.uk/online-applications"),
 
-    ("Derby City Council",
-     "https://eplanning.derby.gov.uk/online-applications"),
+    # BROKEN — confirmed 2026-08-19 through extensive real testing: a
+    # genuine datacenter-ASN block. Zero network activity (not a WAF
+    # challenge page — a real, total connection hang) from every cloud
+    # IP tested: DigitalOcean UK, Azure US (ubuntu-latest), even a paid
+    # Webshare "Static Residential" proxy (later confirmed via industry
+    # sources to be datacenter-hosted despite the label). Loads
+    # completely normally from a real home ISP and from Surfshark VPN
+    # in two different countries — confirming this is genuinely about
+    # IP type, not geography. Real server IP (46.249.197.178) also
+    # confirmed shared with Highland Council — see that entry.
+    # coverage_source set to 'manual_link' in Supabase to match — see
+    # accompanying SQL.
+    # ("Derby City Council",
+    #  "https://eplanning.derby.gov.uk/online-applications"),
 
     ("Nottingham City Council",
      "https://publicaccess.nottinghamcity.gov.uk/online-applications"),
@@ -630,8 +650,13 @@ IDOX_COUNCILS = [
     # differently over HTTP (extra redirect overhead, some environments
     # handle it less reliably than a direct HTTPS connection) — worth
     # treating this as a real potential fix, not just a cosmetic change.
-    ("Bassetlaw District Council",
-     "https://publicaccess.bassetlaw.gov.uk/online-applications"),
+    # BROKEN — confirmed 2026-08-19: same real, broken TLS certificate
+    # problem as Sheffield (NET::ERR_CERT_AUTHORITY_INVALID under HSTS
+    # enforcement). Not fixable by us — needs Bassetlaw's own IT team.
+    # coverage_source set to 'manual_link' in Supabase to match — see
+    # accompanying SQL.
+    # ("Bassetlaw District Council",
+    #  "https://publicaccess.bassetlaw.gov.uk/online-applications"),
 
     ("Broxtowe Borough Council",
      "https://publicaccess.broxtowe.gov.uk/online-applications"),
@@ -1060,8 +1085,13 @@ IDOX_COUNCILS = [
     ("East Lindsey District Council",
      "https://publicaccess.e-lindsey.gov.uk/online-applications"),
 
-    ("North East Lincolnshire Council",
-     "https://planninganddevelopment.nelincs.gov.uk/online-applications"),
+    # BROKEN — confirmed 2026-08-19: same real datacenter-ASN block as
+    # Derby (zero network activity from every cloud IP tested, including
+    # a paid residential proxy; loads fine from home ISP/VPN). See
+    # Derby's entry for the full evidence trail. coverage_source set to
+    # 'manual_link' in Supabase to match — see accompanying SQL.
+    # ("North East Lincolnshire Council",
+    #  "https://planninganddevelopment.nelincs.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # NORFOLK
@@ -1562,9 +1592,18 @@ IDOX_COUNCILS = [
     # Note: Midlothian, Renfrewshire not on monthly list (weekly only)
     # Note: West Dunbartonshire confirmed NOT Idox (bespoke ASP system) — skip permanently
     # -------------------------------------------------------------------------
-    # NOTE: Edinburgh monthly list consistently times out — using weekly list
-    ("City of Edinburgh Council",
-     "https://citydev-portal.edinburgh.gov.uk/idoxpa-web", "weekly"),
+    # BROKEN — confirmed 2026-08-21 via idox_waf_recheck.py: still a
+    # real, total connection timeout (45s, no response) from the UK
+    # runner, same shape as Highland's own confirmed block below. Not
+    # run through the deeper priority1_diagnostic.py zero-network-
+    # activity check specifically (only Highland was), but the same
+    # real symptom (a real browser loads it fine, our infrastructure
+    # gets nothing at all) strongly suggests the same real datacenter-
+    # ASN block category as Derby/NE Lincolnshire/Highland. coverage_
+    # source set to 'manual_link' in Supabase to match — see
+    # accompanying SQL.
+    # ("City of Edinburgh Council",
+    #  "https://citydev-portal.edinburgh.gov.uk/idoxpa-web", "weekly"),
 
     # NOTE: Dundee uses idoxwam.dundeecity.gov.uk (not portal.dundeecity.gov.uk)
     ("Dundee City Council",
@@ -1578,9 +1617,17 @@ IDOX_COUNCILS = [
     ("Aberdeen City Council",
      "https://publicaccess.aberdeencity.gov.uk/online-applications"),
 
-    # NOTE: Highland uses /wam path (not /online-applications) + weekly list mode
-    ("Highland Council",
-     "https://wam.highland.gov.uk/wam", "weekly"),
+    # BROKEN — confirmed 2026-08-21 via priority1_diagnostic.py: real,
+    # total connection hang (120s, ZERO network activity — not a WAF
+    # challenge page). Real DevTools Network tab (checked directly by
+    # the person running this project) confirmed this council's Remote
+    # Address is 46.249.197.178:443 — the EXACT SAME real server IP as
+    # Derby City Council. Same real datacenter-ASN block, same evidence
+    # trail (see Derby's entry) — not the separate Cloudflare-category
+    # issue an old comment elsewhere guessed at. coverage_source set to
+    # 'manual_link' in Supabase to match — see accompanying SQL.
+    # ("Highland Council",
+    #  "https://wam.highland.gov.uk/wam", "weekly"),
 
     # NOTE: Fife uses /online path (not /online-applications, /publicaccess or /idoxpa-web)
     ("Fife Council",
