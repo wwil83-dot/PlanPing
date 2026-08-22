@@ -1517,8 +1517,18 @@ IDOX_COUNCILS = [
     ("London Borough of Greenwich",
      "https://planning.royalgreenwich.gov.uk/online-applications"),
 
-    ("London Borough of Bromley",
-     "https://searchapplications.bromley.gov.uk/online-applications"),
+    # BROKEN — confirmed 2026-08-22 via direct diagnostic
+    # (bromley_platform_check.py): a full 30s navigation timeout, zero
+    # response at all — a genuinely dead/decommissioned subdomain, not
+    # a WAF block. Bromley has migrated to Arcus, confirmed via a real,
+    # clean 200 response and genuine "Welcome to the London Borough of
+    # Bromley Council Public Register" text at
+    # https://planningaccess.bromley.gov.uk/pr/s — see the real, active
+    # entry in arcus_councils.py (same council_id=230). This Idox entry
+    # was a genuine, real duplicate risk before being caught — both
+    # were active simultaneously under the same council_id.
+    # ("London Borough of Bromley",
+    #  "https://searchapplications.bromley.gov.uk/online-applications"),
 
     ("London Borough of Croydon",
      "https://publicaccess3.croydon.gov.uk/online-applications"),
