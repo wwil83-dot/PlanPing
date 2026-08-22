@@ -266,6 +266,19 @@
     // actually follows. A bare trailing designation word, with
     // nothing after it, needs the same treatment.
     s = s.replace(/\s+(city|county|borough|district)$/i, '');
+    // BUG FIX (2026-08-22), found via a real user report that "Kings
+    // Lynn and West Norfolk" wasn't showing as live on the coverage
+    // map. Traced to a genuine regex flaw, not a naming-structure
+    // difference like Newcastle's case: the final collapse step below
+    // REPLACES any non-alphanumeric character with a space, which
+    // splits "king's" into two separate words ("king" + "s") instead
+    // of joining them into "kings" — breaking the match against our
+    // own DB's apostrophe-free spelling. Stripping apostrophes (both
+    // straight ' and typographic ’) entirely first, before that
+    // generic collapse ever runs, fixes this specific case and any
+    // other real council name with an apostrophe, not just a one-off
+    // alias for this single council.
+    s = s.replace(/['’]/g, '');
     // Collapse remaining whitespace/punctuation differences
     s = s.replace(/[^a-z0-9]+/g, ' ').trim();
     return s;
