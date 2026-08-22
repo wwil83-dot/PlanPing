@@ -120,6 +120,15 @@ def _normalise_status(status_raw: str, decision_raw: str, council_name: str) -> 
     if not d:
         return "pending"
 
+    # ADDED 2026-08-22 — real, confirmed value from Runnymede: "No
+    # objection" didn't match any existing keyword, defaulting
+    # incorrectly to pending despite being a genuine, real decided
+    # outcome. Same real precedent already established for statmap's
+    # East Staffordshire data ("No Objection" -> approved) — a
+    # consultation-style "no objection" response is functionally
+    # approved-adjacent, not still pending.
+    if "no objection" in d:
+        return "approved"
     if any(x in d for x in ("approv", "grant", "permit", "allow")):
         return "approved"
     if any(x in d for x in ("refus", "reject", "dismiss")):
@@ -350,6 +359,30 @@ class NorthgatePortal:
             await page.wait_for_load_state("networkidle", timeout=15_000)
         except PlaywrightTimeout:
             pass
+
+        # ADDED 2026-08-22 — real, confirmed cause of Conwy's "element
+        # is not visible" failure on the exact same #rbRange field that
+        # works fine for Runnymede: no overlay-dismissal logic existed
+        # in this file at all. Real evidence from elsewhere in this
+        # project (South Tyneside, Northgate servlet family) confirms
+        # different councils on the same underlying platform can have
+        # genuinely different cookie-consent implementations — one
+        # council's page can have a real blocking overlay the other
+        # doesn't. Reusing the same, already-proven dismissal pattern
+        # rather than reinventing it.
+        for selector in ["#ivcb-overlay button", "#ivcb-overlay .accept",
+                          "button:has-text('Accept')", "button:has-text('I agree')",
+                          "button:has-text('Close')", "[id*='cookie'] button"]:
+            try:
+                el = page.locator(selector).first
+                if await el.count() > 0 and await el.is_visible(timeout=2000):
+                    await el.click(timeout=3000)
+                    await asyncio.sleep(1)
+                    print(f"    [{self.council_name}] Dismissed a real overlay/cookie "
+                          f"banner via {selector!r}")
+                    break
+            except Exception:
+                continue
 
         # CONFIRMED real field IDs (Runnymede) — genuinely working form-
         # fill + submit, ASP.NET postback handled naturally by Playwright
