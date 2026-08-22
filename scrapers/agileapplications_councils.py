@@ -51,9 +51,9 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     "Middlesbrough Council":              202,
     "Flintshire County Council":          487,
     "Cannock Chase District Council":     488,
-    "Rugby Borough Council":              None,
-    "Dudley Metropolitan Borough Council": None,
-    "Peterborough City Council":           None,
+    "Rugby Borough Council":              491,
+    "Dudley Metropolitan Borough Council": 191,
+    "Peterborough City Council":           216,
 }
 
 # (council_name, agileapplications council-slug)
