@@ -42,15 +42,29 @@ NORTHGATE_COUNCILS = [
     # Peak's still-unbuilt bespoke flow, NOT this GeneralSearch.aspx
     # pattern — deliberately not added here, needs its own real build).
     ("Conwy County Borough Council", "https://npe.conwy.gov.uk/Northgate/EnglishPlanningExplorer/generalsearch.aspx"),
+
+    # RE-ADDED 2026-08-22 — this same council is documented ABOVE in
+    # this file's own docstring as previously timing out with no error
+    # page on two separate recon attempts, before the UK proxy
+    # (introduced ~2026-08-10) existed. That exact signature (a silent
+    # hang, no error page at all) matches several other Idox councils
+    # this project confirmed were stale, pre-proxy blocks rather than
+    # permanent ones once actually re-tested (Tonbridge, Solihull, North
+    # East Derbyshire, Bolsover all cleared this way). Worth a genuine
+    # retry rather than assuming the old timeout still holds — but
+    # given the real prior history, this should get one real, isolated
+    # test run before being trusted on the nightly schedule, same
+    # discipline as every other re-enabled council.
+    ("Tamworth Borough Council", "https://planning.tamworth.gov.uk/northgate/planningexplorer/generalsearch.aspx"),
 ]
 
 # Hardcoded IDs — set once a real councils-table row exists (see the
 # INSERT SQL delivered alongside this file). Runnymede has no existing
 # Idox/Arcus/Civica row to reuse — genuinely new to the whole system.
-# Conwy likewise genuinely new — no COUNCIL_DB_IDS entry yet, relies on
-# northgate_scraper.py's live name-match fallback until a real id is
-# confirmed and added explicitly (same approach as this session's new
-# Idox additions).
+# Conwy and Tamworth likewise genuinely new — no COUNCIL_DB_IDS entry
+# yet for either, relies on northgate_scraper.py's live name-match
+# fallback until a real id is confirmed and added explicitly (same
+# approach as this session's new Idox additions).
 COUNCIL_DB_IDS: dict[str, int] = {
     "Runnymede Borough Council": 404,
 }
