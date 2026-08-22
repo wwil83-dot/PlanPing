@@ -73,9 +73,9 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     "Cheshire East Council":                      184,
     "Denbighshire County Council":                321,
     "Stoke-on-Trent City Council":                250,
-    "Nuneaton and Bedworth Borough Council":      None,
-    "Coventry City Council":                      None,
-    "Breckland Council":                          None,
+    "Nuneaton and Bedworth Borough Council":      494,
+    "Coventry City Council":                      187,
+    "Breckland Council":                          496,
 }
 
 # (council_name_as_in_supabase_db, base_url — host only, no path)
