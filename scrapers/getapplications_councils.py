@@ -73,6 +73,9 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     "Cheshire East Council":                      184,
     "Denbighshire County Council":                321,
     "Stoke-on-Trent City Council":                250,
+    "Nuneaton and Bedworth Borough Council":      None,
+    "Coventry City Council":                      None,
+    "Breckland Council":                          None,
 }
 
 # (council_name_as_in_supabase_db, base_url — host only, no path)
@@ -86,6 +89,9 @@ GETAPPLICATIONS_COUNCILS = [
     ("Cheshire East Council",                "https://pa.cheshireeast.gov.uk"),
     ("Denbighshire County Council",          "https://planningandpublicprotection.denbighshire.gov.uk"),
     ("Stoke-on-Trent City Council",          "https://development.stoke.gov.uk"),
+    ("Nuneaton and Bedworth Borough Council", "https://idoxcloud.nuneatonandbedworth.gov.uk"),
+    ("Coventry City Council",                "https://planandregulatory.coventry.gov.uk"),
+    ("Breckland Council",                    "https://publicportal.breckland.gov.uk"),
 ]
 
 
@@ -108,7 +114,10 @@ VALUES
   ('Wirral Metropolitan Borough Council','wirral-metropolitan-borough-council','getapplications','england','https://online.wirral.gov.uk/planning/index.html','pending',true),
   ('Cheshire East Council','cheshire-east-council','getapplications','england','https://pa.cheshireeast.gov.uk/planning/index.html','pending',true),
   ('Denbighshire County Council','denbighshire-county-council','getapplications','wales','https://planningandpublicprotection.denbighshire.gov.uk/planning/index.html','pending',true),
-  ('Stoke-on-Trent City Council','stoke-on-trent-city-council','getapplications','england','https://development.stoke.gov.uk/planning/index.html','pending',true)
+  ('Stoke-on-Trent City Council','stoke-on-trent-city-council','getapplications','england','https://development.stoke.gov.uk/planning/index.html','pending',true),
+  ('Nuneaton and Bedworth Borough Council','nuneaton-and-bedworth-borough-council','getapplications','england','https://idoxcloud.nuneatonandbedworth.gov.uk/planning/index.html','pending',true),
+  ('Coventry City Council','coventry-city-council','getapplications','england','https://planandregulatory.coventry.gov.uk/planning/index.html','pending',true),
+  ('Breckland Council','breckland-council','getapplications','england','https://publicportal.breckland.gov.uk/planning/index.html','pending',true)
 ON CONFLICT (name) DO UPDATE SET
   system = 'getapplications',
   active = true,
