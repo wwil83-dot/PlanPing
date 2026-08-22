@@ -1800,6 +1800,27 @@ IDOX_COUNCILS = [
     ("South Kesteven District Council",
      "https://prod.publicaccess.southkesteven.gov.uk/online-applications"),
 
+    # -------------------------------------------------------------------------
+    # ADDED 2026-08-22 — 3 more councils, real URLs supplied directly
+    # (not guessed), matching the confirmed weeklyList Idox pattern.
+    # None had any existing DB row on any platform. (A 4th real URL
+    # from the same batch — West Norfolk — turned out to already be
+    # active under "Kings Lynn and West Norfolk Borough Council",
+    # id=385, identical URL confirmed — correctly NOT duplicated here.)
+    # Run this file's real INSERT SQL to create these 3 rows — no
+    # COUNCIL_DB_IDS entry added yet, relying on idox_scraper.py's live
+    # name-match fallback until real ids are confirmed, same as this
+    # project's other recent Idox additions.
+    # -------------------------------------------------------------------------
+    ("Harborough District Council",
+     "https://pa2.harborough.gov.uk/online-applications"),
+
+    ("Sandwell Metropolitan Borough Council",
+     "https://webcaps.sandwell.gov.uk/publicaccess"),
+
+    ("North Northamptonshire Council",
+     "https://publicaccess.northnorthants.gov.uk/online-applications"),
+
 ]
 
 # ---------------------------------------------------------------------------
