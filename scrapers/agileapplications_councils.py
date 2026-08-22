@@ -51,13 +51,19 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     "Middlesbrough Council":              202,
     "Flintshire County Council":          487,
     "Cannock Chase District Council":     488,
+    "Rugby Borough Council":              None,
+    "Dudley Metropolitan Borough Council": None,
+    "Peterborough City Council":           None,
 }
 
 # (council_name, agileapplications council-slug)
 AGILE_COUNCILS = [
-    ("Middlesbrough Council",          "middlesbrough"),
-    ("Flintshire County Council",      "flintshire"),
-    ("Cannock Chase District Council", "cannock"),
+    ("Middlesbrough Council",              "middlesbrough"),
+    ("Flintshire County Council",          "flintshire"),
+    ("Cannock Chase District Council",     "cannock"),
+    ("Rugby Borough Council",              "rugby"),
+    ("Dudley Metropolitan Borough Council", "dudley"),
+    ("Peterborough City Council",           "peterborough"),
 ]
 
 INSERT_SQL = """
@@ -65,7 +71,10 @@ INSERT INTO councils (name, slug, system, region, portal_url, coverage_source, a
 VALUES
   ('Middlesbrough Council','middlesbrough-council','agileapplications','england','https://planning.agileapplications.co.uk/middlesbrough/search-applications','pending',true),
   ('Flintshire County Council','flintshire-county-council','agileapplications','wales','https://planning.agileapplications.co.uk/flintshire/search-applications','pending',true),
-  ('Cannock Chase District Council','cannock-chase-district-council','agileapplications','england','https://planning.agileapplications.co.uk/cannock/search-applications','pending',true)
+  ('Cannock Chase District Council','cannock-chase-district-council','agileapplications','england','https://planning.agileapplications.co.uk/cannock/search-applications','pending',true),
+  ('Rugby Borough Council','rugby-borough-council','agileapplications','england','https://planning.agileapplications.co.uk/rugby/search-applications','pending',true),
+  ('Dudley Metropolitan Borough Council','dudley-metropolitan-borough-council','agileapplications','england','https://planning.agileapplications.co.uk/dudley/search-applications','pending',true),
+  ('Peterborough City Council','peterborough-city-council','agileapplications','england','https://planning.agileapplications.co.uk/peterborough/search-applications','pending',true)
 ON CONFLICT (name) DO UPDATE SET
   system = 'agileapplications',
   active = true,
