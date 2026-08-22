@@ -497,16 +497,17 @@ class NorthgatePortal:
 async def process_council(portal: NorthgatePortal, browser: Browser, sem: asyncio.Semaphore) -> int:
     async with sem:
         cid = portal.db_council_id
-        print(f"\n[{portal.council_name}] (council_id={cid})")
+        name = portal.council_name
+        print(f"\n[{name}] (council_id={cid})")
 
         if should_stop():
-            print(f"    — skipping, time budget reached ({elapsed_minutes():.1f} min elapsed)")
+            print(f"    [{name}] — skipping, time budget reached ({elapsed_minutes():.1f} min elapsed)")
             return "TIME_BUDGET_SKIP"
 
         try:
             apps = await portal.scrape(browser)
         except Exception as e:
-            print(f"    ✗ Error: {e}")
+            print(f"    [{name}] ✗ Error: {e}")
             return 0
 
         if not apps:
@@ -519,7 +520,16 @@ async def process_council(portal: NorthgatePortal, browser: Browser, sem: asynci
         try:
             need = [a["postcode"] for a in apps if a.get("postcode")]
             if need:
-                print(f"    Geocoding {len(set(need))} postcodes…")
+                # ADDED 2026-08-22 — real, confirmed confusing log
+                # interleaving with concurrency=2: two councils' output
+                # can genuinely interleave in real time without a
+                # per-line name prefix, making it look like one
+                # council's data got mixed into another's (it never
+                # actually did — the upsert calls below always use the
+                # correct real cid regardless of print order — this was
+                # purely a readability problem). Same fix already
+                # applied to idox_scraper.py earlier this project.
+                print(f"    [{name}] Geocoding {len(set(need))} postcodes…")
                 coords = await geocode(need)
                 for app in apps:
                     if app.get("postcode"):
@@ -543,7 +553,7 @@ async def process_council(portal: NorthgatePortal, browser: Browser, sem: asynci
                 "source":           "northgate_scraper",
             } for a in apps]
 
-            print(f"    Upserting {len(records)} records with council_id={cid}")
+            print(f"    [{name}] Upserting {len(records)} records with council_id={cid}")
 
             BATCH = 20
             saved = 0
@@ -562,9 +572,9 @@ async def process_council(portal: NorthgatePortal, browser: Browser, sem: asynci
                     "consecutive_empty_runs": 0,
                     "active": True,
                 })
-                print(f"    ✓ Saved {saved}")
+                print(f"    [{name}] ✓ Saved {saved}")
             else:
-                print(f"    ⚠ Partial save: {saved} of {len(apps)}")
+                print(f"    [{name}] ⚠ Partial save: {saved} of {len(apps)}")
                 if saved > 0:
                     await _supa_patch_council(cid, {
                         "last_saved_at": datetime.now(timezone.utc).isoformat(),
