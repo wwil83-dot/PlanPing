@@ -384,6 +384,37 @@ class NorthgatePortal:
             except Exception:
                 continue
 
+        # ADDED 2026-08-22 (round 2) — real, decisive diagnostic
+        # evidence: the overlay fix above genuinely deployed but was
+        # never the real cause. A direct JS inspection confirmed
+        # #rbRange sits inside a real ancestor div, id="advancedSearch",
+        # with display:none by default — Conwy's page has a genuine
+        # Simple/Advanced Search toggle (confirmed visually too: a real
+        # "Advanced Search" button sits right next to "Search"), and
+        # the advanced fields (including our real #rbRange target)
+        # start hidden until that's clicked. Runnymede's own page
+        # apparently defaults to this section already open, which is
+        # exactly why only Conwy hit this. Checking whether #rbRange is
+        # already visible first, so this doesn't change anything for
+        # Runnymede's already-working flow — only clicking the real
+        # toggle when it's genuinely needed.
+        try:
+            rbrange_visible = await page.locator("#rbRange").is_visible(timeout=1000)
+        except Exception:
+            rbrange_visible = False
+
+        if not rbrange_visible:
+            try:
+                adv_btn = page.get_by_role("button", name="Advanced Search", exact=False)
+                if await adv_btn.count() > 0:
+                    await adv_btn.first.click(timeout=5_000)
+                    await asyncio.sleep(1)
+                    print(f"    [{self.council_name}] #rbRange wasn't visible — "
+                          f"clicked the real 'Advanced Search' toggle to reveal it")
+            except Exception as e:
+                print(f"    ⚠ [{self.council_name}] Could not click 'Advanced "
+                      f"Search' toggle: {e}")
+
         # CONFIRMED real field IDs (Runnymede) — genuinely working form-
         # fill + submit, ASP.NET postback handled naturally by Playwright
         try:
