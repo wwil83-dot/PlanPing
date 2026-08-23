@@ -75,6 +75,21 @@ TARGETS = [
     ("North East Lincolnshire Council",
      "https://planninganddevelopment.nelincs.gov.uk/online-applications/search.do"
      "?action=monthlyList&searchCriteria.monthYearIndex=0&searchType=Application"),
+    # ADDED 2026-08-23 — real, direct user evidence: this council's
+    # portal loads fast and cleanly in a real browser (even through a
+    # Luxembourg VPN), directly contradicting the original "Idox Cloud
+    # migration not yet live" assumption. Worth testing here IF (and
+    # only if) priority1_diagnostic.py first confirms the same real
+    # zero-network-activity signature as Derby/NE Lincolnshire — a
+    # genuinely different WAF vendor/config here could plausibly NOT
+    # block Webshare specifically, even though Derby's does (Webshare's
+    # real failure mode is blocklist-based detection, not simply "is
+    # this technically datacenter" — a property that varies WAF by
+    # WAF, not universal). No additional cost to test either way, given
+    # the proxy's already paid for.
+    ("St Helens Metropolitan Borough Council",
+     "https://publicaccess.sthelens.gov.uk/online-applications/search.do"
+     "?action=monthlyList&searchCriteria.monthYearIndex=0&searchType=Application"),
 ]
 
 network_log: list[dict] = []
