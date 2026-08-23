@@ -244,7 +244,78 @@ def _parse_results_table(html: str, base_url: str, council_name: str) -> list[di
         })
 
     if not apps:
-        _diagnose_row_parse(header_cells, html)
+        _diagnose_row_parse(council_name, header_cells, html)
+
+    return apps
+
+
+def _parse_card_results(html: str, base_url: str) -> list[dict]:
+    """Real, confirmed alternate results structure — North Warwickshire's
+    newer front-end template renders results as styled cards
+    (div.searchResultsCardRow) rather than a <table>, confirmed
+    directly from real captured HTML:
+      <div class="row searchResultsCardRow">
+        <div class="col-xs-12"><a href="/Planning/Display?applicationNumber=REF">ADDRESS</a></div>
+        <div class="col-xs-12"><h2>REFERENCE</h2><span>TYPE</span><span>DECISION?</span></div>
+        <div class="col-xs-12 col-md-12">DESCRIPTION</div>
+      </div>
+    Real, permanent detail URL confirmed: /Planning/Display?
+    applicationNumber={reference} (URL-encoded)."""
+    soup = BeautifulSoup(html, "html.parser")
+    cards = soup.find_all("div", class_="searchResultsCardRow")
+
+    apps = []
+    for card in cards:
+        cols = card.find_all("div", recursive=False)
+        if len(cols) < 2:
+            continue
+
+        addr_link = cols[0].find("a")
+        # Real, confirmed format: embedded literal newlines within the
+        # link's own text (not <br/> tags) — e.g. "Rear of block 20-26
+        # Church Hill \nColeshill\nB46 3AJ". Splitting and rejoining
+        # with commas, same real convention as every other address
+        # field in this project.
+        raw_address = addr_link.get_text("\n", strip=True) if addr_link else ""
+        address = ", ".join(p.strip() for p in raw_address.split("\n") if p.strip())
+        detail_url = None
+        if addr_link and addr_link.get("href"):
+            href = addr_link["href"]
+            detail_url = href if href.startswith("http") else f"{base_url}{href}"
+
+        h2 = cols[1].find("h2")
+        reference = h2.get_text(strip=True) if h2 else ""
+        spans = cols[1].find_all("span")
+        # Real, confirmed: first span is a type/category label, second
+        # (often empty) is presumably a real decision value once one
+        # exists — never used for our own status, same discipline as
+        # every other platform here.
+        decision_span_text = spans[1].get_text(strip=True) if len(spans) > 1 else ""
+
+        proposal = ""
+        if len(cols) > 2:
+            # Real, confirmed minor formatting quirks: embedded literal
+            # newlines and non-breaking spaces (\xa0) both appear in
+            # real description text — collapsing all whitespace
+            # uniformly via split()/join(), same approach used
+            # elsewhere in this project rather than a simple get_text
+            # separator alone.
+            proposal = " ".join(cols[2].get_text(" ", strip=True).split())
+
+        if not reference:
+            continue
+
+        postcode = _extract_postcode(address)
+
+        apps.append({
+            "reference": reference,
+            "address": address,
+            "postcode": postcode,
+            "description": proposal,
+            "status_workflow_stage": decision_span_text,
+            "status": _normalise_status(decision_span_text) if decision_span_text else "pending",
+            "council_url": detail_url,
+        })
 
     return apps
 
@@ -334,12 +405,57 @@ async def scrape(browser: Browser, council_name: str, base_url: str, days_back: 
         await context.close()
         return []
 
+    # ADDED 2026-08-23 — real, confirmed via nwarks_disclaimer_recon.py:
+    # North Warwickshire redirects to a real disclaimer-acceptance page
+    # before /Search/Advanced becomes accessible. A plain "Accept"
+    # button, no checkbox involved. Checking the real URL for this
+    # rather than assuming — every other council in this family never
+    # shows this gate at all, so this only fires when genuinely needed.
+    if "/Disclaimer" in page.url:
+        try:
+            accept_btn = page.get_by_role("button", name="Accept", exact=True)
+            await accept_btn.first.click(timeout=5_000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=15_000)
+            except PlaywrightTimeout:
+                pass
+            await asyncio.sleep(1)
+            _log(council_name, f"Accepted a real disclaimer gate")
+        except Exception as e:
+            _log(council_name, f"⚠ Could not accept disclaimer: {e}")
+            await context.close()
+            return []
+
     today = date.today()
     start = today - timedelta(days=days_back)
 
     try:
-        await page.fill("#DateReceivedFrom", start.strftime("%d/%m/%Y"), timeout=5_000)
-        await page.fill("#DateReceivedTo", today.strftime("%d/%m/%Y"), timeout=5_000)
+        # REAL FIX — confirmed via direct error inspection on North
+        # Warwickshire: its #DateReceivedFrom/To are genuine HTML5
+        # type="date" inputs (every other council uses plain
+        # type="text"), hidden behind a JS date-picker library that
+        # blocks Playwright's normal fill(). Setting the value
+        # directly via JS in ISO format (the format native date inputs
+        # actually require) and dispatching real input/change events,
+        # same category of fix as Northgate's readonly fields earlier
+        # this project. Checking the real type attribute first so this
+        # doesn't change behaviour for the other 4 councils at all.
+        field_type = await page.locator("#DateReceivedFrom").get_attribute("type")
+        if field_type == "date":
+            for field_id, value in [("DateReceivedFrom", start.isoformat()),
+                                      ("DateReceivedTo", today.isoformat())]:
+                await page.evaluate(
+                    """([id, val]) => {
+                        const el = document.getElementById(id);
+                        el.value = val;
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                    }""",
+                    [field_id, value],
+                )
+        else:
+            await page.fill("#DateReceivedFrom", start.strftime("%d/%m/%Y"), timeout=5_000)
+            await page.fill("#DateReceivedTo", today.strftime("%d/%m/%Y"), timeout=5_000)
     except Exception as e:
         _log(council_name, f"⚠ Could not fill date fields: {e}")
         await context.close()
@@ -393,6 +509,14 @@ async def scrape(browser: Browser, council_name: str, base_url: str, days_back: 
 
         html = await page.content()
         page_apps = _parse_results_table(html, base_url, council_name)
+        # REAL FIX — confirmed via North Warwickshire: its newer
+        # front-end renders results as styled cards, not a <table> at
+        # all. Falling back to the card parser only when the table
+        # parser genuinely finds nothing, so this never changes
+        # behaviour for the other 4 councils.
+        if not page_apps:
+            page_apps = _parse_card_results(html, base_url)
+
         new_count = 0
         for a in page_apps:
             if a["reference"] not in seen_refs:
@@ -425,9 +549,22 @@ async def scrape(browser: Browser, council_name: str, base_url: str, days_back: 
         # a manually replicated AJAX header).
         try:
             next_link = page.get_by_text("Next", exact=True)
-            if await next_link.count() == 0:
-                break
-            await next_link.first.click(timeout=5_000)
+            if await next_link.count() > 0:
+                await next_link.first.click(timeout=5_000)
+            else:
+                # REAL FIX — confirmed via North Warwickshire: its
+                # newer front-end uses an icon-based chevron-right
+                # pagination control instead of plain "Next" text, but
+                # the SAME real data-ajax-target mechanism underneath.
+                # Its real parent <li> gets a "disabled" class on the
+                # last page, used here as the real stopping condition.
+                chevron_li = page.locator("li:has(i.fa-chevron-right)")
+                if await chevron_li.count() == 0:
+                    break
+                classes = await chevron_li.first.get_attribute("class") or ""
+                if "disabled" in classes:
+                    break
+                await chevron_li.first.locator("a").first.click(timeout=5_000)
             try:
                 await page.wait_for_load_state("networkidle", timeout=10_000)
             except PlaywrightTimeout:
@@ -435,7 +572,7 @@ async def scrape(browser: Browser, council_name: str, base_url: str, days_back: 
             await asyncio.sleep(1.5)
             page_num += 1
         except Exception as e:
-            _log(council_name, f"⚠ Could not click Next (page {page_num}): {e}")
+            _log(council_name, f"⚠ Could not click Next/chevron (page {page_num}): {e}")
             break
 
     await context.close()
