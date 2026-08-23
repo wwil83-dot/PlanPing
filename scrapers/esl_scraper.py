@@ -670,8 +670,18 @@ async def process_council(name: str, base_url: str, browser: Browser, sem: async
             _log(name, f"⚠ Recheck error: {e}")
             recheck_updates = []
 
+        # REAL FIX — confirmed via Cherwell's own database state: this
+        # branch was unconditionally resetting coverage_source back to
+        # 'pending' on ANY run that found zero new applications — even
+        # when that emptiness was caused by a genuine, transient
+        # scraping error (the date-field locator bug), not a real lack
+        # of coverage. Cherwell had 113 real, valid records sitting in
+        # the database from an earlier successful run, and a single
+        # later failure silently downgraded it back to looking
+        # uncovered. coverage_source should only ever be SET on a real
+        # success — never reset to 'pending' just because one
+        # particular run happened to find nothing.
         if not raw_apps and not recheck_updates:
-            await _supa_patch_council(cid, {"coverage_source": "pending"})
             return
 
         postcodes = [a["postcode"] for a in raw_apps if a.get("postcode")]
