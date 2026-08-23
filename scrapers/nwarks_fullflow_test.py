@@ -106,8 +106,44 @@ async def main():
         today = date.today()
         start = today - timedelta(days=30)
         try:
-            await page.fill("#DateReceivedFrom", start.strftime("%d/%m/%Y"), timeout=5_000)
-            await page.fill("#DateReceivedTo", today.strftime("%d/%m/%Y"), timeout=5_000)
+            # REAL FIX: confirmed via direct error inspection that this
+            # field is genuinely type="date" (not plain text like every
+            # other council in this family) — a real HTML5 native date
+            # input, likely wrapped by a JS date-picker library that
+            # visually hides the underlying input (same category of
+            # issue as Northgate's readonly fields earlier this
+            # project, different real cause). Native date inputs also
+            # require ISO format (YYYY-MM-DD) when set programmatically,
+            # not the UK DD/MM/YYYY format used everywhere else in this
+            # family. Setting the value directly via JS and dispatching
+            # real change/input events, bypassing Playwright's strict
+            # visibility check.
+            field_type = await page.locator("#DateReceivedFrom").get_attribute("type")
+            print(f"Real #DateReceivedFrom type attribute: {field_type!r}")
+
+            if field_type == "date":
+                await page.evaluate(
+                    """([id, val]) => {
+                        const el = document.getElementById(id);
+                        el.value = val;
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                    }""",
+                    ["DateReceivedFrom", start.isoformat()],
+                )
+                await page.evaluate(
+                    """([id, val]) => {
+                        const el = document.getElementById(id);
+                        el.value = val;
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                    }""",
+                    ["DateReceivedTo", today.isoformat()],
+                )
+                print(f"Set dates via JS (ISO format): {start.isoformat()} to {today.isoformat()}")
+            else:
+                await page.fill("#DateReceivedFrom", start.strftime("%d/%m/%Y"), timeout=5_000)
+                await page.fill("#DateReceivedTo", today.strftime("%d/%m/%Y"), timeout=5_000)
 
             if has_planning_checkbox:
                 await page.locator("#SearchPlanning").check(timeout=3_000)
