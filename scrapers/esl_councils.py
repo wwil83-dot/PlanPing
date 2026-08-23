@@ -1,6 +1,10 @@
 """
-PlanFind — Eden and South Lakeland (Westmorland and Furness Council)
-config (2026-08-22).
+PlanFind — "Search/Advanced" platform family config (2026-08-22,
+extended 2026-08-23).
+
+4 councils sharing one real platform: Westmorland and Furness Council
+(Eden/South Lakeland areas only — Barrow is separate), Cherwell,
+Wychavon, Malvern Hills.
 
 Real, confirmed evidence backing every design decision here — full
 recon trail across 6 rounds: wandf_recon.py, wandf_recon_round2.py,
@@ -67,26 +71,57 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     "Westmorland and Furness Council": 513,
 }
 
+COUNCIL_DB_IDS: dict[str, int | None] = {
+    "Westmorland and Furness Council": 513,
+    "Cherwell District Council":       514,
+    "Wychavon District Council":       515,
+    "Malvern Hills District Council":  516,
+}
+
 # (council_name, base_url)
-# NOTE: this scraper covers ONLY the Eden and South Lakeland areas —
-# Barrow uses a genuinely separate real system (Oracle APEX-based
-# "Barrow Planning Hub", confirmed via barrow_iframe_check.py) needing
-# its own dedicated build. Using the real, single official council
-# name here deliberately — confirmed directly via planning.data.gov.uk
-# ("name": "Westmorland and Furness Council") — rather than a suffixed
-# sub-entity name, so a future Barrow scraper can add its own real
-# applications to this SAME council_id later, rather than creating a
-# second, confusing entry for what is genuinely one real local
-# authority.
+# NOTE: this scraper covers ONLY the Eden and South Lakeland areas of
+# Westmorland and Furness — Barrow uses a genuinely separate real
+# system (Oracle APEX-based "Barrow Planning Hub", confirmed via
+# barrow_iframe_check.py) needing its own dedicated build.
+#
+# ADDED 2026-08-23 — Cherwell, Wychavon, Malvern Hills confirmed as
+# genuinely the SAME shared platform, not just a coincidental URL
+# match. Real, direct confirmation via search_advanced_family_recon.py:
+# identical field ids, identical /Search/Results landing URL, Wychavon
+# and Malvern Hills' table headers matching Eden/South Lakeland's
+# byte-for-byte, and the identical data-ajax-target="/Search/
+# ResultsPage/{N}?module=PLA" pagination pattern already solved for
+# Eden/South Lakeland. ONE real, confirmed difference: these 3 require
+# the top-level "Planning" checkbox (#SearchPlanning) to be explicitly
+# checked before a search will process — confirmed via direct
+# screenshot evidence that an unchecked submission gets silently
+# rejected, just re-serving a blank form. Eden/South Lakeland's own
+# search worked without ever checking this box, but checking it
+# anyway for all councils uniformly is harmless and makes the whole
+# family more robust and consistent.
+#
+# North Warwickshire Borough Council deliberately NOT included here —
+# confirmed via the same recon to redirect through a real disclaimer-
+# acceptance page first, a genuinely different flow needing its own
+# dedicated handling before it can be added safely.
 ESL_COUNCILS = [
     ("Westmorland and Furness Council",
      "https://planningregister.westmorlandandfurness.gov.uk"),
+    ("Cherwell District Council",
+     "https://planningregister.cherwell.gov.uk"),
+    ("Wychavon District Council",
+     "https://plan.wychavon.gov.uk"),
+    ("Malvern Hills District Council",
+     "https://plan.malvernhills.gov.uk"),
 ]
 
 INSERT_SQL = """
 INSERT INTO councils (name, slug, system, region, portal_url, coverage_source, active)
 VALUES
-  ('Westmorland and Furness Council','westmorland-and-furness-council','esl_advanced_search','england','https://planningregister.westmorlandandfurness.gov.uk/Search/Advanced','pending',true)
+  ('Westmorland and Furness Council','westmorland-and-furness-council','esl_advanced_search','england','https://planningregister.westmorlandandfurness.gov.uk/Search/Advanced','pending',true),
+  ('Cherwell District Council','cherwell-district-council','esl_advanced_search','england','https://planningregister.cherwell.gov.uk/Search/Advanced','pending',true),
+  ('Wychavon District Council','wychavon-district-council','esl_advanced_search','england','https://plan.wychavon.gov.uk/Search/Advanced','pending',true),
+  ('Malvern Hills District Council','malvern-hills-district-council','esl_advanced_search','england','https://plan.malvernhills.gov.uk/Search/Advanced','pending',true)
 ON CONFLICT (name) DO UPDATE SET
   system = 'esl_advanced_search',
   active = true,
