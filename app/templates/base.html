@@ -11,7 +11,17 @@
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" href="/static/img/favicon.png">
-  <link rel="apple-touch-icon" href="/static/img/favicon.png">
+  <!-- REAL FIX (2026-08-23) — the old apple-touch-icon pointed at the
+       same 277x340 non-square favicon used for the browser tab. Both
+       iOS and Android expect a proper SQUARE icon for "Add to Home
+       Screen" — a non-square image is often silently ignored, with
+       the OS falling back to an automatic screenshot of the page
+       instead, which is almost certainly why the icon wasn't showing
+       correctly. Real, properly-sized square icons generated from the
+       same original artwork, no distortion. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/img/apple-touch-icon.png">
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#0e3d6e">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css">
