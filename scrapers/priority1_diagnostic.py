@@ -93,6 +93,22 @@ TARGETS = [
     # separate Cloudflare-category issue an old comment guessed at.
     ("Highland Council",
      "https://wam.highland.gov.uk/wam"),
+    # ADDED 2026-08-23 — real, direct evidence just changed the whole
+    # theory here: this council was documented as "Idox Cloud migration
+    # not yet live" (a portal-doesn't-exist-yet assumption), and
+    # idox_waf_recheck.py's own automated check from the UK runner
+    # confirmed a genuine 45s timeout — but the person running this
+    # project just directly confirmed the SAME URL loads fast and
+    # cleanly in their own real browser, even through a Luxembourg VPN.
+    # That's the exact same real signature as Derby/Highland/NE
+    # Lincolnshire: works fine for any real human/residential
+    # connection, silently hangs for automated/cloud traffic. Worth
+    # checking directly whether this shows the SAME real zero-network-
+    # activity fingerprint, which would mean the original "not yet
+    # migrated" theory was wrong all along — it's a live, working
+    # portal with a real datacenter-IP block, not a dead one.
+    ("St Helens Metropolitan Borough Council",
+     "https://publicaccess.sthelens.gov.uk/online-applications"),
 ]
 
 network_log: list[dict] = []
@@ -215,8 +231,8 @@ async def diagnose_one(browser, name: str, base_url: str):
 
 async def main():
     print(f"[{datetime.now(timezone.utc).isoformat()}] Priority 1 diagnostic — "
-          f"4 councils, tested ALONE (no concurrency) with a 120s timeout "
-          f"(vs the real scraper's 45s)\n")
+          f"{len(TARGETS)} councils, tested ALONE (no concurrency) with a 120s "
+          f"timeout (vs the real scraper's 45s)\n")
 
     results = []
     async with async_playwright() as pw:
