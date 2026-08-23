@@ -72,10 +72,11 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
 }
 
 COUNCIL_DB_IDS: dict[str, int | None] = {
-    "Westmorland and Furness Council": 513,
-    "Cherwell District Council":       514,
-    "Wychavon District Council":       515,
-    "Malvern Hills District Council":  516,
+    "Westmorland and Furness Council":  513,
+    "Cherwell District Council":        514,
+    "Wychavon District Council":        515,
+    "Malvern Hills District Council":   516,
+    "North Warwickshire Borough Council": 517,
 }
 
 # (council_name, base_url)
@@ -113,6 +114,34 @@ ESL_COUNCILS = [
      "https://plan.wychavon.gov.uk"),
     ("Malvern Hills District Council",
      "https://plan.malvernhills.gov.uk"),
+    # ADDED 2026-08-23 — genuinely the same shared platform (confirmed:
+    # same field ids, same #SearchPlanning checkbox requirement, same
+    # data-ajax-target AJAX pagination mechanism) but running a newer,
+    # still-being-migrated front-end template (the site's own real
+    # banner text: "Welcome to the new planning register... some
+    # features may not be working as expected"). THREE real, confirmed
+    # differences the scraper handles defensively, not via a hard
+    # per-council branch, in case future councils share any of these
+    # variations too:
+    #   1. A real disclaimer-acceptance gate before /Search/Advanced
+    #      becomes accessible — confirmed via nwarks_disclaimer_recon.py,
+    #      a plain "Accept" button, no checkbox involved.
+    #   2. #DateReceivedFrom/To are genuine HTML5 type="date" inputs
+    #      here (every other council uses plain type="text") — real,
+    #      hidden behind a JS date-picker library, confirmed needing a
+    #      JS-direct value set (ISO format) + dispatched change/input
+    #      events, same category of fix as Northgate's readonly fields
+    #      elsewhere in this project.
+    #   3. Real results render as styled "cards" (div.searchResultsCardRow)
+    #      instead of a <table> — confirmed real structure: a real,
+    #      permanent detail URL (/Planning/Display?applicationNumber=
+    #      {ref}), reference in an <h2>, description in a separate div.
+    #      Real pagination uses the SAME data-ajax-target mechanism,
+    #      just as an icon-based chevron-right control (with a
+    #      genuinely convenient real data-total-pages attribute) rather
+    #      than the plain "Next" text link the other 4 use.
+    ("North Warwickshire Borough Council",
+     "https://planning.northwarks.gov.uk"),
 ]
 
 INSERT_SQL = """
@@ -121,7 +150,8 @@ VALUES
   ('Westmorland and Furness Council','westmorland-and-furness-council','esl_advanced_search','england','https://planningregister.westmorlandandfurness.gov.uk/Search/Advanced','pending',true),
   ('Cherwell District Council','cherwell-district-council','esl_advanced_search','england','https://planningregister.cherwell.gov.uk/Search/Advanced','pending',true),
   ('Wychavon District Council','wychavon-district-council','esl_advanced_search','england','https://plan.wychavon.gov.uk/Search/Advanced','pending',true),
-  ('Malvern Hills District Council','malvern-hills-district-council','esl_advanced_search','england','https://plan.malvernhills.gov.uk/Search/Advanced','pending',true)
+  ('Malvern Hills District Council','malvern-hills-district-council','esl_advanced_search','england','https://plan.malvernhills.gov.uk/Search/Advanced','pending',true),
+  ('North Warwickshire Borough Council','north-warwickshire-borough-council','esl_advanced_search','england','https://planning.northwarks.gov.uk/Search/Advanced','pending',true)
 ON CONFLICT (name) DO UPDATE SET
   system = 'esl_advanced_search',
   active = true,
