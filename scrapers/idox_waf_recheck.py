@@ -75,37 +75,24 @@ CONTEXT_OPTIONS = {
 
 # (council_name, url, real confirmed block signature to look for)
 TARGETS = [
-    ("Tonbridge and Malling Borough Council",
-     "https://publicaccess.tmbc.gov.uk/online-applications/search.do?action=weeklyList",
-     None),  # no specific signature previously recorded — generic check
-    ("Solihull Metropolitan Borough Council",
-     "https://publicaccess.solihull.gov.uk/online-applications/search.do?action=weeklyList",
-     None),
+    # RETESTED 2026-08-23 — real, confirmed via direct DB check: both
+    # of these show a genuine 5+ week silence (last real save 2026-07-
+    # 14, coverage_source drifted to 'pending' via a mechanism that
+    # couldn't be pinned down in the current codebase — ruled out both
+    # idox_scraper.py itself and council_health_check.py directly).
+    # Both are still confirmed ACTIVE in idox_councils.py's real
+    # config, so the scraper should be attempting them every night —
+    # worth a fresh, direct check rather than trust a 5-week-stale
+    # config. Tonbridge/Solihull deliberately NOT retested here —
+    # already confirmed fresh via today's own DB check. Highland/
+    # Edinburgh deliberately NOT retested — already confirmed
+    # genuinely, permanently blocked (same real server as Derby).
     ("North East Derbyshire District Council",
      "https://planapps-online.ne-derbyshire.gov.uk/online-applications/search.do?action=weeklyList",
      "cloudflare"),
     ("Bolsover District Council",
      "https://publicaccess.bolsover.gov.uk/online-applications/search.do?action=weeklyList",
      "incapsula"),
-    # ADDED 2026-08-21 — real, concrete gap found: Highland and
-    # Edinburgh were confirmed "genuinely stuck at zero" way back in
-    # the original Scotland batch investigation, and separately
-    # referenced as the "same Cloudflare-style category" as Dumfries
-    # and Galloway in a comment dated 2026-07-07/09 — genuinely BEFORE
-    # the UK proxy was introduced (~2026-08-10). That's the exact same
-    # situation Tonbridge/Solihull/NE Derbyshire/Bolsover were all in,
-    # and all 4 turned out to be stale, no-longer-valid blocks once
-    # actually re-tested. Neither Highland nor Edinburgh was ever
-    # included in this recheck before now — a real gap, not a
-    # deliberate omission. Real, confirmed URL paths used (NOT the
-    # standard /online-applications — both use different real paths,
-    # confirmed directly from idox_councils.py's own active config).
-    ("Highland Council",
-     "https://wam.highland.gov.uk/wam/search.do?action=weeklyList",
-     None),
-    ("City of Edinburgh Council",
-     "https://citydev-portal.edinburgh.gov.uk/idoxpa-web/search.do?action=weeklyList",
-     "cloudflare"),
 ]
 
 # Real, known WAF/block-page signatures — extend this list with real
