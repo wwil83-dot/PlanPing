@@ -15,7 +15,7 @@ on:
     - cron: '5 8 * * *'   # NI Planning Portal nightly scrape
     - cron: '8 8 * * *'   # agileapplications.co.uk nightly scrape (Middlesbrough, Flintshire, Cannock)
     - cron: '12 8 * * *'  # statmap.co.uk/horizoNext nightly scrape (West Lindsey, East Staffordshire)
-    - cron: '15 8 * * *'  # Eden/South Lakeland (Westmorland and Furness Council) nightly scrape
+    - cron: '15 8 * * *'  # "Search/Advanced" family nightly scrape (Westmorland and Furness, Cherwell, Wychavon, Malvern Hills)
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     # CHANGED 2026-08-18 — both moved to a shared every-5-days cadence
@@ -1547,11 +1547,14 @@ jobs:
           retention-days: 14
 
   esl_scraper:
-    # PROMOTED to the nightly schedule (2026-08-22) after a confirmed
-    # clean production run — 114 real applications saved, all 12 pages
-    # of the hard-won real pagination fix confirmed working, 0.4
-    # minutes total. Manual trigger kept available too, same as every
-    # other platform's job, for ad-hoc reruns.
+    # PROMOTED to the nightly schedule (2026-08-22), extended to the
+    # full "Search/Advanced" platform family (2026-08-23) after a
+    # confirmed clean production run across all 4 councils — 461 real
+    # applications saved (Westmorland and Furness 110, Cherwell 113,
+    # Wychavon 161, Malvern Hills 77), all matching their real
+    # confirmed totals exactly, 5.7 minutes total (comfortably inside
+    # the 15-minute budget). Manual trigger kept available too, same
+    # as every other platform's job, for ad-hoc reruns.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'esl_scraper') ||
       (github.event_name == 'schedule' && github.event.schedule == '15 8 * * *')
