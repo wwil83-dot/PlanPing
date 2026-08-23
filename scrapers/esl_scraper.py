@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """
-PlanFind — Eden/South Lakeland (Westmorland and Furness Council)
-scraper (2026-08-22).
+PlanFind — "Search/Advanced" platform family scraper (2026-08-22,
+extended 2026-08-23).
 
-Covers ONLY the Eden and South Lakeland areas — see esl_councils.py
-for the full, real, confirmed evidence backing every design decision
-here, gathered across 6 recon rounds. Barrow uses a genuinely
-different, separate system (Oracle APEX) needing its own dedicated
-build later.
+4 councils on one shared platform: Westmorland and Furness Council
+(Eden/South Lakeland areas only — Barrow is separate), Cherwell,
+Wychavon, Malvern Hills — see esl_councils.py for the full, real,
+confirmed evidence backing every design decision here, gathered
+across 6 recon rounds for Eden/South Lakeland plus a focused
+confirmation pass for the other 3.
 
-ARCHITECTURE: fill the real date-range fields, submit, parse the real
-results table (stripping the real hidden accessibility-label spans
-first), then repeatedly click the real "Next" link — confirmed via
-direct network capture that only a genuine click (not a manually
-reconstructed URL) correctly triggers the site's own jQuery
-Unobtrusive AJAX pagination.
+ARCHITECTURE: check the real "Planning" search-type checkbox, fill the
+real date-range fields, submit, parse the real results table
+(stripping the real hidden accessibility-label spans first), then
+repeatedly click the real "Next" link — confirmed via direct network
+capture that only a genuine click (not a manually reconstructed URL)
+correctly triggers the site's own jQuery Unobtrusive AJAX pagination.
 
 HONEST LIMITATIONS:
   - No decision/status info exists in the search results list at all
@@ -26,6 +27,16 @@ HONEST LIMITATIONS:
     logic below uses a defensive keyword search, not a confirmed
     label, same discipline used before a detail page has ever been
     directly seen elsewhere in this project.
+  - North Warwickshire Borough Council deliberately NOT included —
+    confirmed to redirect through a real disclaimer-acceptance page
+    first, a genuinely different flow needing its own dedicated
+    handling before it can be added safely.
+  - The real "Planning" checkbox (#SearchPlanning) is checked
+    unconditionally for every council here, even though Eden/South
+    Lakeland's own search worked without it — confirmed harmless, and
+    Cherwell/Wychavon/Malvern Hills all confirmed to silently reject
+    an unchecked submission (just re-serving a blank form), so
+    checking it universally is the safer, more robust choice.
 """
 import asyncio
 import os
@@ -59,6 +70,7 @@ CONTEXT_OPTIONS = {
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "15"))
+CONCURRENCY  = int(os.environ.get("CONCURRENCY", "1"))
 DAYS_BACK    = int(os.environ.get("DAYS_BACK", "30"))
 MAX_PAGES    = int(os.environ.get("MAX_PAGES", "20"))  # real safety cap —
                                                           # 20 pages x 10 =
@@ -132,37 +144,41 @@ def _parse_uk_date(s: str) -> Optional[str]:
     return None
 
 
-_ROW_PARSE_DIAGNOSED = False
+_ROW_PARSE_DIAGNOSED: set[str] = set()
 
 
-def _diagnose_row_parse(headers: list[str], html_snippet: str):
-    global _ROW_PARSE_DIAGNOSED
-    if _ROW_PARSE_DIAGNOSED:
+def _diagnose_row_parse(council_name: str, headers: list[str], html_snippet: str):
+    if council_name in _ROW_PARSE_DIAGNOSED:
         return
-    _ROW_PARSE_DIAGNOSED = True
-    print(f"    [Westmorland and Furness Council] ROW PARSE DIAGNOSTIC: real "
+    _ROW_PARSE_DIAGNOSED.add(council_name)
+    print(f"    [{council_name}] ROW PARSE DIAGNOSTIC: real "
           f"headers found: {headers!r}. Response snippet: {html_snippet[:500]!r}")
 
 
-def _parse_results_table(html: str, base_url: str) -> list[dict]:
-    """Real, confirmed table structure: single <table>, real header
-    row with plain <td> (not <th>) — Application Number | Location |
-    Proposal | Status. Real accessibility-label spans stripped from
-    every cell before extraction (see _clean_cell_text)."""
+def _parse_results_table(html: str, base_url: str, council_name: str) -> list[dict]:
+    """Real, confirmed table structure: single <table>. Header row uses
+    plain <td> for Eden/South Lakeland, Wychavon, and Malvern Hills
+    (confirmed identical: Application Number | Location | Proposal |
+    Status) — but Cherwell's real header row uses <th> instead,
+    confirmed directly (an empty header was returned when only <td>
+    was checked, despite Cherwell genuinely having real result rows).
+    Checking both. Real accessibility-label spans stripped from every
+    cell before extraction (see _clean_cell_text)."""
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table")
     if not table:
-        _diagnose_row_parse([], html)
+        _diagnose_row_parse(council_name, [], html)
         return []
 
     rows = table.find_all("tr")
     if len(rows) < 1:
-        _diagnose_row_parse([], html)
+        _diagnose_row_parse(council_name, [], html)
         return []
 
-    header_cells = [td.get_text(strip=True).lower() for td in rows[0].find_all("td")]
+    header_row_cells = rows[0].find_all("td") or rows[0].find_all("th")
+    header_cells = [c.get_text(strip=True).lower() for c in header_row_cells]
     if not header_cells:
-        _diagnose_row_parse([], html)
+        _diagnose_row_parse(council_name, [], html)
         return []
 
     def _col_index(*keywords) -> Optional[int]:
@@ -177,7 +193,7 @@ def _parse_results_table(html: str, base_url: str) -> list[dict]:
     idx_status = _col_index("status")
 
     if idx_ref is None or idx_location is None:
-        _diagnose_row_parse(header_cells, html)
+        _diagnose_row_parse(council_name, header_cells, html)
         return []
 
     apps = []
@@ -286,11 +302,11 @@ async def geocode(postcodes: list[str]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-def _log(msg: str) -> None:
-    print(f"    [Westmorland and Furness Council] {msg}")
+def _log(council_name: str, msg: str) -> None:
+    print(f"    [{council_name}] {msg}")
 
 
-async def scrape(browser: Browser, base_url: str, days_back: int) -> list[dict]:
+async def scrape(browser: Browser, council_name: str, base_url: str, days_back: int) -> list[dict]:
     context = await browser.new_context(**CONTEXT_OPTIONS)
     page = await context.new_page()
 
@@ -301,7 +317,7 @@ async def scrape(browser: Browser, base_url: str, days_back: int) -> list[dict]:
         except PlaywrightTimeout:
             pass
     except Exception as e:
-        _log(f"⚠ Could not load search page: {e}")
+        _log(council_name, f"⚠ Could not load search page: {e}")
         await context.close()
         return []
 
@@ -312,14 +328,38 @@ async def scrape(browser: Browser, base_url: str, days_back: int) -> list[dict]:
         await page.fill("#DateReceivedFrom", start.strftime("%d/%m/%Y"), timeout=5_000)
         await page.fill("#DateReceivedTo", today.strftime("%d/%m/%Y"), timeout=5_000)
     except Exception as e:
-        _log(f"⚠ Could not fill date fields: {e}")
+        _log(council_name, f"⚠ Could not fill date fields: {e}")
         await context.close()
         return []
 
+    # ADDED 2026-08-23 — real, confirmed via direct screenshot evidence:
+    # Cherwell/Wychavon/Malvern Hills all silently reject a search with
+    # no top-level "Planning" checkbox ticked, just re-serving a blank
+    # form. Eden/South Lakeland's own search worked without this, but
+    # checking it unconditionally is harmless and makes the whole
+    # family more robust.
     try:
-        await page.locator("button:has-text('Search')").first.click(timeout=5_000)
+        planning_checkbox = page.locator("#SearchPlanning")
+        if await planning_checkbox.count() > 0:
+            await planning_checkbox.check(timeout=3_000)
     except Exception as e:
-        _log(f"⚠ Could not click search button: {e}")
+        _log(council_name, f"⚠ Could not check #SearchPlanning (continuing anyway): {e}")
+
+    try:
+        # REAL FIX — confirmed via direct testing that a generic
+        # "button:has-text('Search')" selector can hijack the wrong
+        # element (Cherwell has an unrelated site-header search toggle
+        # containing the same text). Scoping the click specifically to
+        # a button inside the real form that contains the date fields
+        # just filled, same fix already proven in
+        # search_advanced_family_recon.py.
+        form_with_dates = page.locator("form").filter(has=page.locator("#DateReceivedFrom"))
+        search_btn = form_with_dates.locator("button:has-text('Search')")
+        if await search_btn.count() == 0:
+            search_btn = form_with_dates.locator("input[type='submit']")
+        await search_btn.first.click(timeout=5_000)
+    except Exception as e:
+        _log(council_name, f"⚠ Could not click search button: {e}")
         await context.close()
         return []
 
@@ -335,11 +375,11 @@ async def scrape(browser: Browser, base_url: str, days_back: int) -> list[dict]:
 
     while page_num <= MAX_PAGES:
         if should_stop():
-            _log(f"⚠ Time budget reached, stopping at page {page_num}")
+            _log(council_name, f"⚠ Time budget reached, stopping at page {page_num}")
             break
 
         html = await page.content()
-        page_apps = _parse_results_table(html, base_url)
+        page_apps = _parse_results_table(html, base_url, council_name)
         new_count = 0
         for a in page_apps:
             if a["reference"] not in seen_refs:
@@ -358,7 +398,7 @@ async def scrape(browser: Browser, base_url: str, days_back: int) -> list[dict]:
         total_match = re.search(r"\((\d+)\)", body_text)
         real_total = int(total_match.group(1)) if total_match else None
 
-        _log(f"Page {page_num}: {new_count} new (running total {len(all_apps)}"
+        _log(council_name, f"Page {page_num}: {new_count} new (running total {len(all_apps)}"
              + (f" of {real_total} real total" if real_total else "") + ")")
 
         if real_total is not None and len(all_apps) >= real_total:
@@ -382,14 +422,14 @@ async def scrape(browser: Browser, base_url: str, days_back: int) -> list[dict]:
             await asyncio.sleep(1.5)
             page_num += 1
         except Exception as e:
-            _log(f"⚠ Could not click Next (page {page_num}): {e}")
+            _log(council_name, f"⚠ Could not click Next (page {page_num}): {e}")
             break
 
     await context.close()
     return all_apps
 
 
-async def recheck_pending(browser: Browser, pending: list[dict]) -> list[dict]:
+async def recheck_pending(browser: Browser, council_name: str, pending: list[dict]) -> list[dict]:
     """Real, confirmed permanent detail URL (/Planning/Display/{ref}) —
     same purpose as this project's other pending-recheck passes. Real
     detail-page field labels never actually recon'd — using a
@@ -402,7 +442,7 @@ async def recheck_pending(browser: Browser, pending: list[dict]) -> list[dict]:
     updates = []
     for p in pending:
         if should_stop():
-            _log(f"⚠ Time budget reached mid-recheck, stopping")
+            _log(council_name, f"⚠ Time budget reached mid-recheck, stopping")
             break
         url = p.get("council_url")
         if not url:
@@ -434,8 +474,102 @@ async def recheck_pending(browser: Browser, pending: list[dict]) -> list[dict]:
     return updates
 
 
+async def process_council(name: str, base_url: str, browser: Browser, sem: asyncio.Semaphore):
+    async with sem:
+        cid = COUNCIL_DB_IDS[name]
+        print(f"\n[{name}] (council_id={cid})")
+
+        if should_stop():
+            print(f"    [{name}] — skipping, time budget reached "
+                  f"({elapsed_minutes():.1f} min elapsed)")
+            return
+
+        pending = []
+        try:
+            pending = await _supa_get(
+                "planning_applications",
+                council_id=f"eq.{cid}",
+                status="eq.pending",
+                select="reference,council_url",
+                limit=str(RECHECK_LIMIT),
+            )
+            if pending:
+                _log(name, f"Pending recheck: {len(pending)} applications "
+                     f"(bounded to {RECHECK_LIMIT})")
+        except Exception as e:
+            _log(name, f"⚠ Failed to fetch pending recheck list (continuing "
+                 f"without it): {e}")
+
+        try:
+            raw_apps = await scrape(browser, name, base_url, DAYS_BACK)
+        except Exception as e:
+            print(f"    [{name}] ✗ Error: {e}")
+            return
+
+        try:
+            recheck_updates = await recheck_pending(browser, name, pending)
+        except Exception as e:
+            _log(name, f"⚠ Recheck error: {e}")
+            recheck_updates = []
+
+        if not raw_apps and not recheck_updates:
+            await _supa_patch_council(cid, {"coverage_source": "pending"})
+            return
+
+        postcodes = [a["postcode"] for a in raw_apps if a.get("postcode")]
+        coords = await geocode(postcodes) if postcodes else {}
+        if postcodes:
+            _log(name, f"Geocoding {len(postcodes)} postcodes…")
+
+        fallback_count = 0
+        records = []
+        for a in raw_apps:
+            lat, lng = None, None
+            if a.get("postcode"):
+                key = a["postcode"].upper().replace(" ", "")
+                if key in coords:
+                    lat, lng = coords[key]
+            if lat is None:
+                fallback_count += 1
+
+            records.append({
+                "council_id": cid,
+                "reference": a["reference"],
+                "address": a["address"] or None,
+                "postcode": a.get("postcode"),
+                "description": a.get("description") or None,
+                "status": a["status"],
+                "council_url": a.get("council_url"),
+                "lat": lat,
+                "lng": lng,
+                "source": "esl_scraper",
+            })
+
+        if fallback_count:
+            _log(name, f"Council centroid fallback for {fallback_count} apps")
+
+        for u in recheck_updates:
+            records.append({
+                "council_id": cid,
+                "reference": u["reference"],
+                "status": u["status"],
+            })
+
+        if records:
+            _log(name, f"Upserting {len(records)} records with council_id={cid}")
+            ok = await _supa_upsert(records)
+            if ok:
+                _log(name, f"✓ Saved {len(records)}")
+                await _supa_patch_council(cid, {
+                    "coverage_source": "esl_advanced_search",
+                    "last_saved_at": datetime.now(timezone.utc).isoformat(),
+                })
+
+
 async def main():
-    print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Eden/South Lakeland scraper")
+    print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind 'Search/Advanced' family scraper")
+    print(f"Councils:    {len(ESL_COUNCILS)}")
+    print(f"Concurrency: {CONCURRENCY}")
     print(f"Days back:   {DAYS_BACK}")
     print(f"Budget:      {MAX_MINUTES} minutes")
     print(f"Max pages:   {MAX_PAGES}")
@@ -455,85 +589,17 @@ async def main():
               "each None above with the real id Supabase assigns.")
         sys.exit(1)
 
-    name, base_url = ESL_COUNCILS[0]
-    cid = COUNCIL_DB_IDS[name]
-    print(f"[{name}] (council_id={cid})\n")
-
-    pending = []
-    try:
-        pending = await _supa_get(
-            "planning_applications",
-            council_id=f"eq.{cid}",
-            status="eq.pending",
-            select="reference,council_url",
-            limit=str(RECHECK_LIMIT),
-        )
-        print(f"Pending recheck: {len(pending)} applications (bounded to {RECHECK_LIMIT})\n")
-    except Exception as e:
-        print(f"⚠ Failed to fetch pending recheck list (continuing without it): {e}\n")
-
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
-        print(f"Chromium launched: {browser.version}\n")
+        print(f"Chromium launched: {browser.version}")
 
-        raw_apps = await scrape(browser, base_url, DAYS_BACK)
-        recheck_updates = await recheck_pending(browser, pending)
+        sem = asyncio.Semaphore(CONCURRENCY)
+        await asyncio.gather(*[
+            process_council(name, base_url, browser, sem)
+            for name, base_url in ESL_COUNCILS
+        ])
 
         await browser.close()
-
-    if not raw_apps and not recheck_updates:
-        await _supa_patch_council(cid, {"coverage_source": "pending"})
-        print("\nNo results and no recheck updates — nothing to save.")
-        return
-
-    postcodes = [a["postcode"] for a in raw_apps if a.get("postcode")]
-    coords = await geocode(postcodes) if postcodes else {}
-    if postcodes:
-        _log(f"Geocoding {len(postcodes)} postcodes…")
-
-    fallback_count = 0
-    records = []
-    for a in raw_apps:
-        lat, lng = None, None
-        if a.get("postcode"):
-            key = a["postcode"].upper().replace(" ", "")
-            if key in coords:
-                lat, lng = coords[key]
-        if lat is None:
-            fallback_count += 1
-
-        records.append({
-            "council_id": cid,
-            "reference": a["reference"],
-            "address": a["address"] or None,
-            "postcode": a.get("postcode"),
-            "description": a.get("description") or None,
-            "status": a["status"],
-            "council_url": a.get("council_url"),
-            "lat": lat,
-            "lng": lng,
-            "source": "esl_scraper",
-        })
-
-    if fallback_count:
-        _log(f"Council centroid fallback for {fallback_count} apps")
-
-    for u in recheck_updates:
-        records.append({
-            "council_id": cid,
-            "reference": u["reference"],
-            "status": u["status"],
-        })
-
-    if records:
-        _log(f"Upserting {len(records)} records with council_id={cid}")
-        ok = await _supa_upsert(records)
-        if ok:
-            _log(f"✓ Saved {len(records)}")
-            await _supa_patch_council(cid, {
-                "coverage_source": "esl_advanced_search",
-                "last_saved_at": datetime.now(timezone.utc).isoformat(),
-            })
 
     print(f"\n{'=' * 50}")
     print(f"Finished in {elapsed_minutes():.1f} minutes")
