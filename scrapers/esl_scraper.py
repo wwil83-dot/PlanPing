@@ -482,7 +482,7 @@ async def recheck_pending(browser: Browser, council_name: str, pending: list[dic
                 updates.append({"reference": p["reference"], "status": status})
     await context.close()
     if updates:
-        _log(f"Recheck: {len(updates)} of {len(pending)} previously-pending "
+        _log(council_name, f"Recheck: {len(updates)} of {len(pending)} previously-pending "
              f"application(s) now have a real decision")
     return updates
 
