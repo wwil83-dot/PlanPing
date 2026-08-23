@@ -31,10 +31,12 @@ CONTEXT_OPTIONS = {
     "ignore_https_errors": True,
 }
 
-# Real, exact URLs the user originally supplied
+# Real, exact URLs the user originally supplied. North Warwickshire
+# deliberately excluded from this retest — its real disclaimer-gate
+# redirect is a confirmed, genuine structural difference, not an
+# artifact of the button-selector bug fixed above.
 TARGETS = [
     ("Cherwell District Council", "https://planningregister.cherwell.gov.uk"),
-    ("North Warwickshire Borough Council", "https://planning.northwarks.gov.uk"),
     ("Wychavon District Council", "https://plan.wychavon.gov.uk"),
     ("Malvern Hills District Council", "https://plan.malvernhills.gov.uk"),
 ]
@@ -121,7 +123,23 @@ async def recon_one(browser, name: str, base_url: str):
     try:
         await page.fill("#DateReceivedFrom", start.strftime("%d/%m/%Y"), timeout=5_000)
         await page.fill("#DateReceivedTo", today.strftime("%d/%m/%Y"), timeout=5_000)
-        await page.locator("button:has-text('Search')").first.click(timeout=5_000)
+
+        # REAL FIX: the previous version's generic
+        # "button:has-text('Search')" selector grabbed the site's own
+        # header search TOGGLE button (confirmed directly on Cherwell:
+        # class="site-header__search-button", completely unrelated to
+        # the real Advanced Search form) — same category of substring/
+        # generic-text-match trap already hit once this session
+        # (statmap's "Property Search" vs "Search"). Scoping the click
+        # specifically to a button INSIDE the real form element that
+        # contains the date fields we just filled, not the whole page.
+        form_with_dates = page.locator("form").filter(has=page.locator("#DateReceivedFrom"))
+        search_btn = form_with_dates.locator("button:has-text('Search')")
+        if await search_btn.count() == 0:
+            # Real, defensive fallback — some of these forms may use a
+            # real <input type=submit> instead of a <button>
+            search_btn = form_with_dates.locator("input[type='submit']")
+        await search_btn.first.click(timeout=5_000)
     except Exception as e:
         print(f"  ⚠ Could not fill/submit real search: {e}")
         await context.close()
