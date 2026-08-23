@@ -440,7 +440,15 @@ async def scrape(browser: Browser, council_name: str, base_url: str, days_back: 
         # same category of fix as Northgate's readonly fields earlier
         # this project. Checking the real type attribute first so this
         # doesn't change behaviour for the other 4 councils at all.
-        field_type = await page.locator("#DateReceivedFrom").get_attribute("type")
+        # REAL FIX — confirmed via Cherwell's production run: its page
+        # genuinely has 2 real elements sharing id="DateReceivedFrom"
+        # (a real, pre-existing HTML quality issue on their end,
+        # confirmed via the exact real error showing both elements'
+        # slightly different attributes). Playwright's fill() tolerated
+        # this silently before; get_attribute() is stricter. Using
+        # .first, same convention as every other locator interaction
+        # in this file.
+        field_type = await page.locator("#DateReceivedFrom").first.get_attribute("type")
         if field_type == "date":
             for field_id, value in [("DateReceivedFrom", start.isoformat()),
                                       ("DateReceivedTo", today.isoformat())]:
@@ -454,8 +462,8 @@ async def scrape(browser: Browser, council_name: str, base_url: str, days_back: 
                     [field_id, value],
                 )
         else:
-            await page.fill("#DateReceivedFrom", start.strftime("%d/%m/%Y"), timeout=5_000)
-            await page.fill("#DateReceivedTo", today.strftime("%d/%m/%Y"), timeout=5_000)
+            await page.locator("#DateReceivedFrom").first.fill(start.strftime("%d/%m/%Y"), timeout=5_000)
+            await page.locator("#DateReceivedTo").first.fill(today.strftime("%d/%m/%Y"), timeout=5_000)
     except Exception as e:
         _log(council_name, f"⚠ Could not fill date fields: {e}")
         await context.close()
@@ -470,7 +478,7 @@ async def scrape(browser: Browser, council_name: str, base_url: str, days_back: 
     try:
         planning_checkbox = page.locator("#SearchPlanning")
         if await planning_checkbox.count() > 0:
-            await planning_checkbox.check(timeout=3_000)
+            await planning_checkbox.first.check(timeout=3_000)
     except Exception as e:
         _log(council_name, f"⚠ Could not check #SearchPlanning (continuing anyway): {e}")
 
@@ -698,22 +706,40 @@ async def process_council(name: str, base_url: str, browser: Browser, sem: async
         if fallback_count:
             _log(name, f"Council centroid fallback for {fallback_count} apps")
 
-        for u in recheck_updates:
-            records.append({
-                "council_id": cid,
-                "reference": u["reference"],
-                "status": u["status"],
-            })
+        # REAL FIX — confirmed via Wychavon/Malvern Hills' production
+        # run: PostgREST's bulk upsert genuinely requires every object
+        # in a SINGLE call to share identical keys (real error:
+        # "All object keys must match"). Full application records (10
+        # keys) and partial recheck-update records (3 keys) were being
+        # mixed into the same call — this bug was latent since the
+        # very first version, it just never triggered until a run
+        # found real recheck updates for the first time. Two separate
+        # calls now, each internally uniform.
+        recheck_records = [{
+            "council_id": cid,
+            "reference": u["reference"],
+            "status": u["status"],
+        } for u in recheck_updates]
 
+        saved_count = 0
         if records:
-            _log(name, f"Upserting {len(records)} records with council_id={cid}")
-            ok = await _supa_upsert(records)
-            if ok:
-                _log(name, f"✓ Saved {len(records)}")
-                await _supa_patch_council(cid, {
-                    "coverage_source": "esl_advanced_search",
-                    "last_saved_at": datetime.now(timezone.utc).isoformat(),
-                })
+            _log(name, f"Upserting {len(records)} new/updated application records "
+                 f"with council_id={cid}")
+            if await _supa_upsert(records):
+                saved_count += len(records)
+
+        if recheck_records:
+            _log(name, f"Upserting {len(recheck_records)} recheck status updates "
+                 f"with council_id={cid}")
+            if await _supa_upsert(recheck_records):
+                saved_count += len(recheck_records)
+
+        if saved_count:
+            _log(name, f"✓ Saved {saved_count}")
+            await _supa_patch_council(cid, {
+                "coverage_source": "esl_advanced_search",
+                "last_saved_at": datetime.now(timezone.utc).isoformat(),
+            })
 
 
 async def main():
