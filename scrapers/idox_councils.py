@@ -333,8 +333,25 @@ IDOX_COUNCILS = [
     ("Knowsley Metropolitan Borough Council",
      "https://planapp.knowsley.gov.uk/online-applications"),
 
-    # BROKEN — St Helens selected Idox Cloud (announced May 2026) but portal not yet live.
-    # publicaccess.sthelens.gov.uk times out. Re-enable once migration completes.
+    # RE-DIAGNOSED 2026-08-23 — the original "migration not yet live"
+    # theory was WRONG. Real, direct evidence from the person running
+    # this project: the exact same URL loads fast and cleanly in a
+    # real browser, even through a Luxembourg VPN — the portal is
+    # genuinely live. This is the SAME real datacenter-ASN/proxy-
+    # blocklist block as Derby/NE Lincolnshire/Highland (see Derby's
+    # entry for the full evidence trail): zero network activity, a
+    # total connection hang from every cloud IP tested. Also tested
+    # directly via the Webshare Static Residential proxy
+    # (webshare_priority1_test.py) — confirmed FAILED the exact same
+    # way as Derby/NE Lincolnshire (proxy itself genuinely active,
+    # confirmed via a real exit-IP check, but the target still hit a
+    # total ERR_TIMED_OUT). That's 3 for 3 — Webshare's residential
+    # product doesn't help with this real block category at all.
+    # coverage_source set to 'manual_link' in Supabase to match — see
+    # accompanying SQL. A second, different URL
+    # (www.sthelens.gov.uk/online-applications) was also tried and
+    # returned a genuine, clean 404 — that domain is live but has no
+    # planning page at this path; not further pursued.
     # ("St. Helens Metropolitan Borough Council",
     #  "https://publicaccess.sthelens.gov.uk/online-applications"),
 
@@ -1206,6 +1223,11 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # BROKEN — Lancaster, Preston, Burnley all timeout at 60s (WAF/cloud-IP blocking)
     # Consistent across 30s/45s/60s runs. Not worth the 3-minute drain per run.
+    # RETESTED 2026-08-23 via idox_waf_recheck.py — Lancaster STILL
+    # genuinely times out (45s), unlike Tonbridge/Solihull/NE
+    # Derbyshire/Bolsover, which all turned out to be stale blocks.
+    # This one's a real, current block, not just untested. Worth
+    # trying again in a few weeks rather than assuming it's cleared.
     # ("Lancaster City Council",
     #  "https://planning.lancaster.gov.uk/online-applications"),
     # ("Preston City Council",
