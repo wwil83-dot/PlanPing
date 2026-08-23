@@ -176,7 +176,16 @@ def _parse_results_table(html: str, base_url: str, council_name: str) -> list[di
         return []
 
     header_row_cells = rows[0].find_all("td") or rows[0].find_all("th")
-    header_cells = [c.get_text(strip=True).lower() for c in header_row_cells]
+    # REAL FIX, confirmed via Cherwell's production run: sortable
+    # column headers there have real, decorative sort-arrow unicode
+    # characters (▶/▲) glued directly onto the header text (e.g.
+    # "reference no.▶") — stripping these so keyword matching below
+    # isn't affected by decoration that has nothing to do with the
+    # real column name.
+    header_cells = [
+        c.get_text(strip=True).lower().rstrip("▶▲▼◀")
+        for c in header_row_cells
+    ]
     if not header_cells:
         _diagnose_row_parse(council_name, [], html)
         return []
@@ -187,7 +196,11 @@ def _parse_results_table(html: str, base_url: str, council_name: str) -> list[di
                 return i
         return None
 
-    idx_ref = _col_index("application number")
+    # REAL FIX, confirmed via Cherwell's production run: its real
+    # header says "reference no." — genuinely different wording from
+    # Eden/South Lakeland/Wychavon/Malvern Hills' "application number".
+    # Matching both.
+    idx_ref = _col_index("application number", "reference no")
     idx_location = _col_index("location")
     idx_proposal = _col_index("proposal")
     idx_status = _col_index("status")
