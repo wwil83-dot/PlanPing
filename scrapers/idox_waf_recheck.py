@@ -75,24 +75,28 @@ CONTEXT_OPTIONS = {
 
 # (council_name, url, real confirmed block signature to look for)
 TARGETS = [
-    # RETESTED 2026-08-23 — real, confirmed via direct DB check: both
-    # of these show a genuine 5+ week silence (last real save 2026-07-
-    # 14, coverage_source drifted to 'pending' via a mechanism that
-    # couldn't be pinned down in the current codebase — ruled out both
-    # idox_scraper.py itself and council_health_check.py directly).
-    # Both are still confirmed ACTIVE in idox_councils.py's real
-    # config, so the scraper should be attempting them every night —
-    # worth a fresh, direct check rather than trust a 5-week-stale
-    # config. Tonbridge/Solihull deliberately NOT retested here —
-    # already confirmed fresh via today's own DB check. Highland/
-    # Edinburgh deliberately NOT retested — already confirmed
-    # genuinely, permanently blocked (same real server as Derby).
-    ("North East Derbyshire District Council",
-     "https://planapps-online.ne-derbyshire.gov.uk/online-applications/search.do?action=weeklyList",
-     "cloudflare"),
-    ("Bolsover District Council",
-     "https://publicaccess.bolsover.gov.uk/online-applications/search.do?action=weeklyList",
-     "incapsula"),
+    # Priority 4 — cheap rechecks, real evidence from 2026-08-23:
+    # Lancaster confirmed same real "WAF/cloud-IP blocking" category
+    # documented for Preston/Burnley too (60s timeout, consistent
+    # across 30/45/60s runs) — never retested since the UK runner was
+    # introduced, same situation Tonbridge/Solihull/NE Derbyshire/
+    # Bolsover were all in before clearing. St Helens: real, documented
+    # Idox Cloud migration announced May 2026, portal wasn't live at
+    # the time of the original check — worth a fresh look. Testing
+    # BOTH real URL candidates found in the config: the disabled
+    # entry's own URL (publicaccess.sthelens.gov.uk) and a second,
+    # different URL sitting in this file's own INSERT_SQL block
+    # (www.sthelens.gov.uk) — a real, unexplained discrepancy worth
+    # resolving directly rather than guessing which one's current.
+    ("Lancaster City Council",
+     "https://planning.lancaster.gov.uk/online-applications/search.do?action=weeklyList",
+     None),
+    ("St Helens (publicaccess subdomain)",
+     "https://publicaccess.sthelens.gov.uk/online-applications/search.do?action=weeklyList",
+     None),
+    ("St Helens (www subdomain)",
+     "https://www.sthelens.gov.uk/online-applications/search.do?action=weeklyList",
+     None),
 ]
 
 # Real, known WAF/block-page signatures — extend this list with real
