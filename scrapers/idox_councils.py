@@ -1162,14 +1162,30 @@ IDOX_COUNCILS = [
     # 'manual_link' back to 'pending' (see accompanying SQL).
     ("North East Derbyshire District Council",
      "https://planapps-online.ne-derbyshire.gov.uk/online-applications"),
+    # NOTE 2026-08-23 — real, confirmed via direct DB check: this
+    # council genuinely saved data on 2026-07-14 (23 apps), then went
+    # 5+ weeks with no further saves, and coverage_source was found
+    # reset to 'pending' by a mechanism that couldn't be pinned down
+    # despite a real, thorough search — ruled out both idox_scraper.py
+    # itself (confirmed: never resets coverage_source on an empty run,
+    # only increments a counter) and council_health_check.py (confirmed
+    # read-only, never writes to the DB at all). Freshly re-verified
+    # via idox_waf_recheck.py the same day: real 200, real "Weekly
+    # List" title, no block signature — genuinely clear right now.
+    # coverage_source manually corrected back to 'idox_scraper' via
+    # direct SQL. If this council goes silent again, the ROOT CAUSE of
+    # the coverage_source drift is still genuinely unknown — worth
+    # investigating properly rather than assuming it's the same known
+    # WAF category as before.
 
-    # RE-ENABLED 2026-08-17 — same evidence and same honest caveat as
-    # North East Derbyshire directly above (identical original
-    # Cloudflare challenge, identical recheck result: real 200, real
-    # "Weekly List" title, no challenge text present). NOT YET run
-    # through a real data-producing scrape. coverage_source needs a
-    # manual Supabase reset from 'manual_link' back to 'pending' (see
-    # accompanying SQL).
+    # NOTE 2026-08-23 — same real, unresolved coverage_source-drift
+    # mystery as North East Derbyshire directly above (see its comment
+    # for the full detail) — genuinely saved data on 2026-07-14 (17
+    # apps), then 5+ weeks of silence with coverage_source found reset
+    # to 'pending' by an unidentified mechanism. Freshly re-verified
+    # the same day: real 200, real "Weekly List" title, no block
+    # signature — genuinely clear right now, coverage_source manually
+    # corrected back to 'idox_scraper'.
     ("Bolsover District Council",
      "https://publicaccess.bolsover.gov.uk/online-applications"),
 
