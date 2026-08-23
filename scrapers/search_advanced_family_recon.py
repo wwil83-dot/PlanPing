@@ -49,21 +49,34 @@ def slug(name: str) -> str:
 def get_refs(html):
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(html, "html.parser")
-    table = soup.find("table")
-    if not table:
-        return None, []
-    rows = table.find_all("tr")
-    if not rows:
-        return None, []
-    header = [td.get_text(strip=True) for td in rows[0].find_all("td")]
-    refs = []
-    for r in rows[1:]:
-        cells = r.find_all("td")
-        if cells:
-            a = cells[0].find("a")
-            if a:
-                refs.append(a.get_text(strip=True))
-    return header, refs
+    tables = soup.find_all("table")
+    if not tables:
+        return None, [], 0
+    # Real, defensive check: look for a real results-shaped table
+    # (one with a real <a> link in its first data-row cell) among ALL
+    # tables on the page, not just assuming the first one is right —
+    # confirmed necessary this round, given the search form's own
+    # category-selector table keeps being picked up as if it were
+    # results.
+    for table in tables:
+        rows = table.find_all("tr")
+        if len(rows) < 2:
+            continue
+        header = [td.get_text(strip=True) for td in rows[0].find_all("td")]
+        refs = []
+        for r in rows[1:]:
+            cells = r.find_all("td")
+            if cells:
+                a = cells[0].find("a")
+                if a:
+                    refs.append(a.get_text(strip=True))
+        if refs:
+            return header, refs, len(tables)
+    # No table with real refs found — return the first table's header
+    # anyway, for visibility into what WAS found
+    rows = tables[0].find_all("tr")
+    header = [td.get_text(strip=True) for td in rows[0].find_all("td")] if rows else []
+    return header, [], len(tables)
 
 
 async def recon_one(browser, name: str, base_url: str):
@@ -153,7 +166,23 @@ async def recon_one(browser, name: str, base_url: str):
 
     print(f"  Real URL after search: {page.url}")
     html = await page.content()
-    header, refs = get_refs(html)
+
+    # REAL, DIRECT EVIDENCE — save full HTML and a screenshot so the
+    # actual page state can be seen directly, rather than continuing
+    # to guess from incomplete table/URL signals after two rounds of
+    # inconclusive results.
+    out_html = f"/tmp/search_advanced_recon_{slug(name)}.html"
+    with open(out_html, "w", encoding="utf-8") as f:
+        f.write(html)
+    out_png = f"/tmp/search_advanced_recon_{slug(name)}.png"
+    try:
+        await page.screenshot(path=out_png, full_page=True)
+    except Exception:
+        pass
+    print(f"  Saved: {out_html}, {out_png}")
+
+    header, refs, total_tables = get_refs(html)
+    print(f"  Real total <table> elements on page: {total_tables}")
     print(f"  Real table header: {header}")
     print(f"  Real refs found on page 1: {len(refs)}: {refs[:5]}")
 
