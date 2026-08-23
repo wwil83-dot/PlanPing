@@ -137,20 +137,25 @@ async def recon_one(browser, name: str, base_url: str):
         await page.fill("#DateReceivedFrom", start.strftime("%d/%m/%Y"), timeout=5_000)
         await page.fill("#DateReceivedTo", today.strftime("%d/%m/%Y"), timeout=5_000)
 
-        # REAL FIX: the previous version's generic
-        # "button:has-text('Search')" selector grabbed the site's own
-        # header search TOGGLE button (confirmed directly on Cherwell:
-        # class="site-header__search-button", completely unrelated to
-        # the real Advanced Search form) — same category of substring/
-        # generic-text-match trap already hit once this session
-        # (statmap's "Property Search" vs "Search"). Scoping the click
-        # specifically to a button INSIDE the real form element that
-        # contains the date fields we just filled, not the whole page.
+        # REAL FIX, confirmed via direct screenshot inspection: all 3
+        # of Cherwell/Wychavon/Malvern Hills showed the exact same
+        # real pattern — dates filled correctly, but the top-level
+        # "Planning" checkbox (real field name/id: SearchPlanning,
+        # same convention confirmed on Eden/South Lakeland too) stayed
+        # unchecked, and the server appears to reject/ignore a search
+        # with no search-type selected, just re-serving a fresh blank
+        # form. Checking it explicitly before submitting.
+        try:
+            planning_checkbox = page.locator("#SearchPlanning")
+            if await planning_checkbox.count() > 0:
+                await planning_checkbox.check(timeout=3_000)
+                print(f"  Checked #SearchPlanning")
+        except Exception as e:
+            print(f"  ⚠ Could not check #SearchPlanning: {e}")
+
         form_with_dates = page.locator("form").filter(has=page.locator("#DateReceivedFrom"))
         search_btn = form_with_dates.locator("button:has-text('Search')")
         if await search_btn.count() == 0:
-            # Real, defensive fallback — some of these forms may use a
-            # real <input type=submit> instead of a <button>
             search_btn = form_with_dates.locator("input[type='submit']")
         await search_btn.first.click(timeout=5_000)
     except Exception as e:
