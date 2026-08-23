@@ -1595,6 +1595,13 @@ jobs:
       - run: playwright install --with-deps chromium
       - name: Recon Cherwell, North Warwickshire, Wychavon, Malvern Hills
         run: cd scrapers && python search_advanced_family_recon.py
+      - name: Upload recon HTML and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: search-advanced-family-recon-output
+          path: /tmp/search_advanced_recon_*
+          retention-days: 14
 
   northgate_url_healthcheck:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_url_healthcheck'
