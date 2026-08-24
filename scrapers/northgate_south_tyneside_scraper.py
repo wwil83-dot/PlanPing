@@ -528,8 +528,15 @@ async def main():
 
         await browser.close()
 
+    # REAL FIX — same bug already found and fixed in esl_scraper.py:
+    # this branch was unconditionally resetting coverage_source back
+    # to 'pending' on ANY run that found zero new applications — even
+    # when caused by a genuine, transient scraping error, silently
+    # downgrading a council that may have real, valid data from an
+    # earlier successful run. coverage_source should only ever be SET
+    # on a real success, never reset to 'pending' just because one
+    # particular run happened to find nothing.
     if not raw_apps and not recheck_updates:
-        await _supa_patch_council(COUNCIL_DB_ID, {"coverage_source": "pending"})
         print("\nNo results and no recheck updates — nothing to save.")
         return
 
