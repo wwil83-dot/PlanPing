@@ -627,13 +627,43 @@ async def fetch_received_dates(browser: Browser, council_name: str,
         except Exception:
             continue
 
+        # REAL FIX — confirmed via esl_cherwell_nwarks_detail_recon.py:
+        # North Warwickshire's own detail page redirects through the
+        # exact same real disclaimer gate as its search flow — this
+        # function's own fresh browser context (separate cookies/
+        # session from whatever scrape() already accepted) had never
+        # seen it, so it silently landed on the disclaimer page
+        # instead of real content every time. Same real handling
+        # already proven in scrape() itself, applied here too — only
+        # fires when genuinely needed, harmless for every other
+        # council that never shows this gate at all.
+        if "/Disclaimer" in page.url:
+            try:
+                accept_btn = page.get_by_role("button", name="Accept", exact=True)
+                await accept_btn.first.click(timeout=5_000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=15_000)
+                except PlaywrightTimeout:
+                    pass
+                await asyncio.sleep(1)
+            except Exception:
+                continue
+
         text = ""
         try:
             text = await page.locator("body").inner_text()
         except Exception:
             continue
 
-        m = re.search(r"Application Received Date\s*\n?\s*(\d{1,2}/\d{1,2}/\d{2,4})", text)
+        # REAL FIX — confirmed via esl_cherwell_nwarks_detail_recon.py:
+        # Cherwell's real label is simply "Received Date", not
+        # "Application Received Date" like ESL's — a genuine per-
+        # council wording difference on the same shared platform, same
+        # category as the header-tag/column-naming differences already
+        # found elsewhere in this family. Making "Application " an
+        # optional prefix rather than assuming every council phrases
+        # it identically.
+        m = re.search(r"(?:Application )?Received Date\s*\n?\s*(\d{1,2}/\d{1,2}/\d{2,4})", text)
         if m:
             iso = _parse_uk_date(m.group(1))
             if iso:
@@ -672,6 +702,23 @@ async def recheck_pending(browser: Browser, council_name: str, pending: list[dic
                 pass
         except Exception:
             continue
+
+        # REAL FIX — same real cause and same real fix as
+        # fetch_received_dates(): North Warwickshire's detail page
+        # redirects through the same disclaimer gate as its search
+        # flow, and this function's own fresh browser context never
+        # accepted it. Only fires when genuinely needed.
+        if "/Disclaimer" in page.url:
+            try:
+                accept_btn = page.get_by_role("button", name="Accept", exact=True)
+                await accept_btn.first.click(timeout=5_000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=15_000)
+                except PlaywrightTimeout:
+                    pass
+                await asyncio.sleep(1)
+            except Exception:
+                continue
 
         text = ""
         try:
