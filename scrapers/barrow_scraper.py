@@ -329,19 +329,74 @@ async def geocode(postcodes: list[str]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-async def _close_modal(page: Page):
-    """Real, confirmed: a 'Close' control exists at the end of every
-    modal's own content. Best-effort — if it can't be found/clicked,
-    the next real click on the underlying page usually still works
-    fine regardless (APEX modals don't block the parent page's own
-    interactivity the way a true native browser dialog would)."""
+async def _close_modal(page: Page) -> bool:
+    """REAL FIX (2026-08-24) — confirmed root cause of a real,
+    expensive cascading failure: the original version's assumption
+    ("APEX modals don't block the parent page") was WRONG. Real,
+    direct evidence from a live production run: after the very first
+    successful Validated click, EVERY subsequent click for the rest of
+    the entire run failed with "subtree intercepts pointer events" —
+    the SAME stuck first-week modal blocking all 15 later attempts,
+    because this function's old bare 'except: pass' silently swallowed
+    whatever went wrong with the close click, with zero warning. ~7 of
+    15 available minutes were burned on doomed retries as a direct
+    result.
+
+    Real, confirmed via the actual error log: this site's modals are
+    genuine jQuery UI dialog widgets (class="ui-dialog ui-corner-all
+    ui-widget..."). jQuery UI's own standard, well-documented
+    convention renders a real close button with class
+    'ui-dialog-titlebar-close' inside the titlebar — targeting that
+    directly as the primary, most reliable approach, with a real
+    Escape-key press as a second, independent fallback (a standard,
+    reliable way to dismiss this exact class of dialog). Returns
+    whether the modal genuinely appears gone, and — critically —
+    LOGS a real, visible warning on failure instead of staying silent,
+    so this exact class of cascading failure can never again burn an
+    entire run's time budget without anyone knowing why.
+    """
+    closed = False
     try:
-        close_btn = page.get_by_role("button", name="Close", exact=True)
-        if await close_btn.count() > 0:
-            await close_btn.first.click(timeout=3000)
+        close_x = page.locator(".ui-dialog-titlebar-close")
+        if await close_x.count() > 0:
+            await close_x.first.click(timeout=3000)
             await asyncio.sleep(0.5)
+            closed = True
+    except Exception as e:
+        _log(f"⚠ Real jQuery UI close button click failed: {e}")
+
+    if not closed:
+        try:
+            close_btn = page.get_by_role("button", name="Close", exact=True)
+            if await close_btn.count() > 0:
+                await close_btn.first.click(timeout=3000)
+                await asyncio.sleep(0.5)
+                closed = True
+        except Exception as e:
+            _log(f"⚠ Real 'Close' button click also failed: {e}")
+
+    if not closed:
+        try:
+            await page.keyboard.press("Escape")
+            await asyncio.sleep(0.5)
+            closed = True
+            _log("Used a real Escape key press as a fallback to close the modal")
+        except Exception as e:
+            _log(f"⚠ Real Escape key fallback also failed: {e}")
+
+    # Real, direct confirmation check — did a real dialog element
+    # actually disappear, rather than just assuming success because no
+    # exception was thrown
+    try:
+        still_open = await page.locator("[role='dialog']").count() > 0
+        if still_open:
+            _log("⚠ A real dialog element is STILL present after all close "
+                 "attempts — the next click may fail")
+            return False
     except Exception:
         pass
+
+    return closed
 
 
 async def scrape() -> tuple[list[dict], list[dict]]:
@@ -411,10 +466,30 @@ async def scrape() -> tuple[list[dict], list[dict]]:
                                 new_count += 1
                         _log(f"Week {week_date_str} (Validated): {new_count} new "
                              f"(real count shown: {validated_count})")
-                        await _close_modal(page)
+                        if not await _close_modal(page):
+                            # REAL FIX — confirmed root cause of a real
+                            # cascading failure: continuing to click
+                            # against a genuinely stuck modal just
+                            # repeats the exact same doomed failure for
+                            # every remaining week, burning the whole
+                            # time budget for nothing. Stopping cleanly
+                            # here preserves whatever real data was
+                            # already captured instead.
+                            _log("⚠ Modal genuinely would not close — stopping "
+                                 "here rather than burning the rest of the "
+                                 "budget on doomed retries")
+                            await context.close()
+                            await browser.close()
+                            return _finalise(all_apps, decided_entries)
                 except Exception as e:
                     _log(f"⚠ Error on Validated list, week {week_date_str}: {e}")
-                    await _close_modal(page)
+                    if not await _close_modal(page):
+                        _log("⚠ Modal genuinely would not close after an error — "
+                             "stopping here rather than burning the rest of "
+                             "the budget on doomed retries")
+                        await context.close()
+                        await browser.close()
+                        return _finalise(all_apps, decided_entries)
 
             if should_stop():
                 break
@@ -437,18 +512,37 @@ async def scrape() -> tuple[list[dict], list[dict]]:
                         decided_entries.extend(week_decided)
                         _log(f"Week {week_date_str} (Decided): {len(week_decided)} real "
                              f"decision(s) found (real count shown: {decided_count})")
-                        await _close_modal(page)
+                        if not await _close_modal(page):
+                            _log("⚠ Modal genuinely would not close — stopping "
+                                 "here rather than burning the rest of the "
+                                 "budget on doomed retries")
+                            await context.close()
+                            await browser.close()
+                            return _finalise(all_apps, decided_entries)
                 except Exception as e:
                     _log(f"⚠ Error on Decided list, week {week_date_str}: {e}")
-                    await _close_modal(page)
+                    if not await _close_modal(page):
+                        _log("⚠ Modal genuinely would not close after an error — "
+                             "stopping here rather than burning the rest of "
+                             "the budget on doomed retries")
+                        await context.close()
+                        await browser.close()
+                        return _finalise(all_apps, decided_entries)
 
         await context.close()
         await browser.close()
 
-    # Real merge pass — a decided reference either updates a full
-    # record already captured this run, or becomes its own separate
-    # partial status-only update for an older, already-saved
-    # application never seen in this run's Validated pass.
+    return _finalise(all_apps, decided_entries)
+
+
+def _finalise(all_apps: list[dict], decided_entries: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Real merge pass — a decided reference either updates a full
+    record already captured this run, or becomes its own separate
+    partial status-only update for an older, already-saved
+    application never seen in this run's Validated pass. Extracted
+    into its own function so both a normal, full completion AND an
+    early exit (e.g. a genuinely stuck modal) save whatever real data
+    was actually captured, rather than losing it entirely."""
     apps_by_ref = {a["reference"]: a for a in all_apps}
     partial_updates: list[dict] = []
     seen_decided_refs: set[str] = set()
@@ -465,6 +559,7 @@ async def scrape() -> tuple[list[dict], list[dict]]:
             partial_updates.append({"reference": ref, "status": d["status"]})
 
     return all_apps, partial_updates
+
 
 
 async def main():
