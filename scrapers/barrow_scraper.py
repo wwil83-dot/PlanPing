@@ -1,42 +1,56 @@
 #!/usr/bin/env python3
 """
-PlanFind — Barrow (Westmorland and Furness Council) scraper (2026-08-24).
+PlanFind — Barrow (Westmorland and Furness Council) scraper (2026-08-24,
+extended same day with real Decided-list support).
 
 Real, confirmed evidence backing every design decision here — see
 barrow_councils.py, and the full recon trail: wandf_recon.py,
-wandf_recon_round2.py, wandf_recon_round3.py, barrow_iframe_check.py.
+wandf_recon_round2.py, wandf_recon_round3.py, barrow_iframe_check.py,
+barrow_decided_recon.py.
 
 ARCHITECTURE: genuinely the most complex real platform in this whole
 project — a live, 2-level click-driven Oracle APEX iframe navigation,
 not a URL-based scrape at all:
   1. Load the real Weekly List overview. Parse real week-commencing
-     dates from the confirmed table (class="t-Report-report").
+     dates AND real Validated/Decided counts from the confirmed table
+     (class="t-Report-report").
   2. For each real target week (within DAYS_BACK), click that week's
-     own real "Validated" button — a genuine javascript:apex.
-     navigation.dialog(...) call, letting Oracle APEX's own real JS
-     handler open a correctly-authenticated new iframe (confirmed:
-     manually reconstructing the target URL is NOT attempted here —
-     every other platform in this project that tried that specific
-     shortcut against a similar real APEX/AJAX mechanism failed; only
-     a genuine click ever worked).
+     own real "Validated" button, THEN its own real "Decided" button —
+     both genuine javascript:apex.navigation.dialog(...) calls,
+     letting Oracle APEX's own real JS handler open a correctly-
+     authenticated new iframe each time (confirmed: manually
+     reconstructing the target URL is NOT attempted here — every other
+     platform in this project that tried that specific shortcut
+     against a similar real APEX/AJAX mechanism failed; only a genuine
+     click ever worked).
   3. Find the real new iframe among page.frames (its URL contains
-     "VALIDATEDLIST") and extract its real table
+     "VALIDATEDLIST" or "DECIDEDLIST") and extract its real table
      (class="a-IRR-table", the one with actual data rows, not the
-     hidden 1-row template sharing the same class).
+     hidden 1-row template sharing the same class) — both lists share
+     the exact same real structure, confirmed via barrow_decided_recon.py,
+     just with 2 extra real columns (Decision, Decision date) on the
+     Decided list.
   4. Close the real modal (confirmed: a "Close" button/link exists)
-     before moving to the next week, so dialogs don't stack up.
+     before moving to the next click, so dialogs don't stack up.
+  5. Real, confirmed decision matching by reference number: a real
+     decided application's reference is checked against this SAME
+     run's own Validated-list catch (fast-turnaround merge) and, if
+     not found there, becomes its own separate partial status-only
+     update — matched by reference alone, no stored URL needed at all.
 
 HONEST LIMITATIONS:
-  - No pending-recheck mechanism for Barrow at all. Real, confirmed
-    evidence: the per-application detail link carries genuine
-    session-bound security tokens (cs=, p_dialog_cs=) baked directly
-    into its URL — unlike Hartlepool's clean, permanent reference-only
-    URL, this one won't still be valid tomorrow. Storing it for a
-    later recheck pass would not work. Every Barrow application starts
-    and stays 'pending' from this scraper alone.
-  - Only the real "Validated" list is scraped — the real "Decided"
-    list's own column structure was never directly recon'd. A real,
-    separate investigation would be needed to add decision data later.
+  - Real decision codes confirmed via barrow_decided_recon.py:
+    'APPCOND', 'APPROVED'. Only these 2 have actually been observed —
+    refused/withdrawn mappings are a defensive, reasonable guess based
+    on common wording patterns, same discipline as every other
+    platform's status normalisation here, since a real refused/
+    withdrawn code has never actually been seen in the wild yet.
+  - Only weeks within the real DAYS_BACK window get a Decided-list
+    check — an application validated long before that window, then
+    decided just now, would still be correctly caught (since the
+    DECISION happened within the window and that week's own Decided
+    list is checked), but an application decided far outside the
+    window entirely would never be seen by this scraper at all.
   - Shares council_id with esl_scraper.py's Eden/South Lakeland data
     (same real council, deliberately one row) — this scraper's own
     records use a distinct real "source" tag so the two can be told
@@ -120,11 +134,12 @@ def _parse_uk_date(s: str) -> Optional[str]:
     return None
 
 
-def _real_weeks(html: str) -> list[tuple[str, int]]:
+def _real_weeks(html: str) -> list[tuple[str, int, int]]:
     """Real, confirmed weekly overview table structure — class=
     't-Report-report', real columns Week Commencing | Validated |
-    Decided. Returns (date_string, real_application_count) pairs for
-    every real week found, oldest filtering left to the caller."""
+    Decided. Returns (date_string, real_validated_count,
+    real_decided_count) triples for every real week found, oldest
+    filtering left to the caller."""
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", class_="t-Report-report")
     if not table:
@@ -133,26 +148,56 @@ def _real_weeks(html: str) -> list[tuple[str, int]]:
     weeks = []
     for row in rows[1:]:
         cells = row.find_all("td")
-        if len(cells) < 2:
+        if len(cells) < 3:
             continue
         week_date = cells[0].get_text(strip=True)
-        validated_link = cells[1].find("a")
-        if not validated_link:
+        if not week_date:
             continue
-        count_text = validated_link.get_text(strip=True)
-        m = re.search(r"\((\d+)\)", count_text)
-        count = int(m.group(1)) if m else 0
-        if week_date:
-            weeks.append((week_date, count))
+
+        def _count_from_cell(cell) -> int:
+            link = cell.find("a")
+            if not link:
+                return 0
+            m = re.search(r"\((\d+)\)", link.get_text(strip=True))
+            return int(m.group(1)) if m else 0
+
+        validated_count = _count_from_cell(cells[1])
+        decided_count = _count_from_cell(cells[2])
+        weeks.append((week_date, validated_count, decided_count))
     return weeks
 
 
+def _normalise_status(decision_code: Optional[str]) -> str:
+    """Real, confirmed decision codes from barrow_decided_recon.py:
+    'APPCOND' (approved with conditions), 'APPROVED'. Only 2 real
+    codes have actually been observed — extending defensively to
+    common Oracle-APEX-style wording patterns for refused/withdrawn,
+    same discipline as every other platform's status normalisation in
+    this project, since a real 'refused' code has never actually been
+    seen in the wild yet."""
+    if not decision_code:
+        return "pending"
+    d = decision_code.lower()
+    if any(x in d for x in ("app", "grant", "permit", "allow")):
+        return "approved"
+    if any(x in d for x in ("ref", "reject", "dismiss")):
+        return "refused"
+    if "withdraw" in d:
+        return "withdrawn"
+    return "pending"
+
+
 def _parse_application_list(html: str) -> list[dict]:
-    """Real, confirmed structure inside the per-week iframe. TWO real
-    tables share class='a-IRR-table' — one a hidden 1-row template,
-    one the real populated data. Matching by real row count (> 1),
-    not by Oracle's own id-suffix naming convention, since that's a
-    more defensible, less implementation-specific signal."""
+    """Real, confirmed structure inside the per-week iframe — shared by
+    BOTH the Validated and Decided lists (confirmed via
+    barrow_decided_recon.py: identical real table structure, class=
+    'a-IRR-table', same real column set plus two extra real columns
+    — Decision, Decision date — when parsing a Decided-list frame.
+    TWO real tables share class='a-IRR-table' on every page — one a
+    hidden 1-row template, one the real populated data. Matching by
+    real row count (> 1), not by Oracle's own id-suffix naming
+    convention, since that's a more defensible, less implementation-
+    specific signal."""
     soup = BeautifulSoup(html, "html.parser")
     candidate_tables = soup.find_all("table", class_="a-IRR-table")
     table = None
@@ -175,7 +220,20 @@ def _parse_application_list(html: str) -> list[dict]:
     idx_ref = _col_index("reference number")
     idx_location = _col_index("location")
     idx_proposal = _col_index("proposal")
-    idx_date = _col_index("validated date")
+    # Real, confirmed: the Validated list's date column is literally
+    # "Validated date"; the Decided list's is "Decision date" — trying
+    # both so this one function serves both real lists.
+    idx_date = _col_index("validated date", "decision date")
+    # Real, confirmed ONLY present on the Decided list — a genuine
+    # decision outcome code (e.g. "APPCOND", "APPROVED"), absent
+    # entirely from the Validated list (which is pre-decision by
+    # definition).
+    idx_decision = _col_index("decision")
+    if idx_decision is not None and idx_decision == idx_date:
+        idx_decision = None  # real defensive guard: "decision" is a
+                               # substring of "decision date" — never
+                               # let both keywords resolve to the same
+                               # real column by accident
 
     if idx_ref is None:
         return []
@@ -191,7 +249,9 @@ def _parse_application_list(html: str) -> list[dict]:
         address = _clean_address(cells[idx_location].get_text(strip=True)) if idx_location is not None and idx_location < len(cells) else ""
         proposal = cells[idx_proposal].get_text(strip=True) if idx_proposal is not None and idx_proposal < len(cells) else ""
         submitted_date = _parse_uk_date(cells[idx_date].get_text(strip=True)) if idx_date is not None and idx_date < len(cells) else None
+        decision_code = cells[idx_decision].get_text(strip=True) if idx_decision is not None and idx_decision < len(cells) else None
         postcode = _extract_postcode(address)
+
 
         apps.append({
             "reference": reference,
@@ -199,8 +259,12 @@ def _parse_application_list(html: str) -> list[dict]:
             "postcode": postcode,
             "description": proposal,
             "submitted_date": submitted_date,
-            "status": "pending",  # real, confirmed: the Validated list
-                                    # is pre-decision by definition
+            # Real, confirmed: only the Decided list has a real
+            # decision code present at all (idx_decision is None when
+            # parsing the Validated list, since that list is
+            # pre-decision by definition) — _normalise_status(None)
+            # correctly falls through to 'pending'.
+            "status": _normalise_status(decision_code),
         })
 
     return apps
@@ -280,9 +344,17 @@ async def _close_modal(page: Page):
         pass
 
 
-async def scrape() -> list[dict]:
+async def scrape() -> tuple[list[dict], list[dict]]:
+    """Returns (full_records, partial_status_updates) — kept separate
+    throughout, never mixed into one list, since a single upsert call
+    containing both full application records and partial status-only
+    records hits PostgREST's real 'All object keys must match' error
+    (the exact bug already found and fixed in esl_scraper.py)."""
     all_apps: list[dict] = []
     seen_refs: set[str] = set()
+    decided_entries: list[dict] = []  # collected separately, merged
+                                        # into the right place only
+                                        # after all weeks are done
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
@@ -300,73 +372,99 @@ async def scrape() -> list[dict]:
             _log(f"⚠ Could not load weekly list page: {e}")
             await context.close()
             await browser.close()
-            return []
+            return [], []
 
         html = await page.content()
         weeks = _real_weeks(html)
         _log(f"Real weeks found on overview: {len(weeks)}")
 
         cutoff = date.today() - timedelta(days=DAYS_BACK)
-        target_weeks = []
-        for week_date_str, count in weeks:
-            parsed = _parse_uk_date(week_date_str)
-            if parsed and date.fromisoformat(parsed) >= cutoff and count > 0:
-                target_weeks.append((week_date_str, count))
+        target_weeks = [w for w in weeks
+                         if (p := _parse_uk_date(w[0])) and date.fromisoformat(p) >= cutoff]
 
-        _log(f"Real weeks within {DAYS_BACK}-day window with real applications: "
-             f"{len(target_weeks)}")
+        _log(f"Real weeks within {DAYS_BACK}-day window: {len(target_weeks)}")
 
-        for week_date_str, count in target_weeks:
+        for week_date_str, validated_count, decided_count in target_weeks:
             if should_stop():
                 _log(f"⚠ Time budget reached, stopping at week {week_date_str}")
                 break
 
-            try:
-                # Real, precise selector: the row whose real
-                # WeekCommencing cell matches this exact date, then
-                # that row's own Validated button specifically — not
-                # just "the first Validated button on the page".
-                row = page.locator(f"tr:has(td:text-is('{week_date_str}'))")
-                validated_btn = row.locator("td[headers='Validated'] a")
-                if await validated_btn.count() == 0:
-                    _log(f"⚠ Could not find real Validated button for week {week_date_str}")
-                    continue
+            row = page.locator(f"tr:has(td:text-is('{week_date_str}'))")
 
-                frames_before = len(page.frames)
-                await validated_btn.first.click(timeout=8_000)
-                await asyncio.sleep(2)  # real, deliberate pause for the
-                                          # new iframe to genuinely load
+            # Real Validated pass — full application records
+            if validated_count > 0:
+                try:
+                    btn = row.locator("td[headers='Validated'] a")
+                    if await btn.count() > 0:
+                        await btn.first.click(timeout=8_000)
+                        await asyncio.sleep(2)
+                        week_apps = []
+                        for frame in page.frames:
+                            if "VALIDATEDLIST" in frame.url:
+                                week_apps = _parse_application_list(await frame.content())
+                                break
+                        new_count = 0
+                        for a in week_apps:
+                            if a["reference"] not in seen_refs:
+                                seen_refs.add(a["reference"])
+                                all_apps.append(a)
+                                new_count += 1
+                        _log(f"Week {week_date_str} (Validated): {new_count} new "
+                             f"(real count shown: {validated_count})")
+                        await _close_modal(page)
+                except Exception as e:
+                    _log(f"⚠ Error on Validated list, week {week_date_str}: {e}")
+                    await _close_modal(page)
 
-                # Real, direct search for the new frame among all real
-                # frames on the page — the one whose URL contains
-                # "VALIDATEDLIST"
-                week_apps = []
-                for frame in page.frames:
-                    if "VALIDATEDLIST" in frame.url:
-                        frame_html = await frame.content()
-                        week_apps = _parse_application_list(frame_html)
-                        break
+            if should_stop():
+                break
 
-                new_count = 0
-                for a in week_apps:
-                    if a["reference"] not in seen_refs:
-                        seen_refs.add(a["reference"])
-                        all_apps.append(a)
-                        new_count += 1
-
-                _log(f"Week {week_date_str}: {new_count} new (real count shown: {count})")
-
-                await _close_modal(page)
-
-            except Exception as e:
-                _log(f"⚠ Error processing week {week_date_str}: {e}")
-                await _close_modal(page)
-                continue
+            # Real Decided pass — real decision outcomes, collected
+            # separately since a reference here might belong to either
+            # a full record just captured above, or an older
+            # application never seen in this run's own Validated pass
+            if decided_count > 0:
+                try:
+                    btn = row.locator("td[headers='Decided'] a")
+                    if await btn.count() > 0:
+                        await btn.first.click(timeout=8_000)
+                        await asyncio.sleep(2)
+                        week_decided = []
+                        for frame in page.frames:
+                            if "DECIDEDLIST" in frame.url:
+                                week_decided = _parse_application_list(await frame.content())
+                                break
+                        decided_entries.extend(week_decided)
+                        _log(f"Week {week_date_str} (Decided): {len(week_decided)} real "
+                             f"decision(s) found (real count shown: {decided_count})")
+                        await _close_modal(page)
+                except Exception as e:
+                    _log(f"⚠ Error on Decided list, week {week_date_str}: {e}")
+                    await _close_modal(page)
 
         await context.close()
         await browser.close()
 
-    return all_apps
+    # Real merge pass — a decided reference either updates a full
+    # record already captured this run, or becomes its own separate
+    # partial status-only update for an older, already-saved
+    # application never seen in this run's Validated pass.
+    apps_by_ref = {a["reference"]: a for a in all_apps}
+    partial_updates: list[dict] = []
+    seen_decided_refs: set[str] = set()
+    for d in decided_entries:
+        ref = d["reference"]
+        if ref in seen_decided_refs:
+            continue  # real, defensive dedup — a reference could
+                        # theoretically appear in more than one
+                        # decided-list page if weeks overlap oddly
+        seen_decided_refs.add(ref)
+        if ref in apps_by_ref:
+            apps_by_ref[ref]["status"] = d["status"]
+        else:
+            partial_updates.append({"reference": ref, "status": d["status"]})
+
+    return all_apps, partial_updates
 
 
 async def main():
@@ -388,9 +486,9 @@ async def main():
     print(f"[Barrow] (council_id={cid}, shares council with esl_scraper.py's "
           f"Eden/South Lakeland data)\n")
 
-    raw_apps = await scrape()
+    raw_apps, partial_updates = await scrape()
 
-    if not raw_apps:
+    if not raw_apps and not partial_updates:
         print("\nNo results — nothing to save.")
         return
 
@@ -426,14 +524,40 @@ async def main():
     if fallback_count:
         _log(f"Council centroid fallback for {fallback_count} apps")
 
+    # Real, confirmed via barrow_decided_recon.py: matching a decided
+    # application back to an existing 'pending' record by reference
+    # number alone genuinely works — no session-bound URL needs
+    # storing at all. Kept as a SEPARATE upsert call from the full
+    # application records above, same discipline as esl_scraper.py's
+    # own recheck split — PostgREST's bulk upsert genuinely requires
+    # every object in one call to share identical keys, and mixing
+    # full (10-key) records with partial (2-key) status updates hits
+    # a real "All object keys must match" error.
+    partial_records = [{
+        "council_id": cid,
+        "reference": p["reference"],
+        "status": p["status"],
+    } for p in partial_updates]
+
+    saved_count = 0
     if records:
-        _log(f"Upserting {len(records)} records with council_id={cid}")
-        ok = await _supa_upsert(records)
-        if ok:
-            _log(f"✓ Saved {len(records)}")
-            await _supa_patch_council(cid, {
-                "last_saved_at": datetime.now(timezone.utc).isoformat(),
-            })
+        _log(f"Upserting {len(records)} new/updated application records "
+             f"with council_id={cid}")
+        if await _supa_upsert(records):
+            saved_count += len(records)
+
+    if partial_records:
+        _log(f"Upserting {len(partial_records)} real decision status "
+             f"updates (matched by reference, no stored URL needed) "
+             f"with council_id={cid}")
+        if await _supa_upsert(partial_records):
+            saved_count += len(partial_records)
+
+    if saved_count:
+        _log(f"✓ Saved {saved_count}")
+        await _supa_patch_council(cid, {
+            "last_saved_at": datetime.now(timezone.utc).isoformat(),
+        })
 
     print(f"\n{'=' * 50}")
     print(f"Finished in {elapsed_minutes():.1f} minutes")
