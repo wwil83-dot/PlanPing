@@ -82,14 +82,28 @@ async def main():
         for i, frame in enumerate(frames):
             print(f"\n  Frame {i}: url={frame.url!r}")
             try:
-                frame_html_len = len(await frame.content())
+                real_html = await frame.content()
+                frame_html_len = len(real_html)
                 print(f"    Real content length: {frame_html_len} chars")
+
+                # ADDED 2026-08-24 — real, confirmed gap from last time:
+                # this diagnostic's real findings only ever reached the
+                # conversation as pasted terminal text, never as an
+                # actual saved file — meaning no parser could be tested
+                # against genuine, real markup the way every other
+                # platform in this project has been. Saving each real
+                # frame's content directly this time.
+                out_html = f"/tmp/barrow_frame_{i}.html"
+                with open(out_html, "w", encoding="utf-8") as f:
+                    f.write(real_html)
+                print(f"    Saved: {out_html}")
+
                 frame_text = (await frame.locator("body").inner_text())[:1500]
                 print(f"    Real visible text (first 1500 chars): {frame_text!r}")
 
                 # Real, direct table check within THIS specific frame
                 from bs4 import BeautifulSoup
-                soup = BeautifulSoup(await frame.content(), "html.parser")
+                soup = BeautifulSoup(real_html, "html.parser")
                 tables = soup.find_all("table")
                 print(f"    Real <table> elements in this frame: {len(tables)}")
                 for j, t in enumerate(tables):
