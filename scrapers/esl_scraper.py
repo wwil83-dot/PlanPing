@@ -587,6 +587,65 @@ async def scrape(browser: Browser, council_name: str, base_url: str, days_back: 
     return all_apps
 
 
+async def fetch_received_dates(browser: Browser, council_name: str,
+                                 new_apps: list[dict]) -> dict:
+    """ADDED 2026-08-24 — real, confirmed via esl_detail_page_recon.py:
+    the results list has no date column at all, but each real,
+    permanent detail page (/Planning/Display/{reference}) has a
+    genuine 'Application Received Date' field. Real, confirmed exact
+    label text and tab-separated value format: 'Application Received
+    Date\\t12/08/2026'. Deliberately called ONLY for genuinely new
+    applications (never seen before in the database) — visiting every
+    application's own detail page just for a date would be a real,
+    meaningful added cost on top of the existing scrape, and after the
+    first run for a council, only a small number of genuinely new
+    applications appear each night anyway.
+
+    Returns {reference: iso_date_string} for whichever ones a real
+    date was actually found for — a missing entry just means no real
+    match, not an error."""
+    results: dict[str, str] = {}
+    if not new_apps:
+        return results
+
+    context = await browser.new_context(**CONTEXT_OPTIONS)
+    page = await context.new_page()
+
+    for a in new_apps:
+        if should_stop():
+            _log(council_name, f"⚠ Time budget reached mid-date-fetch, stopping")
+            break
+        url = a.get("council_url")
+        if not url:
+            continue
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10_000)
+            except PlaywrightTimeout:
+                pass
+        except Exception:
+            continue
+
+        text = ""
+        try:
+            text = await page.locator("body").inner_text()
+        except Exception:
+            continue
+
+        m = re.search(r"Application Received Date\s*\n?\s*(\d{1,2}/\d{1,2}/\d{2,4})", text)
+        if m:
+            iso = _parse_uk_date(m.group(1))
+            if iso:
+                results[a["reference"]] = iso
+
+    await context.close()
+    if results:
+        _log(council_name, f"Found a real received date for {len(results)} of "
+             f"{len(new_apps)} genuinely new application(s)")
+    return results
+
+
 async def recheck_pending(browser: Browser, council_name: str, pending: list[dict]) -> list[dict]:
     """Real, confirmed permanent detail URL (/Planning/Display/{ref}) —
     same purpose as this project's other pending-recheck passes. Real
@@ -664,6 +723,57 @@ async def process_council(name: str, base_url: str, browser: Browser, sem: async
             print(f"    [{name}] ✗ Error: {e}")
             return
 
+        # ADDED 2026-08-24 — real, confirmed gap: this platform's
+        # results list has no date column at all (unlike every other
+        # platform in this project), so every ESL application was
+        # saved with no date whatsoever. Real fix: check which of this
+        # run's references are genuinely new (never seen before in the
+        # database) and, ONLY for those, visit their own real,
+        # permanent detail page for a real 'Application Received Date'
+        # field — confirmed present via esl_detail_page_recon.py.
+        # Deliberately not applied to already-known references, since
+        # that would mean re-fetching hundreds of already-saved
+        # applications' detail pages for no real benefit.
+        if raw_apps:
+            try:
+                known = await _supa_get(
+                    "planning_applications",
+                    council_id=f"eq.{cid}",
+                    select="reference",
+                    limit="2000",
+                )
+                known_refs = {r["reference"] for r in known}
+            except Exception as e:
+                _log(name, f"⚠ Could not fetch known references (skipping "
+                     f"real date lookup this run): {e}")
+                known_refs = set(a["reference"] for a in raw_apps)  # real,
+                                                                       # safe
+                                                                       # fallback:
+                                                                       # treat
+                                                                       # everything
+                                                                       # as
+                                                                       # "already
+                                                                       # known"
+                                                                       # so no
+                                                                       # date
+                                                                       # lookups
+                                                                       # are
+                                                                       # attempted
+                                                                       # blind
+
+            new_apps = [a for a in raw_apps if a["reference"] not in known_refs]
+            if new_apps:
+                _log(name, f"{len(new_apps)} of {len(raw_apps)} applications "
+                     f"are genuinely new — fetching their real received dates")
+                try:
+                    dates = await fetch_received_dates(browser, name, new_apps)
+                    for a in raw_apps:
+                        if a["reference"] in dates:
+                            a["submitted_date"] = dates[a["reference"]]
+                except Exception as e:
+                    _log(name, f"⚠ Real date-fetch error (continuing without "
+                         f"dates this run): {e}")
+
         try:
             recheck_updates = await recheck_pending(browser, name, pending)
         except Exception as e:
@@ -691,6 +801,7 @@ async def process_council(name: str, base_url: str, browser: Browser, sem: async
 
         fallback_count = 0
         records = []
+        records_with_date = []
         for a in raw_apps:
             lat, lng = None, None
             if a.get("postcode"):
@@ -700,7 +811,7 @@ async def process_council(name: str, base_url: str, browser: Browser, sem: async
             if lat is None:
                 fallback_count += 1
 
-            records.append({
+            base_record = {
                 "council_id": cid,
                 "reference": a["reference"],
                 "address": a["address"] or None,
@@ -711,7 +822,23 @@ async def process_council(name: str, base_url: str, browser: Browser, sem: async
                 "lat": lat,
                 "lng": lng,
                 "source": "esl_scraper",
-            })
+            }
+
+            # REAL FIX — confirmed necessary before this ever ran live:
+            # sending an explicit "submitted_date": None for an
+            # already-known application (every night after its first
+            # appearance, since fetch_received_dates only ever runs
+            # for genuinely new references) would NULL OUT a real date
+            # correctly set on an earlier run. Omitting the key
+            # entirely for those, rather than sending null — but that
+            # means this batch and the "has a real date" batch have
+            # genuinely different key sets, so they're kept as two
+            # separate upsert calls, same discipline as the recheck-
+            # updates split elsewhere in this file.
+            if a.get("submitted_date"):
+                records_with_date.append({**base_record, "submitted_date": a["submitted_date"]})
+            else:
+                records.append(base_record)
 
         if fallback_count:
             _log(name, f"Council centroid fallback for {fallback_count} apps")
@@ -737,6 +864,13 @@ async def process_council(name: str, base_url: str, browser: Browser, sem: async
                  f"with council_id={cid}")
             if await _supa_upsert(records):
                 saved_count += len(records)
+
+        if records_with_date:
+            _log(name, f"Upserting {len(records_with_date)} genuinely new "
+                 f"application record(s) with a real received date "
+                 f"with council_id={cid}")
+            if await _supa_upsert(records_with_date):
+                saved_count += len(records_with_date)
 
         if recheck_records:
             _log(name, f"Upserting {len(recheck_records)} recheck status updates "
