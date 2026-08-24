@@ -469,8 +469,15 @@ async def process_council(portal: AgilePortal, browser: Browser, sem: asyncio.Se
             print(f"    [{portal.council_name}] ✗ Error: {e}")
             return
 
+        # REAL FIX — same bug already found and fixed in esl_scraper.py:
+        # this branch was unconditionally resetting coverage_source
+        # back to 'pending' on ANY run that found zero new applications
+        # — even when caused by a genuine, transient scraping error,
+        # silently downgrading a council that may have real, valid
+        # data from an earlier successful run. coverage_source should
+        # only ever be SET on a real success, never reset to 'pending'
+        # just because one particular run happened to find nothing.
         if not raw_apps:
-            await _supa_patch_council(cid, {"coverage_source": "pending"})
             return
 
         postcodes = [a["postcode"] for a in raw_apps if a.get("postcode")]
