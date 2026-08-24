@@ -1441,7 +1441,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: barrow-iframe-check-output
-          path: /tmp/barrow_iframe_check.png
+          path: |
+            /tmp/barrow_iframe_check.png
+            /tmp/barrow_frame_*.html
           retention-days: 14
 
   esl_pagination_test:
