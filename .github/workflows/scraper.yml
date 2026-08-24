@@ -16,6 +16,7 @@ on:
     - cron: '8 8 * * *'   # agileapplications.co.uk nightly scrape (Middlesbrough, Flintshire, Cannock)
     - cron: '12 8 * * *'  # statmap.co.uk/horizoNext nightly scrape (West Lindsey, East Staffordshire)
     - cron: '15 8 * * *'  # "Search/Advanced" family nightly scrape (Westmorland and Furness, Cherwell, Wychavon, Malvern Hills)
+    - cron: '22 8 * * *'  # Barrow (Westmorland and Furness Council) nightly scrape — shares council_id with esl_scraper.py above, deliberately scheduled after it clears
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     # CHANGED 2026-08-18 — both moved to a shared every-5-days cadence
@@ -1661,11 +1662,17 @@ jobs:
           retention-days: 14
 
   barrow_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # genuinely the most complex real architecture in this project,
-    # never run live, matching every other new platform's first job
-    # this session before a confirmed clean production run.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'barrow_scraper'
+    # PROMOTED to the nightly schedule (2026-08-24) after a confirmed
+    # clean production run — 45 real records saved (18 new
+    # applications, 27 real decision status updates matched by
+    # reference number), all 4 weeks handled correctly across both
+    # Validated and Decided lists, 0.4 minutes total. The stuck-modal
+    # cascading-failure bug from the first live attempt is confirmed
+    # fixed. Manual trigger kept available too, same as every other
+    # platform's job, for ad-hoc reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'barrow_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '22 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
