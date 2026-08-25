@@ -17,6 +17,7 @@ on:
     - cron: '12 8 * * *'  # statmap.co.uk/horizoNext nightly scrape (West Lindsey, East Staffordshire)
     - cron: '15 8 * * *'  # "Search/Advanced" family nightly scrape (Westmorland and Furness, Cherwell, Wychavon, Malvern Hills)
     - cron: '22 8 * * *'  # Barrow (Westmorland and Furness Council) nightly scrape — shares council_id with esl_scraper.py above, deliberately scheduled after it clears
+    - cron: '28 8 * * *'  # OcellaWeb nightly scrape (Great Yarmouth, South Holland, Havering, Hillingdon)
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     # CHANGED 2026-08-18 — both moved to a shared every-5-days cadence
@@ -1870,10 +1871,18 @@ jobs:
           retention-days: 14
 
   ocellaweb_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live, matching every other new platform's first job
-    # this session before a confirmed clean production run.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ocellaweb_scraper'
+    # PROMOTED to the nightly schedule (2026-08-25) after a confirmed
+    # clean production run — 67 real applications saved across all 4
+    # councils (Great Yarmouth 26, South Holland 10, Havering 6,
+    # Hillingdon 25), zero errors, zero per-council quirks needed
+    # despite only Great Yarmouth's results page ever being directly
+    # search-tested beforehand, 0.3 minutes total. Havering and
+    # Hillingdon both close a genuine gap from an earlier London
+    # coverage audit. Manual trigger kept available too, same as every
+    # other platform's job, for ad-hoc reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ocellaweb_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '28 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
