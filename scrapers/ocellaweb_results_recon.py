@@ -63,7 +63,22 @@ async def main():
         try:
             await page.fill("#receivedFrom", from_str, timeout=5_000)
             await page.fill("#receivedTo", to_str, timeout=5_000)
-            await page.locator("button:has-text('Search')").first.click(timeout=5_000)
+            # REAL FIX — confirmed via a second direct timeout: the
+            # error explicitly showed it was still waiting on the
+            # FIRST locator (button:has-text), meaning at least one
+            # real match existed there — so this was never a "wrong
+            # tag type" problem, it's the exact same class of bug as
+            # Cherwell's own real search-button fix: a generic,
+            # unscoped selector matching some unrelated element
+            # elsewhere on the page (likely a site header search
+            # toggle), not a genuinely missing button. Scoping
+            # specifically to the real form containing the date fields
+            # just filled, same proven pattern.
+            form_with_dates = page.locator("form").filter(has=page.locator("#receivedFrom"))
+            search_btn = form_with_dates.locator("button:has-text('Search')")
+            if await search_btn.count() == 0:
+                search_btn = form_with_dates.locator("input[type='submit'][value='Search']")
+            await search_btn.first.click(timeout=5_000)
         except Exception as e:
             print(f"⚠ Could not fill/submit search: {e}")
             await browser.close()
