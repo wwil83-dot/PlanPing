@@ -1833,8 +1833,19 @@ IDOX_COUNCILS = [
     # other council, since that's more reliable than relying on the
     # name-match fallback long-term.
     # -------------------------------------------------------------------------
+    # SWITCHED TO WEEKLY 2026-08-25 — real, confirmed via
+    # never_succeeded_diagnostic.py: this council's real form loads
+    # perfectly (HTTP 200, no block signature at all) — the actual
+    # cause was the default monthly query being too broad, hitting the
+    # site's own real "Too many results found. Please enter some more
+    # parameters" validation. Switching to weekly-list mode, using the
+    # same existing per-council mode mechanism already proven for
+    # Glasgow/Aberdeen (just in the opposite direction — they needed
+    # monthly because their weekly search broke; East Riding needs
+    # weekly because its monthly search is too broad).
     ("East Riding of Yorkshire Council",
-     "https://newplanningaccess.eastriding.gov.uk/newplanningaccess"),
+     "https://newplanningaccess.eastriding.gov.uk/newplanningaccess",
+     "weekly"),
 
     ("Stafford Borough Council",
      "https://www12.staffordbc.gov.uk/online-applications"),
