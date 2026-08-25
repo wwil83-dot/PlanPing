@@ -1853,8 +1853,18 @@ IDOX_COUNCILS = [
     ("Lichfield District Council",
      "https://planning.lichfielddc.gov.uk/online-applications"),
 
-    ("North Kesteven District Council",
-     "https://planningonline.n-kesteven.gov.uk/online-applications"),
+    # BROKEN — confirmed 2026-08-25 via priority1_diagnostic.py's full,
+    # formal 120s test: genuine timeout, ZERO real network activity
+    # captured — the exact same real datacenter-ASN block signature
+    # already confirmed for Derby/Highland/NE Lincolnshire/Sheffield/
+    # Bassetlaw/St Helens. Real, direct evidence the portal itself is
+    # genuinely live and working: the person running this project
+    # confirmed a real, populated results page (26 real applications,
+    # correct pagination) for an earlier week directly in their own
+    # browser. coverage_source set to 'manual_link' in Supabase to
+    # match — see accompanying SQL.
+    # ("North Kesteven District Council",
+    #  "https://planningonline.n-kesteven.gov.uk/online-applications"),
 
     ("South Kesteven District Council",
      "https://prod.publicaccess.southkesteven.gov.uk/online-applications"),
