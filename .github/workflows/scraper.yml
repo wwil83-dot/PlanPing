@@ -874,7 +874,14 @@ jobs:
   priority1_diagnostic:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'priority1_diagnostic'
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 15
+    # REAL FIX (2026-08-25) — bumped from 15 to 25 minutes after a real
+    # job cancellation: this diagnostic uses a genuine 120s timeout
+    # PER council specifically to rule out "just slow" as an
+    # explanation, and now tests 7 councils (North Kesteven just
+    # added) — worst case that's up to 14 minutes of navigation
+    # attempts alone, before even counting real setup overhead for
+    # pip install and downloading Playwright's browser.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
