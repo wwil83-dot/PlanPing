@@ -109,6 +109,20 @@ TARGETS = [
     # portal with a real datacenter-IP block, not a dead one.
     ("St Helens Metropolitan Borough Council",
      "https://publicaccess.sthelens.gov.uk/online-applications"),
+    # ADDED 2026-08-25 — real, confirmed via never_succeeded_diagnostic.py:
+    # a genuine 45s timeout, ZERO real network activity captured —
+    # matching the exact signature already confirmed for Derby/
+    # Highland/NE Lincolnshire/St Helens. The person running this
+    # project independently confirmed the same real portal loads a
+    # completely normal, working weekly-list search form (and even a
+    # real, populated results page for an earlier week — 26 real
+    # applications, correct pagination) from their own browser — same
+    # "works fine for any real human connection, silently hangs for
+    # automated/cloud traffic" pattern as every other council in this
+    # group. Running the full, formal 120s test here for rigorous
+    # confirmation before parking it the same way as the others.
+    ("North Kesteven District Council",
+     "https://planningonline.n-kesteven.gov.uk/online-applications"),
 ]
 
 network_log: list[dict] = []
