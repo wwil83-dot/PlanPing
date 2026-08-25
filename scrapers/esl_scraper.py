@@ -136,7 +136,13 @@ def _parse_uk_date(s: str) -> Optional[str]:
     if not s:
         return None
     s = s.strip()
-    for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"):
+    # REAL FIX — confirmed via nwarks_date_fetch_verbose_diag.py: North
+    # Warwickshire's detail page uses a genuinely different, written
+    # long-form date ("24 August 2026"), not the slash-separated
+    # numeric format every other council in this family uses — same
+    # category as its other real front-end differences (native
+    # type="date" field, card-based results).
+    for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d %B %Y"):
         try:
             return datetime.strptime(s, fmt).date().isoformat()
         except ValueError:
@@ -663,7 +669,17 @@ async def fetch_received_dates(browser: Browser, council_name: str,
         # found elsewhere in this family. Making "Application " an
         # optional prefix rather than assuming every council phrases
         # it identically.
-        m = re.search(r"(?:Application )?Received Date\s*\n?\s*(\d{1,2}/\d{1,2}/\d{2,4})", text)
+        # REAL FIX — confirmed via nwarks_date_fetch_verbose_diag.py:
+        # North Warwickshire's real value is a written long-form date
+        # ("24 August 2026"), not the slash-separated numeric format
+        # every other council in this family uses. Matching both real
+        # formats, same discipline as every other cross-council
+        # wording/format difference found in this platform family.
+        m = re.search(
+            r"(?:Application )?Received Date\s*\n?\s*"
+            r"(\d{1,2}/\d{1,2}/\d{2,4}|\d{1,2}\s+[A-Za-z]+\s+\d{4})",
+            text,
+        )
         if m:
             iso = _parse_uk_date(m.group(1))
             if iso:
