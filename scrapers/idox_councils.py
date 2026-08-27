@@ -1024,8 +1024,17 @@ IDOX_COUNCILS = [
     # Cambridge City and Cambridgeshire County (minerals & waste) added Jul
     # 2026 — separate Idox instances, same pattern as Buckinghamshire's
     # county-level minerals/waste portal.
+    # UPDATED 2026-08-27 — old URL (idox.cambridge.gov.uk) confirmed
+    # genuinely dead via scambs_cambridge_url_check.py: real
+    # ERR_NAME_NOT_RESOLVED, the subdomain no longer exists in DNS at
+    # all. The real, current system is a shared portal covering both
+    # Cambridge City and South Cambridgeshire together — confirmed via
+    # gcambridge_separation_check.py: a genuine searchCriteria.
+    # localAuthority dropdown with exactly the options needed to keep
+    # each council's real data correctly separated into its own row.
     ("Cambridge City Council",
-     "https://idox.cambridge.gov.uk/online-applications"),
+     "https://applications.greatercambridgeplanning.org/online-applications",
+     None, "&searchCriteria.localAuthority=Cambridge+City+Council"),
 
     ("Cambridgeshire County Council",
      "https://planning.cambridgeshire.gov.uk/online-applications"),
@@ -1215,8 +1224,15 @@ IDOX_COUNCILS = [
     ("East Cambridgeshire District Council",
      "https://pa.eastcambs.gov.uk/online-applications"),
 
+    # UPDATED 2026-08-27 — old URL (planning.scambs.gov.uk) confirmed
+    # genuinely dead via scambs_cambridge_url_check.py: a real 30s
+    # timeout, no response at all. Same real shared portal as
+    # Cambridge City directly above — see its comment for the full
+    # evidence trail. Real, confirmed exact option text via
+    # gcambridge_separation_check.py's own dropdown dump.
     ("South Cambridgeshire District Council",
-     "https://planning.scambs.gov.uk/online-applications"),
+     "https://applications.greatercambridgeplanning.org/online-applications",
+     None, "&searchCriteria.localAuthority=South+Cambridgeshire+District+Council"),
 
     # -------------------------------------------------------------------------
     # LANCASHIRE
