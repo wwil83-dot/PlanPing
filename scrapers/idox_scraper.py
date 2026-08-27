@@ -862,11 +862,19 @@ class IdoxPortal:
     """Scrapes one Idox planning portal via Playwright."""
 
     def __init__(self, council_name: str, base_url: str, db_council_id: int,
-                 use_weekly_list: bool = False):
+                 use_weekly_list: bool = False, extra_search_param: str = ""):
         self.council_name = council_name
         self.base_url = base_url.rstrip("/")
         self.db_council_id = db_council_id   # ← locked to this portal, immune to concurrency
         self.use_weekly_list = use_weekly_list
+        # ADDED 2026-08-27 — real, confirmed need: Greater Cambridge's
+        # shared portal serves BOTH Cambridge City and South
+        # Cambridgeshire from one real system, with a genuine
+        # searchCriteria.localAuthority filter confirmed via
+        # gcambridge_separation_check.py. A real, empty string for
+        # every other council — appended to the URL only when present,
+        # so this is a no-op everywhere else.
+        self.extra_search_param = extra_search_param
         parsed = urlparse(self.base_url)
         self.domain_root = f"{parsed.scheme}://{parsed.netloc}"
 
@@ -1070,6 +1078,7 @@ class IdoxPortal:
             f"?action=monthlyList"
             f"&searchCriteria.monthYearIndex={month_index}"
             f"&searchType=Application"
+            f"{self.extra_search_param}"
         )
 
         # — Step 1: Navigate to monthly list page —
@@ -1854,13 +1863,22 @@ async def main():
     missing: list[str] = []
 
     for entry in IDOX_COUNCILS:
-        # Support both (name, url) and (name, url, "weekly") tuple formats
-        if len(entry) == 3:
+        # Support (name, url), (name, url, "weekly"), and (name, url,
+        # mode_or_none, extra_search_param) tuple formats. The 4th
+        # element is real, confirmed necessary for shared multi-council
+        # portals like Greater Cambridge — see IdoxPortal's own
+        # extra_search_param docstring.
+        if len(entry) == 4:
+            name, url, mode, extra_search_param = entry
+            use_weekly = (mode == "weekly")
+        elif len(entry) == 3:
             name, url, mode = entry
             use_weekly = (mode == "weekly")
+            extra_search_param = ""
         else:
             name, url = entry
             use_weekly = False
+            extra_search_param = ""
 
         # Use hardcoded ID if available — bypasses unreliable name matching
         council_id = COUNCIL_DB_IDS.get(name)
@@ -1880,7 +1898,8 @@ async def main():
             id_source = "HARDCODED" if name in COUNCIL_DB_IDS else "db-lookup"
             if id_source == "HARDCODED":
                 print(f"  [HARDCODED] {name} → id={council_id}")
-            to_scrape.append((IdoxPortal(name, url, council_id, use_weekly_list=use_weekly), council_id))
+            to_scrape.append((IdoxPortal(name, url, council_id, use_weekly_list=use_weekly,
+                                          extra_search_param=extra_search_param), council_id))
         else:
             missing.append(name)
 
