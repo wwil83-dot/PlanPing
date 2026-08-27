@@ -69,39 +69,27 @@ async def main():
         except Exception:
             pass
 
-        # Real, direct check of the field's own real DOM value right
-        # after setting it, BEFORE any submission — confirms whether
-        # the raw DOM at least reflects what we set
         today = date.today()
         start = today - timedelta(days=30)
 
-        for field_id, value in [("dateAppValidFrom", start.isoformat()),
-                                  ("dateAppValidTo", today.isoformat())]:
-            await page.evaluate(
-                """([id, val]) => {
-                    const els = document.querySelectorAll('#' + id);
-                    els.forEach(el => {
-                        el.value = val;
-                        el.dispatchEvent(new Event('input', {bubbles: true}));
-                        el.dispatchEvent(new Event('change', {bubbles: true}));
-                    });
-                }""",
-                [field_id, value],
-            )
-
-        real_values = await page.evaluate(
-            """() => {
-                const from = document.querySelectorAll('#dateAppValidFrom');
-                const to = document.querySelectorAll('#dateAppValidTo');
-                return {
-                    from_count: from.length,
-                    from_values: Array.from(from).map(el => el.value),
-                    to_count: to.length,
-                    to_values: Array.from(to).map(el => el.value),
-                };
-            }"""
-        )
-        print(f"Real DOM state right after setting (before submit): {real_values}\n")
+        try:
+            # REAL FIX — confirmed via direct network capture: the
+            # previous JS-injection approach (set .value + dispatch
+            # input/change) correctly updated the raw DOM, but the
+            # real click handler completely ignored it and submitted a
+            # bare, parameter-less GET request regardless — this
+            # framework reads from its own internal state model, not
+            # the raw DOM. Using Playwright's native .fill() instead,
+            # which triggers a real, complete sequence of keyboard/
+            # input events that framework-level listeners are actually
+            # built to catch.
+            await page.locator("#dateAppValidFrom").first.fill(start.strftime("%Y-%m-%d"), timeout=5_000)
+            await page.locator("#dateAppValidTo").first.fill(today.strftime("%Y-%m-%d"), timeout=5_000)
+            print(f"Filled real dates via native .fill(): {start.isoformat()} to {today.isoformat()}\n")
+        except Exception as e:
+            print(f"⚠ Could not fill date fields: {e}")
+            await browser.close()
+            return
 
         requests_log.clear()
 
