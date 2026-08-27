@@ -18,6 +18,8 @@ on:
     - cron: '15 8 * * *'  # "Search/Advanced" family nightly scrape (Westmorland and Furness, Cherwell, Wychavon, Malvern Hills)
     - cron: '22 8 * * *'  # Barrow (Westmorland and Furness Council) nightly scrape — shares council_id with esl_scraper.py above, deliberately scheduled after it clears
     - cron: '28 8 * * *'  # OcellaWeb nightly scrape (Great Yarmouth, South Holland, Havering, Hillingdon)
+    - cron: '32 8 * * *'  # Walsall (Swift/APAS) nightly scrape
+    - cron: '35 8 * * *'  # Stratford-on-Avon (E-Planning v2.11) nightly scrape
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     # CHANGED 2026-08-18 — both moved to a shared every-5-days cadence
@@ -2038,10 +2040,14 @@ jobs:
           retention-days: 14
 
   walsall_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live, matching every other new platform's first job
-    # this session before a confirmed clean production run.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'walsall_scraper'
+    # PROMOTED to the nightly schedule (2026-08-27) after a confirmed
+    # clean production run — 58 real applications saved, all 6 pages
+    # matching the real confirmed total exactly, 0.3 minutes total.
+    # Manual trigger kept available too, same as every other platform's
+    # job, for ad-hoc reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'walsall_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '32 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -2177,10 +2183,16 @@ jobs:
           retention-days: 14
 
   stratford_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live, matching every other new platform's first job
-    # this session before a confirmed clean production run.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'stratford_scraper'
+    # PROMOTED to the nightly schedule (2026-08-27) after a confirmed
+    # clean production run — 139 real applications saved, all 6 pages
+    # matching the real confirmed total exactly, 0.3 minutes total.
+    # Genuinely the most stubborn platform in this batch to get
+    # working (6 real diagnostic rounds), now fully resolved. Manual
+    # trigger kept available too, same as every other platform's job,
+    # for ad-hoc reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'stratford_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '35 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
