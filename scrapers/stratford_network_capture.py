@@ -73,19 +73,18 @@ async def main():
         start = today - timedelta(days=30)
 
         try:
-            # REAL FIX — confirmed via direct network capture: the
-            # previous JS-injection approach (set .value + dispatch
-            # input/change) correctly updated the raw DOM, but the
-            # real click handler completely ignored it and submitted a
-            # bare, parameter-less GET request regardless — this
-            # framework reads from its own internal state model, not
-            # the raw DOM. Using Playwright's native .fill() instead,
-            # which triggers a real, complete sequence of keyboard/
-            # input events that framework-level listeners are actually
-            # built to catch.
-            await page.locator("#dateAppValidFrom").first.fill(start.strftime("%Y-%m-%d"), timeout=5_000)
-            await page.locator("#dateAppValidTo").first.fill(today.strftime("%Y-%m-%d"), timeout=5_000)
-            print(f"Filled real dates via native .fill(): {start.isoformat()} to {today.isoformat()}\n")
+            # REAL FIX — confirmed via direct user testing: the real
+            # field is "Date Application Received"
+            # (dateApprecFrom/dateApprecTo), NOT "Date Application
+            # Valid" (dateAppValidFrom/dateAppValidTo) — a genuine
+            # mistake in the original field selection, not any real
+            # framework/automation limitation. The empty network
+            # request from the earlier round was simply because the
+            # wrong field was being searched.
+            await page.locator("#dateApprecFrom").first.fill(start.strftime("%Y-%m-%d"), timeout=5_000)
+            await page.locator("#dateApprecTo").first.fill(today.strftime("%Y-%m-%d"), timeout=5_000)
+            print(f"Filled real dates via native .fill() on the CORRECT field: "
+                  f"{start.isoformat()} to {today.isoformat()}\n")
         except Exception as e:
             print(f"⚠ Could not fill date fields: {e}")
             await browser.close()
@@ -112,6 +111,28 @@ async def main():
             print(f"\n  {r['method']} {r['url']}")
             if r['post_data']:
                 print(f"    Real POST data: {r['post_data'][:1000]}")
+
+        print(f"\nReal URL after search: {page.url}")
+        title = await page.title()
+        print(f"Real page title: {title!r}\n")
+
+        body_text = ""
+        try:
+            body_text = (await page.locator("body").inner_text())[:1500]
+        except Exception:
+            pass
+        print(f"Real visible body text (first 1500 chars): {body_text!r}\n")
+
+        html = await page.content()
+        out_html = "/tmp/stratford_correct_results.html"
+        with open(out_html, "w", encoding="utf-8") as f:
+            f.write(html)
+        out_png = "/tmp/stratford_correct_results.png"
+        try:
+            await page.screenshot(path=out_png, full_page=True)
+        except Exception:
+            pass
+        print(f"Saved: {out_html}, {out_png}")
 
         await context.close()
         await browser.close()
