@@ -42,7 +42,7 @@ on:
         required: true
         default: 'scrape'
         type: choice
-        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, scrape_ni, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test, brightdata_browser_api_test, ni_planningsystemni_recon, getapplications_family_recon, scrape_getapplications, idox_waf_recheck, priority1_diagnostic, scraperapi_priority1_test, priority1_diagnostic_us_runner, derby_results_page_test, northgate_servlet_family_recon, northgate_servlet_scraper, northgate_south_tyneside_scraper, webshare_priority1_test, priority3_recon, statmap_weeklylist_recon, statmap_results_recon, statmap_weeklydate_recon, agileapplications_scraper, statmap_scraper, conwy_visibility_diagnostic, bromley_platform_check, wandf_recon, wandf_recon_round2, wandf_recon_round3, barrow_iframe_check, esl_pagination_test, esl_request_inspection, esl_next_link_test, esl_ajax_pagination_test, esl_real_click_test, esl_scraper, search_advanced_family_recon, nwarks_disclaimer_recon, nwarks_fullflow_test, barrow_scraper, barrow_decided_recon, esl_detail_page_recon, esl_cherwell_nwarks_detail_recon, test_nwarks_date_fetch_direct, nwarks_date_fetch_verbose_diag, ocellaweb_family_recon, ocellaweb_results_recon, ocellaweb_scraper, never_succeeded_diagnostic, oneoff_batch_recon]
+        options: [scrape, scrape_bulk, scrape_idox_a, scrape_idox_b, scrape_idox_c, scrape_idox_d, scrape_idox_targeted, scrape_idox_bulk, scrape_arcus, scrape_arcus_bulk, scrape_civica, scrape_northgate, scrape_ni, alerts, council_health, arcus_recon, idox_month_test, idox_form_recon, idox_multi_recon, idox_recon_round2, civica_recon, civica_stalbans_results_recon, harrow_weekly_recon, northgate_recon, northgate_runnymede_results_recon, northgate_url_healthcheck, idox_gap_prober, idox_cheltenham_lewisham_verify, redbridge_recon, diagnose_runner_location, applicant_agent_recon, brightdata_unlocker_test, scraperapi_test, brightdata_browser_api_test, ni_planningsystemni_recon, getapplications_family_recon, scrape_getapplications, idox_waf_recheck, priority1_diagnostic, scraperapi_priority1_test, priority1_diagnostic_us_runner, derby_results_page_test, northgate_servlet_family_recon, northgate_servlet_scraper, northgate_south_tyneside_scraper, webshare_priority1_test, priority3_recon, statmap_weeklylist_recon, statmap_results_recon, statmap_weeklydate_recon, agileapplications_scraper, statmap_scraper, conwy_visibility_diagnostic, bromley_platform_check, wandf_recon, wandf_recon_round2, wandf_recon_round3, barrow_iframe_check, esl_pagination_test, esl_request_inspection, esl_next_link_test, esl_ajax_pagination_test, esl_real_click_test, esl_scraper, search_advanced_family_recon, nwarks_disclaimer_recon, nwarks_fullflow_test, barrow_scraper, barrow_decided_recon, esl_detail_page_recon, esl_cherwell_nwarks_detail_recon, test_nwarks_date_fetch_direct, nwarks_date_fetch_verbose_diag, ocellaweb_family_recon, ocellaweb_results_recon, ocellaweb_scraper, never_succeeded_diagnostic, oneoff_batch_recon, scambs_cambridge_url_check]
       arcus_target_url:
         description: '(arcus_recon only) base URL to reconnoitre, e.g. https://example.my.site.com/pr/s — leave blank to default to Ashford as a sanity check'
         required: false
@@ -1963,6 +1963,25 @@ jobs:
           name: oneoff-batch-recon-output
           path: /tmp/oneoff_recon_*
           retention-days: 14
+
+  scambs_cambridge_url_check:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scambs_cambridge_url_check'
+    runs-on: [self-hosted, uk-runner]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright
+      - run: playwright install --with-deps chromium
+      - name: Check whether South Cambridgeshire/Cambridge City's existing URLs still work
+        run: cd scrapers && python scambs_cambridge_url_check.py
 
   northgate_url_healthcheck:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_url_healthcheck'
