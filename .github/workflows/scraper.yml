@@ -2166,6 +2166,15 @@ jobs:
       - run: playwright install --with-deps chromium
       - name: Capture the real network request behind Stratford's search
         run: cd scrapers && python stratford_network_capture.py
+      - name: Upload recon HTML and screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stratford-network-capture-output
+          path: |
+            /tmp/stratford_correct_results.html
+            /tmp/stratford_correct_results.png
+          retention-days: 14
 
   northgate_url_healthcheck:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_url_healthcheck'
