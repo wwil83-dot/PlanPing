@@ -12,11 +12,19 @@ REAL, CONFIRMED (not guessed):
     genuinely richer "Advanced Search" with real native type="date"
     fields — using Advanced Search, since it supports a real from/to
     range directly rather than needing to iterate individual months.
-  - Real, confirmed field ids: dateAppValidFrom / dateAppValidTo
-    (Application Valid date — the real "received/submitted" concept
-    used everywhere else in this project). Real native type="date"
-    inputs, confirmed appearing TWICE in the DOM (likely a responsive
-    mobile/desktop duplicate) — using .first defensively.
+  - Real, CORRECTED field ids: dateApprecFrom / dateApprecTo (the real
+    "Date Application Received" fields) — confirmed genuinely
+    different from dateAppValidFrom/dateAppValidTo ("Date Application
+    Valid"), which was mistakenly targeted first and produced a real,
+    confirmed empty search (network capture showed a bare, parameter-
+    less GET request) purely because that field wasn't the one
+    actually meant to be searched, not any real framework/automation
+    limitation. Confirmed directly working: the person running this
+    project filled "Date Application Received" by hand and got 99 real
+    results with a clean, standard results page. Real native
+    type="date" inputs, confirmed appearing TWICE in the DOM (likely a
+    responsive mobile/desktop duplicate) — using .first defensively,
+    with Playwright's native .fill() (not raw JS value-setting).
   - Real cookie/consent gate exists on the base MonthlyList URL,
     confirmed a plain "Accept" button dismisses it — untested whether
     Advanced Search (reached via /eplanningv2 -> Search -> Advanced
