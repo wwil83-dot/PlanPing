@@ -38,7 +38,7 @@ REAL, CONFIRMED (not guessed):
 """
 
 COUNCIL_DB_IDS: dict[str, int | None] = {
-    "Stratford-on-Avon District Council": None,
+    "Stratford-on-Avon District Council": 523,
 }
 
 BASE_URL = "https://apps.stratford.gov.uk/eplanningv2"
