@@ -2470,7 +2470,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: charnwood-guid-pagination-test-output
-          path: /tmp/charnwood_page2.html
+          path: |
+            /tmp/charnwood_page2.html
+            /tmp/charnwood_no_pagination_debug.html
           retention-days: 14
 
   northgate_url_healthcheck:
