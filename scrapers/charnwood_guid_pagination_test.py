@@ -119,7 +119,32 @@ async def test_pagination(browser):
             await page.wait_for_load_state("networkidle", timeout=15_000)
         except PlaywrightTimeout:
             pass
-        await asyncio.sleep(1.5)
+
+        # REAL FIX — confirmed necessary via repeated inconsistent
+        # behaviour across runs: "networkidle" only tracks network
+        # requests finishing, not whether this platform's own JS has
+        # finished re-rendering a potentially large dataset (175 real
+        # rows worth of underlying data) into the DOM afterward — a
+        # genuine race condition, not a logic error. Polling for the
+        # real "N Results" text to actually appear, rather than
+        # trusting a fixed sleep to happen to land after it does.
+        import re
+        real_total_this_run = None
+        for attempt in range(15):
+            try:
+                body_text_check = await page.locator("body").inner_text()
+            except Exception:
+                body_text_check = ""
+            m = re.search(r"(\d+) Results", body_text_check)
+            if m:
+                real_total_this_run = int(m.group(1))
+                print(f"Real results text appeared after {attempt + 1}s: "
+                      f"{real_total_this_run} Results")
+                break
+            await asyncio.sleep(1)
+        if real_total_this_run is None:
+            print("⚠ Real results text never appeared after 15s of polling")
+
         print("Reached real search results\n")
     except Exception as e:
         print(f"⚠ Could not reach search results: {e}")
@@ -134,15 +159,6 @@ async def test_pagination(browser):
     # real CSS-selector parsing issue mixing double and single quotes.
     # Using a safer, simpler text-based match scoped to the confirmed
     # real pagination container instead.
-    try:
-        body_text_check = await page.locator("body").inner_text()
-        import re
-        m = re.search(r"(\d+) Results", body_text_check)
-        real_total_this_run = int(m.group(1)) if m else None
-        print(f"Real total results this run: {real_total_this_run}")
-    except Exception:
-        real_total_this_run = None
-
     try:
         pagination = page.locator("ul.tablePagingRow")
         pcount = await pagination.count()
