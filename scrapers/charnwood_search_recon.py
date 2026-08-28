@@ -115,8 +115,12 @@ async def main():
             month_select = page.locator("select").filter(has=page.locator("option", has_text="2026"))
             options = await month_select.first.locator("option").all_text_contents()
             print(f"Real month options found: {options[:3]}...")
-            await month_select.first.select_option(label=options[0], timeout=5_000)
-            print(f"Selected real month: {options[0]}")
+            # REAL FIX — confirmed via direct evidence: options[0] is
+            # the placeholder text itself ("Select a Month yyyy"), not
+            # a real month — the actual first real month is options[1].
+            real_month = options[1]
+            await month_select.first.select_option(label=real_month, timeout=5_000)
+            print(f"Selected real month: {real_month}")
         except Exception as e:
             print(f"⚠ Could not select month: {e}")
 
@@ -129,14 +133,16 @@ async def main():
             print(f"⚠ Could not check Validated this month: {e}")
 
         try:
-            form_with_month = page.locator("form").filter(has=month_select.first)
-            search_btn = form_with_month.locator("button:has-text('Search'), a:has-text('Search')")
+            # REAL FIX — confirmed via direct HTML inspection: the
+            # earlier scoped text-based "Search" match actually hit
+            # #aResetSearchTools ("Reset search tools"), a completely
+            # different real link — the actual correct button has a
+            # confirmed specific id (#ancWeeklyMonthlySearch) with its
+            # own direct onclick handler
+            # (OnlinePlanningWeeklyMonthlySearch.SubmitWeeklyMonthlyForm(4)).
+            search_btn = page.locator("#ancWeeklyMonthlySearch")
             count = await search_btn.count()
-            print(f"Real scoped 'Search' elements found: {count}")
-            if count == 0:
-                search_btn = page.locator("button:has-text('Search'), a:has-text('Search')")
-                count = await search_btn.count()
-                print(f"Falling back to unscoped 'Search' elements: {count}")
+            print(f"Real #ancWeeklyMonthlySearch buttons found: {count}")
             await search_btn.first.click(timeout=8_000)
         except Exception as e:
             print(f"⚠ Could not click Search: {e}")
