@@ -65,22 +65,23 @@ async def main():
         except Exception as e:
             print(f"⚠ Could not click Past month: {e}")
 
+        # REAL PIVOT — confirmed via two consecutive real attempts:
+        # this platform's basic search genuinely, always requires a
+        # real 3+ character keyword regardless of other filters set
+        # (Planning applications radio, Past month preset) — the exact
+        # same "main search proves unexpectedly restrictive, a
+        # separate Weekly/Monthly list turns out to be the real,
+        # correct simpler path" pattern already seen twice this
+        # session (Herefordshire, Stratford). Testing that button
+        # directly instead of continuing to fight the keyword
+        # requirement.
         try:
-            # REAL FIX — confirmed via direct HTML inspection: the
-            # original "button:has-text('Search')" substring match
-            # grabbed the wrong one of 3 real Search-related buttons
-            # (likely "Advanced search", appearing first in DOM order)
-            # — the REAL basic-search button has a confirmed id
-            # (#ancBasicSearch) with a direct onclick handler
-            # (OnlinePlanningBasicSearch.SubmitForm()), the actual
-            # correct target for the filter/preset search just
-            # configured.
-            search_btn = page.locator("#ancBasicSearch")
-            count = await search_btn.count()
-            print(f"Real #ancBasicSearch buttons found: {count}")
-            await search_btn.first.click(timeout=8_000)
+            weekly_btn = page.get_by_text("Weekly / Monthly list", exact=True)
+            count = await weekly_btn.count()
+            print(f"Real 'Weekly / Monthly list' elements found: {count}")
+            await weekly_btn.first.click(timeout=8_000)
         except Exception as e:
-            print(f"⚠ Could not click Search: {e}")
+            print(f"⚠ Could not click Weekly / Monthly list: {e}")
             await browser.close()
             return
 
