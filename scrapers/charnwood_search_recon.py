@@ -103,6 +103,46 @@ async def main():
             await browser.close()
             return
 
+        await asyncio.sleep(1)
+
+        # Real, confirmed the Monthly List form has its own real Month
+        # dropdown, "Validated this month" status checkbox, and its
+        # own Search button — selecting the most recent real month
+        # option and checking Validated, then scoping the Search click
+        # to a container that includes the month dropdown, same
+        # proven pattern used elsewhere to avoid button ambiguity.
+        try:
+            month_select = page.locator("select").filter(has=page.locator("option", has_text="2026"))
+            options = await month_select.first.locator("option").all_text_contents()
+            print(f"Real month options found: {options[:3]}...")
+            await month_select.first.select_option(label=options[0], timeout=5_000)
+            print(f"Selected real month: {options[0]}")
+        except Exception as e:
+            print(f"⚠ Could not select month: {e}")
+
+        try:
+            validated_cb = page.get_by_text("Validated this month", exact=True)
+            if await validated_cb.count() > 0:
+                await validated_cb.first.click(timeout=5_000)
+                print("Checked real 'Validated this month'")
+        except Exception as e:
+            print(f"⚠ Could not check Validated this month: {e}")
+
+        try:
+            form_with_month = page.locator("form").filter(has=month_select.first)
+            search_btn = form_with_month.locator("button:has-text('Search'), a:has-text('Search')")
+            count = await search_btn.count()
+            print(f"Real scoped 'Search' elements found: {count}")
+            if count == 0:
+                search_btn = page.locator("button:has-text('Search'), a:has-text('Search')")
+                count = await search_btn.count()
+                print(f"Falling back to unscoped 'Search' elements: {count}")
+            await search_btn.first.click(timeout=8_000)
+        except Exception as e:
+            print(f"⚠ Could not click Search: {e}")
+            await browser.close()
+            return
+
         try:
             await page.wait_for_load_state("networkidle", timeout=15_000)
         except PlaywrightTimeout:
