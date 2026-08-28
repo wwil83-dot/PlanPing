@@ -21,6 +21,7 @@ on:
     - cron: '32 8 * * *'  # Walsall (Swift/APAS) nightly scrape
     - cron: '35 8 * * *'  # Stratford-on-Avon (E-Planning v2.11) nightly scrape
     - cron: '40 8 * * *'  # Herefordshire nightly scrape
+    - cron: '44 8 * * *'  # Medway (Open Digital Planning) nightly scrape
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     # CHANGED 2026-08-18 — both moved to a shared every-5-days cadence
@@ -2355,10 +2356,19 @@ jobs:
           retention-days: 14
 
   medway_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live, matching every other new platform's first job
-    # this session before a confirmed clean production run.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'medway_scraper'
+    # PROMOTED to the nightly schedule (2026-08-28) after a confirmed
+    # clean production run — 18 real applications across the whole
+    # register (genuinely confirmed complete via the real 'no more
+    # Next page' signal), 2 within the 30-day window saved, recheck
+    # correctly ran against 10 previously-pending applications, 0.4
+    # minutes total. Real, honest note: this is a known-incomplete
+    # Open Digital Planning pilot register per the council's own text
+    # — small numbers here reflect the real, limited scope of the
+    # source, not a scraper problem. Manual trigger kept available
+    # too, same as every other platform's job, for ad-hoc reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'medway_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '44 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
