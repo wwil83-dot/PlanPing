@@ -38,7 +38,7 @@ REAL, CONFIRMED (not guessed):
 """
 
 COUNCIL_DB_IDS: dict[str, int | None] = {
-    "Medway Council": None,
+    "Medway Council": 210,
 }
 
 BASE_URL = "https://planningregister.org/medway"
