@@ -66,9 +66,18 @@ async def main():
             print(f"⚠ Could not click Past month: {e}")
 
         try:
-            search_btn = page.locator("button:has-text('Search')")
+            # REAL FIX — confirmed via direct HTML inspection: the
+            # original "button:has-text('Search')" substring match
+            # grabbed the wrong one of 3 real Search-related buttons
+            # (likely "Advanced search", appearing first in DOM order)
+            # — the REAL basic-search button has a confirmed id
+            # (#ancBasicSearch) with a direct onclick handler
+            # (OnlinePlanningBasicSearch.SubmitForm()), the actual
+            # correct target for the filter/preset search just
+            # configured.
+            search_btn = page.locator("#ancBasicSearch")
             count = await search_btn.count()
-            print(f"Real 'Search' buttons found: {count}")
+            print(f"Real #ancBasicSearch buttons found: {count}")
             await search_btn.first.click(timeout=8_000)
         except Exception as e:
             print(f"⚠ Could not click Search: {e}")
