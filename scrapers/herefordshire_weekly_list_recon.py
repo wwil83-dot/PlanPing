@@ -108,36 +108,48 @@ async def main():
             except Exception:
                 pass
 
-        # Real, confirmed via the user's own screenshot: a real, wide
-        # week-selection date input exists — filling it with a recent
-        # real date to test the full real flow
+        # REAL FIX — confirmed via direct timeout evidence: the
+        # generic input[type='date'] selector grabbed the OTHER tab's
+        # hidden field (#date-from), since both tabs' HTML coexists on
+        # the same page (CSS-toggled visibility, not separate
+        # navigation). Targeting the specific real field id confirmed
+        # for THIS tab. Also real, confirmed: only ONE date field
+        # exists here (a single week-anchor date), not a from/to pair
+        # — makes sense, a weekly list only needs one anchor date.
         today = date.today()
-        # Real, confirmed the Week field snaps to a Monday-anchored
-        # week — using a date within the last 7 days
         test_date = today - timedelta(days=3)
 
         try:
-            week_input = page.locator("input[type='date']")
-            wcount = await week_input.count()
-            print(f"\nReal type=date inputs on this tab: {wcount}")
-            if wcount > 0:
-                await week_input.first.fill(test_date.isoformat(), timeout=5_000)
-                print(f"Filled real week date: {test_date.isoformat()}")
+            await page.locator("#parish-weekly-search-datefrom").fill(test_date.isoformat(), timeout=5_000)
+            print(f"Filled real week date via the correct field id: {test_date.isoformat()}")
         except Exception as e:
             print(f"⚠ Could not fill week date: {e}")
+            await browser.close()
+            return
 
         try:
-            search_btn = page.locator("button:has-text('Search')")
-            if await search_btn.count() > 0:
-                await search_btn.first.click(timeout=8_000)
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=10_000)
-                except PlaywrightTimeout:
-                    pass
-                await asyncio.sleep(1.5)
-                print(f"\nReal URL after search: {page.url}")
+            # REAL FIX — confirmed via direct evidence: an unscoped
+            # "Search" click hit the site's generic header search
+            # instead (real resulting URL: herefordshire.gov.uk/
+            # search?q=) — same category of hijack bug already fixed
+            # for Cherwell earlier in this project. Scoping to a real
+            # form containing the just-filled field.
+            form_with_date = page.locator("form").filter(has=page.locator("#parish-weekly-search-datefrom"))
+            search_btn = form_with_date.locator("button:has-text('Search')")
+            count = await search_btn.count()
+            print(f"Real scoped 'Search' buttons found: {count}")
+            await search_btn.first.click(timeout=8_000)
         except Exception as e:
             print(f"⚠ Could not click Search: {e}")
+            await browser.close()
+            return
+
+        try:
+            await page.wait_for_load_state("networkidle", timeout=15_000)
+        except PlaywrightTimeout:
+            pass
+        await asyncio.sleep(1.5)
+        print(f"\nReal URL after search: {page.url}")
 
         body_text = ""
         try:
