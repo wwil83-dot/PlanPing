@@ -111,7 +111,9 @@ async def test_pagination(browser):
         month_select = page.locator("select").filter(has=page.locator("option", has_text="2026"))
         options = await month_select.first.locator("option").all_text_contents()
         await month_select.first.select_option(label=options[1], timeout=5_000)
-        await page.get_by_text("Validated this month", exact=True).first.click(timeout=5_000)
+        # REAL, CONFIRMED via direct manual testing: the working flow
+        # leaves this checkbox unchecked — not needed.
+        # await page.get_by_text("Validated this month", exact=True).first.click(timeout=5_000)
         await page.locator("#ancWeeklyMonthlySearch").first.click(timeout=8_000)
         try:
             await page.wait_for_load_state("networkidle", timeout=15_000)
@@ -137,25 +139,43 @@ async def test_pagination(browser):
         pcount = await pagination.count()
         print(f"Real ul.tablePagingRow containers found: {pcount}")
         if pcount == 0:
-            print("⚠ The pagination container itself was not found — checking real page HTML directly")
-            html_check = await page.content()
-            with open("/tmp/charnwood_no_pagination_debug.html", "w", encoding="utf-8") as f:
-                f.write(html_check)
-            print("Saved: /tmp/charnwood_no_pagination_debug.html for direct inspection")
+            print("⚠ The pagination container itself was not found")
             await context.close()
             return
 
-        page2_link = pagination.get_by_text("2", exact=True)
-        count = await page2_link.count()
-        print(f"Real page-2 pagination links found (scoped text match): {count}")
-        await page2_link.first.click(timeout=8_000)
-        try:
-            await page.wait_for_load_state("networkidle", timeout=10_000)
-        except PlaywrightTimeout:
-            pass
-        await asyncio.sleep(1.5)
+        # Real, genuinely different approach — confirmed via 2 prior
+        # failed attempts that a real UI click on the page-2 link
+        # mechanically fires with no error, yet the page's AJAX-driven
+        # content swap never actually happens (or happens outside
+        # whatever window a fixed sleep catches). Calling the exact
+        # real underlying JS directly instead, replicating both real
+        # statements from the confirmed onclick handler
+        # ("$('#CurrentPageIndex').val(1); PagingClick('1');"),
+        # bypassing Playwright's own click machinery entirely.
+        first_ref_before = await page.locator("table").nth(1).locator("tr").nth(1).inner_text()
+        print(f"Real first-row reference before: {first_ref_before[:50]!r}")
+
+        await page.evaluate("$('#CurrentPageIndex').val(1); PagingClick('1');")
+        print("Called real PagingClick('1') directly via JS")
+
+        # Real, more robust wait: poll for the actual content to
+        # change, rather than trust a fixed sleep to happen to land
+        # inside whatever window the AJAX update takes
+        changed = False
+        for attempt in range(10):
+            await asyncio.sleep(1)
+            try:
+                first_ref_after = await page.locator("table").nth(1).locator("tr").nth(1).inner_text()
+            except Exception:
+                continue
+            if first_ref_after != first_ref_before:
+                changed = True
+                print(f"Real content changed after {attempt + 1}s: {first_ref_after[:50]!r}")
+                break
+        if not changed:
+            print("⚠ Real content still unchanged after 10s of polling")
     except Exception as e:
-        print(f"⚠ Could not click page 2: {e}")
+        print(f"⚠ Could not call PagingClick directly: {e}")
         await context.close()
         return
 
