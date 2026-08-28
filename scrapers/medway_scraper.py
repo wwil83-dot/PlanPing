@@ -241,8 +241,6 @@ async def scrape(browser: Browser) -> list[dict]:
     context = await browser.new_context(**CONTEXT_OPTIONS)
     page = await context.new_page()
 
-    cutoff = date.today() - timedelta(days=DAYS_BACK)
-
     for page_num in range(1, MAX_PAGES + 1):
         if should_stop():
             _log(f"⚠ Time budget reached, stopping at page {page_num}")
@@ -276,31 +274,28 @@ async def scrape(browser: Browser) -> list[dict]:
             break
 
         new_count = 0
-        oldest_on_page = None
         for a in page_apps:
             if a["reference"] not in seen_refs:
                 seen_refs.add(a["reference"])
                 all_apps.append(a)
                 new_count += 1
-            if a.get("submitted_date"):
-                d = date.fromisoformat(a["submitted_date"])
-                if oldest_on_page is None or d < oldest_on_page:
-                    oldest_on_page = d
 
-        _log(f"Page {page_num}: {new_count} new (running total {len(all_apps)})"
-             + (f" — oldest real received date on this page: {oldest_on_page}" if oldest_on_page else ""))
+        _log(f"Page {page_num}: {new_count} new (running total {len(all_apps)})")
 
-        # Real, honest early-exit: since there's no real date-range
-        # filter on this platform, paging through a recency-sorted
-        # list is the only way to reach older applications — stopping
-        # once this page's own oldest real 'Received date' falls
-        # outside the desired window, since every subsequent page will
-        # only be older still.
-        if oldest_on_page is not None and oldest_on_page < cutoff:
-            _log(f"Oldest real received date on this page ({oldest_on_page}) is "
-                 f"outside the {DAYS_BACK}-day window — stopping")
-            break
-
+        # REAL FIX — confirmed via a live run: this platform sorts by
+        # PUBLISHED date, not received date. An application received
+        # a year ago can legitimately appear mixed in with genuinely
+        # recent ones if it was only recently republished — the
+        # earlier "stop once this page's oldest received date falls
+        # outside the window" logic assumed strict, monotonic sorting
+        # by received date, which is NOT what this platform actually
+        # does, and could have caused a premature stop that silently
+        # missed real, recent applications sitting on later pages.
+        # Relying solely on the real "no more Next page" signal
+        # instead — this register is confirmed to be a small,
+        # explicitly limited pilot, so fetching every page and
+        # filtering by date only when building final records is cheap
+        # and safe here.
         if not has_next:
             _log(f"No real 'Next page' link found — reached the end")
             break
@@ -398,6 +393,17 @@ async def main():
         print(f"Chromium launched: {browser.version}\n")
 
         raw_apps = await scrape(browser)
+        # REAL FIX — filtering by the desired date window here now,
+        # since fetching itself no longer stops early based on an
+        # unreliable sort-order assumption. Applications with no real
+        # parseable date are kept rather than silently dropped, same
+        # discipline as every other platform's honest handling of
+        # missing data.
+        cutoff = date.today() - timedelta(days=DAYS_BACK)
+        raw_apps = [
+            a for a in raw_apps
+            if not a.get("submitted_date") or date.fromisoformat(a["submitted_date"]) >= cutoff
+        ]
         recheck_updates = await recheck_pending(browser, pending)
 
         await browser.close()
