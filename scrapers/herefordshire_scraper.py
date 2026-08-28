@@ -55,7 +55,7 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "15"))
 DAYS_BACK    = int(os.environ.get("DAYS_BACK", "30"))
-MAX_PAGES    = int(os.environ.get("MAX_PAGES", "30"))
+MAX_PAGES    = int(os.environ.get("MAX_PAGES", "60"))
 RECHECK_LIMIT = int(os.environ.get("RECHECK_LIMIT", "50"))
 
 COUNCIL_NAME = "Herefordshire Council"
