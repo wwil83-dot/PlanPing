@@ -85,6 +85,24 @@ async def main():
             await browser.close()
             return
 
+        await asyncio.sleep(1)
+
+        # REAL, further confirmed: clicking "Weekly / Monthly list"
+        # only revealed 2 further real sub-options ("Weekly list" /
+        # "Monthly list") rather than navigating anywhere — the URL
+        # and page stayed identical. Clicking "Monthly list"
+        # specifically, matching the same real convention already
+        # proven for Stratford.
+        try:
+            monthly_btn = page.get_by_text("Monthly list", exact=True)
+            count = await monthly_btn.count()
+            print(f"Real 'Monthly list' elements found: {count}")
+            await monthly_btn.first.click(timeout=8_000)
+        except Exception as e:
+            print(f"⚠ Could not click Monthly list: {e}")
+            await browser.close()
+            return
+
         try:
             await page.wait_for_load_state("networkidle", timeout=15_000)
         except PlaywrightTimeout:
