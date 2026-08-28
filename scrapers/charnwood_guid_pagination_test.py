@@ -134,6 +134,17 @@ async def test_pagination(browser):
     # real pagination container instead.
     try:
         pagination = page.locator("ul.tablePagingRow")
+        pcount = await pagination.count()
+        print(f"Real ul.tablePagingRow containers found: {pcount}")
+        if pcount == 0:
+            print("⚠ The pagination container itself was not found — checking real page HTML directly")
+            html_check = await page.content()
+            with open("/tmp/charnwood_no_pagination_debug.html", "w", encoding="utf-8") as f:
+                f.write(html_check)
+            print("Saved: /tmp/charnwood_no_pagination_debug.html for direct inspection")
+            await context.close()
+            return
+
         page2_link = pagination.get_by_text("2", exact=True)
         count = await page2_link.count()
         print(f"Real page-2 pagination links found (scoped text match): {count}")
