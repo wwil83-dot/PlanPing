@@ -124,11 +124,19 @@ async def test_pagination(browser):
         await context.close()
         return
 
-    # Real, confirmed pagination mechanism: PagingClick('N'), 0-indexed
+    # REAL FIX — confirmed via direct HTML inspection: the exact
+    # onclick attribute value IS present as expected
+    # ("$('#CurrentPageIndex').val(1); PagingClick('1');"), yet the
+    # earlier nested-quote CSS attribute selector
+    # (a[onclick*="PagingClick('1')"]) found zero matches — likely a
+    # real CSS-selector parsing issue mixing double and single quotes.
+    # Using a safer, simpler text-based match scoped to the confirmed
+    # real pagination container instead.
     try:
-        page2_link = page.locator("a[onclick*=\"PagingClick('1')\"]")
+        pagination = page.locator("ul.tablePagingRow")
+        page2_link = pagination.get_by_text("2", exact=True)
         count = await page2_link.count()
-        print(f"Real page-2 pagination links found: {count}")
+        print(f"Real page-2 pagination links found (scoped text match): {count}")
         await page2_link.first.click(timeout=8_000)
         try:
             await page.wait_for_load_state("networkidle", timeout=10_000)
@@ -148,7 +156,10 @@ async def test_pagination(browser):
         rows = tables[1].find_all("tr")
         print(f"Real rows on page 2: {len(rows)}")
         if len(rows) > 1:
-            print(f"First real data row on page 2: {rows[1].get_text(' ', strip=True)[:200]}")
+            first_ref = rows[1].get_text(" ", strip=True)[:200]
+            print(f"First real data row on page 2: {first_ref}")
+            # Real, explicit confirmation the click genuinely worked
+            print(f"\nReal confirmation: {'DIFFERENT from page 1 (P/26/1328/2) — click worked' if 'P/26/1328/2' not in first_ref else '⚠ SAME as page 1 — click may have silently failed'}")
 
     out_html = "/tmp/charnwood_page2.html"
     with open(out_html, "w", encoding="utf-8") as f:
