@@ -37,7 +37,7 @@ platforms in this whole project:
 """
 
 COUNCIL_DB_IDS: dict[str, int | None] = {
-    "Herefordshire Council": None,
+    "Herefordshire Council": 524,
 }
 
 BASE_URL = "https://www.herefordshire.gov.uk"
