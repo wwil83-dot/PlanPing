@@ -62,7 +62,7 @@ REAL, CONFIRMED (not guessed):
 """
 
 COUNCIL_DB_IDS: dict[str, int | None] = {
-    "Charnwood Borough Council": None,
+    "Charnwood Borough Council": 526,
 }
 
 BASE_URL = "https://planningexplorer.charnwood.gov.uk/Assure/ES/Presentation/Planning/OnLinePlanning/OnlinePlanningSearch"
