@@ -260,8 +260,16 @@ async def _reach_month_results(page, month_label: str) -> bool:
         month_select = page.locator("select").filter(has=page.locator("option", has_text="20")) 
         options = await month_select.first.locator("option").all_text_contents()
         if month_label not in options:
+            # REAL, CONFIRMED via a live production run: this is
+            # genuinely expected for the CURRENT calendar month
+            # specifically — the platform's own Monthly List only
+            # offers completed months (confirmed real dropdown never
+            # includes the current, still-ongoing month), not a real
+            # error. Harmless — the loop correctly skips to the next
+            # real month.
             _log(f"⚠ Real month '{month_label}' not found in dropdown options — "
-                 f"likely outside the platform's own available range")
+                 f"expected if this is the current calendar month (the platform's "
+                 f"Monthly List only offers completed months)")
             return False
         await month_select.first.select_option(label=month_label, timeout=5_000)
 
@@ -337,26 +345,37 @@ async def scrape_month(browser: Browser, month_label: str) -> list[dict]:
         if not page_apps:
             break
 
-        # Real, confirmed necessary — a genuine UI click on the
-        # pagination link mechanically succeeds with no error while
-        # never actually triggering the AJAX content swap, confirmed
-        # across several separate attempts. Calling the real
-        # underlying JS function directly instead.
+        # REAL FIX — confirmed necessary via a live production run:
+        # comparing the WHOLE page HTML was too fragile a signal,
+        # catching transient in-between DOM states as "no change" and
+        # silently desyncing the real page index from what the
+        # platform actually shows — causing real data loss (only 120
+        # of 175 real applications saved on the first live run,
+        # multiple pages alternating between real new content and
+        # false "0 new" repeats of already-seen content). Comparing
+        # the specific first-row reference instead — the same precise
+        # method already proven reliable in
+        # charnwood_guid_pagination_test.py's own successful real test.
         try:
-            first_ref_before = html
+            first_ref_before = page_apps[0]["reference"] if page_apps else None
             await page.evaluate(
                 f"$('#CurrentPageIndex').val({page_num + 1}); PagingClick('{page_num + 1}');"
             )
             changed = False
             for _ in range(10):
                 await asyncio.sleep(1)
-                html_after = await page.content()
-                if html_after != first_ref_before:
+                try:
+                    html_after = await page.content()
+                    apps_after = _parse_results_table(html_after)
+                except Exception:
+                    continue
+                first_ref_after = apps_after[0]["reference"] if apps_after else None
+                if first_ref_after and first_ref_after != first_ref_before:
                     changed = True
                     break
             if not changed:
                 _log(f"⚠ Real pagination to page {page_num + 2} did not change "
-                     f"content after 10s — stopping {month_label} here")
+                     f"the real first reference after 10s — stopping {month_label} here")
                 break
         except Exception as e:
             _log(f"⚠ Could not paginate for {month_label}: {e}")
