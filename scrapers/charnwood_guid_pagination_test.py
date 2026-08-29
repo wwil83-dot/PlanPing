@@ -111,9 +111,45 @@ async def test_pagination(browser):
         month_select = page.locator("select").filter(has=page.locator("option", has_text="2026"))
         options = await month_select.first.locator("option").all_text_contents()
         await month_select.first.select_option(label=options[1], timeout=5_000)
-        # REAL, CONFIRMED via direct manual testing: the working flow
-        # leaves this checkbox unchecked — not needed.
-        # await page.get_by_text("Validated this month", exact=True).first.click(timeout=5_000)
+
+        # REAL, NECESSARY diagnostic — the earlier click on "Validated
+        # this month" has been silently finding 0 matches despite the
+        # text being confirmed visible on the page, the same category
+        # of subtle text-matching issue seen elsewhere tonight (e.g.
+        # Medway's "Next"+"page" concatenation). Getting the exact real
+        # HTML structure before guessing at another fix.
+        try:
+            from bs4 import BeautifulSoup
+            html_now = await page.content()
+            soup = BeautifulSoup(html_now, "html.parser")
+            import re
+            status_area = soup.find(string=re.compile("Please select a status"))
+            if status_area:
+                node = status_area.parent
+                for level in range(5):
+                    print(f"Real status area level {level}: <{node.name}> "
+                          f"attrs={node.attrs}")
+                    node = node.parent
+                    if node is None:
+                        break
+                # Print the real, full markup of the immediate container
+                container = status_area.parent
+                for _ in range(3):
+                    if container.parent:
+                        container = container.parent
+                print(f"\nReal container HTML:\n{container.prettify()[:1500]}")
+        except Exception as e:
+            print(f"⚠ Could not inspect status area: {e}")
+
+        try:
+            validated_cb = page.get_by_text("Validated this month", exact=True)
+            if await validated_cb.count() > 0:
+                await validated_cb.first.click(timeout=5_000)
+                print("Checked real 'Validated this month'")
+            else:
+                print("⚠ 'Validated this month' text match found 0 elements")
+        except Exception as e:
+            print(f"⚠ Could not check Validated this month: {e}")
         await page.locator("#ancWeeklyMonthlySearch").first.click(timeout=8_000)
         try:
             await page.wait_for_load_state("networkidle", timeout=15_000)
