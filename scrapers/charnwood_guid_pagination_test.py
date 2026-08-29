@@ -144,6 +144,19 @@ async def test_pagination(browser):
             await asyncio.sleep(1)
         if real_total_this_run is None:
             print("⚠ Real results text never appeared after 15s of polling")
+            # REAL, NECESSARY diagnostic — every prior attempt has only
+            # ever checked for one specific text pattern and inferred
+            # failure from its absence, never actually looked at what
+            # the real page DOES show at this point. Capturing the
+            # full real state directly now, rather than keep guessing
+            # blind after 5+ inconclusive attempts.
+            print(f"\nReal URL at point of failure: {page.url}")
+            try:
+                real_body_now = await page.locator("body").inner_text()
+                print(f"Real full visible body text at point of failure "
+                      f"(first 2000 chars):\n{real_body_now[:2000]!r}")
+            except Exception as e:
+                print(f"⚠ Could not even read body text: {e}")
 
         print("Reached real search results\n")
     except Exception as e:
