@@ -22,6 +22,8 @@ on:
     - cron: '35 8 * * *'  # Stratford-on-Avon (E-Planning v2.11) nightly scrape
     - cron: '40 8 * * *'  # Herefordshire nightly scrape
     - cron: '44 8 * * *'  # Medway (Open Digital Planning) nightly scrape
+    - cron: '48 8 * * *'  # Ipswich (plain-ASP, httpx-only) nightly scrape
+    - cron: '52 8 * * *'  # Central Bedfordshire (AcolNet) nightly scrape
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     # CHANGED 2026-08-18 — both moved to a shared every-5-days cadence
@@ -2557,17 +2559,19 @@ jobs:
         run: cd scrapers && python charnwood_scraper.py
 
   ipswich_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live, matching every other new platform's first job
-    # this session before a confirmed clean production run.
-    #
-    # NO Playwright install/cache here — CONFIRMED not needed. This
-    # platform's real data comes from plain GET requests with no
-    # session/CSRF/cookie needed anywhere — genuinely the simplest
-    # platform in the project, same category as ni_scraper.py. See
-    # ipswich_councils.py's module docstring for the full real-evidence
-    # trail.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ipswich_scraper'
+    # PROMOTED to the nightly schedule (2026-08-30) after a confirmed
+    # clean first production run — 80 real applications saved across
+    # 8 pages, zero errors, 0.4 minutes total. Genuinely the simplest
+    # platform in the project — NO Playwright install/cache here —
+    # CONFIRMED not needed. This platform's real data comes from plain
+    # GET requests with no session/CSRF/cookie needed anywhere, same
+    # category as ni_scraper.py. See ipswich_councils.py's module
+    # docstring for the full real-evidence trail. Manual trigger kept
+    # available too, same as every other platform's job, for ad-hoc
+    # reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ipswich_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '48 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -2585,16 +2589,19 @@ jobs:
         run: cd scrapers && python ipswich_scraper.py
 
   central_beds_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live, matching every other new platform's first job
-    # this session before a confirmed clean production run. Real
-    # confirmed volume is meaningfully higher than most platforms in
-    # this project (402 real applications across a ~2 month window
-    # during recon) — timeout budgeted generously given up to 60 pages
-    # of session-bound click-through pagination. See
-    # central_beds_councils.py's module docstring for the full
-    # real-evidence trail.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'central_beds_scraper'
+    # PROMOTED to the nightly schedule (2026-08-30) after a confirmed
+    # clean first production run — 177 real applications saved across
+    # 18 pages, zero errors, 0.7 minutes total. Real confirmed volume
+    # is meaningfully higher than most platforms in this project (402
+    # real applications across a ~2 month window during recon; 177 for
+    # the real 30-day production window) — timeout budgeted generously
+    # given up to 60 pages of session-bound click-through pagination.
+    # See central_beds_councils.py's module docstring for the full
+    # real-evidence trail. Manual trigger kept available too, same as
+    # every other platform's job, for ad-hoc reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'central_beds_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '52 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 20
     steps:
