@@ -106,6 +106,13 @@ def _normalise_ipswich_status(s: str) -> str:
     key = s.lower()
     if any(x in key for x in ("approv", "grant", "permit")):
         return "approved"
+    # CONFIRMED 2026-08-30, first real production run: "No Objection"
+    # and "No Objection - Conditions" are real approval-equivalent
+    # outcomes (seen on tree/listed-building consent applications,
+    # where the council doesn't formally "approve" so much as raise no
+    # objection to the proposed works).
+    if "no objection" in key:
+        return "approved"
     if any(x in key for x in ("refus", "reject")):
         return "refused"
     if "withdraw" in key:
