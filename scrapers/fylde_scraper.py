@@ -204,7 +204,8 @@ async def geocode(postcodes: list[str]) -> dict:
 
 
 async def _paginate(page, all_apps: list, seen_refs: set, link_prefix: str,
-                     app_type_label: str, tab_aria_label: Optional[str] = None) -> None:
+                     app_type_label: str, page1_first_ref: Optional[str] = None,
+                     tab_aria_label: Optional[str] = None) -> None:
     """Paginates through one result type's pages by clicking its real
     'Next' link. If tab_aria_label is given, clicks that tab first —
     needed for Building Control, whose pagination controls aren't
@@ -219,18 +220,13 @@ async def _paginate(page, all_apps: list, seen_refs: set, link_prefix: str,
             return
 
     page_num = 2  # page 1 was already parsed from the initial page load
+    last_page_first_ref = page1_first_ref
     while page_num <= MAX_PAGES:
         if should_stop():
             _log(f"⚠ Time budget reached during {app_type_label} pagination, "
                  f"stopping at page {page_num}")
             break
         try:
-            # Both tabs' "Next" links share the same aria-label text —
-            # scope the search to links currently visible or with a
-            # module matching this type isn't reliable via aria-label
-            # alone, so rely on the tab already being active/scrolled
-            # into the right panel via the tab click above (or
-            # Planning's default-active state).
             next_link = page.locator("a[aria-label='Next Page.']:visible")
             if await next_link.count() == 0:
                 _log(f"{app_type_label}: no visible 'Next' link — stopping "
@@ -241,7 +237,15 @@ async def _paginate(page, all_apps: list, seen_refs: set, link_prefix: str,
                 await page.wait_for_load_state("networkidle", timeout=10_000)
             except PlaywrightTimeout:
                 pass
-            await asyncio.sleep(0.5)
+            # REAL FIX (2026-08-31) — first live run's Building Control
+            # count (20 for a 30-day window) was suspiciously low versus
+            # the recon rate (237 apps / ~2 months ≈ 118/month expected).
+            # 0.5s wasn't enough to rule out a race: the AJAX swap
+            # completing its network request (networkidle) doesn't
+            # guarantee the DOM has actually been updated with the new
+            # content yet. Increased settle time, plus an explicit
+            # stale-content check below.
+            await asyncio.sleep(1.5)
         except Exception as e:
             _log(f"⚠ {app_type_label}: could not click Next at page "
                  f"{page_num}: {type(e).__name__}: {e!r}")
@@ -254,6 +258,20 @@ async def _paginate(page, all_apps: list, seen_refs: set, link_prefix: str,
                  f"clicking Next — stopping")
             break
 
+        # Stale-content check: if this page's first reference matches
+        # the PREVIOUS page's first reference, the DOM almost certainly
+        # hasn't actually updated yet — retry once with a longer wait
+        # before concluding this is really the end of the data.
+        this_page_first_ref = page_apps[0]["reference"]
+        if this_page_first_ref == last_page_first_ref:
+            _log(f"⚠ {app_type_label} page {page_num}: first reference "
+                 f"matches the previous page — likely stale content, "
+                 f"retrying with a longer wait")
+            await asyncio.sleep(3)
+            html = await page.content()
+            page_apps = _parse_results_page(html, link_prefix, app_type_label)
+            this_page_first_ref = page_apps[0]["reference"] if page_apps else None
+
         new_count = 0
         for a in page_apps:
             if a["reference"] not in seen_refs:
@@ -264,8 +282,11 @@ async def _paginate(page, all_apps: list, seen_refs: set, link_prefix: str,
              f"(running total {len(all_apps)})")
 
         if new_count == 0:
-            _log(f"⚠ {app_type_label} page {page_num}: 0 NEW apps — stopping")
+            _log(f"⚠ {app_type_label} page {page_num}: 0 NEW apps even "
+                 f"after stale-content retry — stopping (genuinely likely "
+                 f"the end of real data)")
             break
+        last_page_first_ref = this_page_first_ref
         page_num += 1
 
 
@@ -333,12 +354,15 @@ async def scrape() -> list[dict]:
         _log(f"Building Control page 1: {len(bc_page1)} found (running total {len(all_apps)})")
 
         # Planning tab is active by default — no tab click needed
-        await _paginate(page, all_apps, seen_refs, "/Planning/Display/", "Planning")
+        await _paginate(page, all_apps, seen_refs, "/Planning/Display/", "Planning",
+                         page1_first_ref=planning_page1[0]["reference"] if planning_page1 else None)
 
         # Building Control tab needs activating first — its pagination
         # controls aren't clickable until its panel is visible
         await _paginate(page, all_apps, seen_refs, "/BuildingControl/Display/",
-                         "Building Control", tab_aria_label="Building Control results")
+                         "Building Control",
+                         page1_first_ref=bc_page1[0]["reference"] if bc_page1 else None,
+                         tab_aria_label="Building Control results")
 
         await context.close()
         await browser.close()
