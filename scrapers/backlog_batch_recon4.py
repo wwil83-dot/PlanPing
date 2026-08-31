@@ -101,11 +101,18 @@ async def recon_south_derbyshire(browser):
             await asyncio.sleep(2)  # let the Livewire round-trip complete
 
         html_after = await page.content()
-        total_after = re.search(r'"total":(\d+)', html_after)
-        showing_after = re.search(r"SHOWING \d+ TO \d+ OF ([\d,]+) APPLICATIONS", html_after)
-        print(f"  Real total AFTER interaction: {total_after.group(1) if total_after else 'not found'}")
-        print(f"  Real 'SHOWING...OF' text AFTER: {showing_after.group(1) if showing_after else 'not found'}")
-        print("  (Base was 32,240 — if either number above is meaningfully "
+        import html as htmlmod
+        effects_matches = re.findall(r'wire:effects="([^"]*)"', html_after)
+        real_total = None
+        for raw in effects_matches:
+            unescaped = htmlmod.unescape(raw)
+            if '"dispatches"' in unescaped and '"data"' in unescaped:
+                total_match = re.search(r'"total":(\d+)', unescaped)
+                if total_match:
+                    real_total = total_match.group(1)
+                break
+        print(f"  Real total AFTER interaction: {real_total or 'not found'}")
+        print("  (Base was 32,240 — if the number above is meaningfully "
               "smaller, real UI interaction successfully filters it.)")
 
         await save_evidence(page, "south_derbyshire_real_interaction")
@@ -131,10 +138,22 @@ async def recon_rotherham(browser):
         await page.goto("https://planning.rotherham.gov.uk/weeklylistapp.asp",
                          wait_until="domcontentloaded", timeout=45_000)
 
-        # Real, confirmed: lbxWeeklyListToShow defaults to "Most Recent"
-        # (value="0") already. Real, confirmed hypothesis to test: the
-        # sort-order selects (wListSort1/2/3) default to blank, which
-        # may be why the previous blind submit returned nothing.
+        # REAL FIX (2026-08-31) — round4 recon selected a sort value and
+        # clicked "Update" directly, but got back the exact same blank
+        # landing state (RecCount=0, sort selects reset). This looks
+        # like a two-step wizard: the week selection ("Go") likely needs
+        # to be submitted first to register it into the server's
+        # session state, before "Update" (sort selection) does anything
+        # real. Clicking "Go" first (even with the default "Most
+        # Recent" already selected) before touching sort order.
+        go_button = page.locator("input[type='submit']").first
+        async with page.expect_navigation(wait_until="domcontentloaded", timeout=30_000):
+            await go_button.click()
+        try:
+            await page.wait_for_load_state("networkidle", timeout=10_000)
+        except PlaywrightTimeout:
+            pass
+
         await page.select_option("#wListSort1", label="Received Date", timeout=10_000)
 
         submit_buttons = page.locator("input[type='submit']")
@@ -189,7 +208,14 @@ async def recon_fylde(browser):
         await page.fill("#DateReceivedFrom", "01/08/2026", timeout=5_000)
         await page.fill("#DateReceivedTo", "30/08/2026", timeout=5_000)
 
-        submit = page.locator("input[type='submit']").last
+        # REAL FIX (2026-08-31) — round4 recon's input[type='submit']
+        # selector timed out finding ANY match at all, unlike Redcar &
+        # Cleveland (same platform family, but apparently a styled
+        # <button> here rather than a plain <input type=submit>).
+        submit = page.locator(
+            "button:has-text('Search'), input[type='submit'], "
+            "button[type='submit']"
+        ).last
         async with page.expect_navigation(wait_until="domcontentloaded", timeout=45_000):
             await submit.click()
         try:
