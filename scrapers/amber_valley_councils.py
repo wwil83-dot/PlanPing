@@ -1,0 +1,53 @@
+"""
+PlanFind — Amber Valley Borough Council config (2026-08-31).
+
+Real, confirmed evidence: backlog_batch_recon2.py found real,
+documented JSON web-service endpoints embedded directly in the page
+source. backlog_batch_recon3.py CONFIRMED both endpoints work exactly
+as the page's own JavaScript calls them — real, clean JSON responses,
+no HTML parsing needed at all, no Playwright needed at all.
+
+REAL, CONFIRMED (not guessed):
+  - Base: info.ambervalley.gov.uk/WebServices/AVBCFeeds/DevConJSON.asmx
+  - PlanAppsAllValidNonDetermined — POST, form-encoded (NOT JSON body —
+    a JSON body variant was tested and returned a 404), params
+    wardCode/parishCode (empty string for "all"). Returns every
+    currently-undetermined application.
+  - PlanAppsDetermined — same but adds fromDate/toDate, format
+    DD-Mon-YYYY (e.g. "01-Aug-2026"). Returns applications decided in
+    that window.
+  - Real JSON fields per application: refVal (reference), altRef,
+    proposal, applicationAddress (lines separated by \\r, NOT \\n),
+    dateReceived, dateRegistered, dateValid, dateDecision,
+    dateToBeDecided, decided (bool), decisionType, applicationTypeCode,
+    developmentTypeCode, wardName, lat/lng (both null in real samples
+    seen — no coordinates from this feed, geocode from address/postcode
+    like every other platform).
+  - HONEST LIMITATION: the real "decision" and "status" fields were
+    both null in every real sample seen, even for applications where
+    decided=true. This feed appears to only expose a binary decided/
+    not-decided signal, NOT the actual outcome (approved/refused/
+    withdrawn) — normalise_amber_valley_status() below reflects this
+    honestly rather than guessing.
+"""
+
+COUNCIL_DB_IDS: dict[str, int | None] = {
+    "Amber Valley Borough Council": 4,
+}
+
+BASE_URL = "https://info.ambervalley.gov.uk/WebServices/AVBCFeeds/DevConJSON.asmx"
+NON_DETERMINED_URL = f"{BASE_URL}/PlanAppsAllValidNonDetermined"
+DETERMINED_URL = f"{BASE_URL}/PlanAppsDetermined"
+
+INSERT_SQL = """
+INSERT INTO councils (name, slug, system, region, portal_url, coverage_source, active)
+VALUES
+  ('Amber Valley Borough Council','amber-valley-borough-council','amber_valley_json_api','england','https://www.ambervalley.gov.uk/planning/development-management/view-a-planning-application/','pending',true)
+ON CONFLICT (name) DO UPDATE SET
+  system = 'amber_valley_json_api',
+  active = true,
+  portal_url = EXCLUDED.portal_url;
+"""
+
+if __name__ == "__main__":
+    print(INSERT_SQL)
