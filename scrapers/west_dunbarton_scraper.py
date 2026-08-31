@@ -42,20 +42,21 @@ HTTP_HEADERS = {
 
 
 def _legacy_ssl_context() -> ssl.SSLContext:
-    """REAL FIX (2026-08-31) — the first live run failed with a bare
-    ConnectError('') even with verify=False. That points past
-    certificate validation to TLS version negotiation itself: this old
-    council server likely only supports TLS 1.0/1.1, which modern
-    Python's default SSL context refuses to negotiate at all (OpenSSL
-    3.x defaults reject anything below TLS 1.2). Playwright's Chromium
-    engine tolerates legacy TLS; plain httpx's default context doesn't.
-    Lowering the minimum version (and keeping cert checks off, since
-    that was already established as needed) matches what a real
-    browser does here."""
+    """REAL FIX (2026-08-31), round 2 — lowering the minimum TLS
+    version alone did NOT fix the live ConnectError('') (still failed
+    identically). That points past protocol version to OpenSSL 3.x's
+    default SECURITY LEVEL (SECLEVEL=2), which outright rejects weak
+    ciphers and short key lengths regardless of TLS version — a very
+    common real blocker with old government IIS servers. Lowering the
+    cipher security level (SECLEVEL=1, or 0 if 1 still isn't enough)
+    is the actual documented fix for this class of problem, on top of
+    the TLS 1.0 minimum and disabled cert verification already
+    established as needed."""
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     ctx.minimum_version = ssl.TLSVersion.TLSv1
+    ctx.set_ciphers("DEFAULT@SECLEVEL=0")
     return ctx
 
 START_TIME = time.monotonic()
@@ -255,7 +256,12 @@ async def scrape() -> list[dict]:
             r = await client.get(RESULTS_URL, params=params)
             r.raise_for_status()
         except Exception as e:
-            _log(f"⚠ Results request failed: {type(e).__name__}: {e!r}")
+            cause_chain = []
+            cur = e
+            while cur is not None:
+                cause_chain.append(f"{type(cur).__name__}: {cur!r}")
+                cur = cur.__cause__ or cur.__context__
+            _log(f"⚠ Results request failed. Full exception chain: {' <- '.join(cause_chain)}")
             return []
 
         apps = _parse_results_page(r.text)
