@@ -30,7 +30,7 @@ UNCONFIRMED:
 """
 
 COUNCIL_DB_IDS: dict[str, int | None] = {
-    "Redcar and Cleveland Borough Council": None,
+    "Redcar and Cleveland Borough Council": 531,
 }
 
 SEARCH_URL = "https://planning.redcar-cleveland.gov.uk/Search/Planning/Advanced"
