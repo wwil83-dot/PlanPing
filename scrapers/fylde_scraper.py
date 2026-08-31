@@ -7,10 +7,21 @@ fylde_councils.py. Genuinely high confidence — unlike most of this
 backlog batch, a real submission was actually captured and validated
 before this was written.
 
+INCLUDES BUILDING CONTROL (2026-08-31, added on request) — the same
+search returns Building Control applications (e.g. extensions, dormer
+conversions) alongside Planning ones, in an identically-structured but
+separate table. Both are captured here, tagged via `application_type`
+("Planning" or "Building Control") so they remain distinguishable
+downstream. Real, confirmed: both tables' page-1 data is present in
+the DOM from a single initial page load; Planning's pagination tab is
+active by default, but Building Control's tab must be clicked first
+before its own "Next" pagination control becomes visible/clickable.
+
 ARCHITECTURE: Playwright accepts the disclaimer once, submits the real
-date-range search, then paginates through the confirmed stable
-/Search/ResultsPage/<page>?module=PLA URLs within the same browser
-context (session cookie carried over automatically).
+date-range search, then paginates through both Planning and Building
+Control results by clicking their real "Next" links in turn (not by
+navigating directly to the AJAX-backed ResultsPage URLs — an earlier
+attempt at that silently returned nothing beyond page 1).
 """
 import asyncio
 import os
@@ -91,20 +102,23 @@ def _normalise_fylde_status(s: str) -> str:
     return "pending"
 
 
-def _parse_results_page(html: str) -> list[dict]:
+def _parse_results_page(html: str, link_prefix: str, app_type_label: str) -> list[dict]:
     """Real, confirmed structure: table class="table-striped tblResults".
-    Two such tables exist on the page (Planning, Building Control) with
-    IDENTICAL headers — only the /Planning/Display/ href prefix
-    reliably distinguishes Planning rows."""
+    TWO such tables exist on the page (Planning, Building Control) with
+    IDENTICAL headers — only the href prefix (/Planning/Display/ vs
+    /BuildingControl/Display/) reliably distinguishes them. Both
+    tables' HTML is present in the DOM regardless of which tab is
+    visually active, so page-1 data for both types comes free from a
+    single request."""
     soup = BeautifulSoup(html, "html.parser")
     apps = []
 
     for table in soup.find_all("table", class_="tblResults"):
         rows = table.find_all("tr")
         for row in rows:
-            link = row.find("a", href=re.compile(r"^/Planning/Display/"))
+            link = row.find("a", href=re.compile(r"^" + re.escape(link_prefix)))
             if not link:
-                continue  # not a Planning row (or it's the header row)
+                continue  # not a row of this type (or it's the header row)
 
             cells = row.find_all("td")
             if len(cells) < 4:
@@ -123,6 +137,7 @@ def _parse_results_page(html: str) -> list[dict]:
                 "address": location_raw,
                 "postcode": postcode,
                 "description": proposal,
+                "application_type": app_type_label,
                 "status": _normalise_fylde_status(status_raw),
                 "council_url": detail_url,
             })
@@ -188,6 +203,72 @@ async def geocode(postcodes: list[str]) -> dict:
     return results
 
 
+async def _paginate(page, all_apps: list, seen_refs: set, link_prefix: str,
+                     app_type_label: str, tab_aria_label: Optional[str] = None) -> None:
+    """Paginates through one result type's pages by clicking its real
+    'Next' link. If tab_aria_label is given, clicks that tab first —
+    needed for Building Control, whose pagination controls aren't
+    visible/clickable until its tab is activated (Planning's tab is
+    active by default, so it doesn't need this)."""
+    if tab_aria_label:
+        try:
+            await page.click(f"a[aria-label*='{tab_aria_label}']", timeout=10_000)
+            await asyncio.sleep(1)  # let the tab-switch CSS/JS settle
+        except Exception as e:
+            _log(f"⚠ Could not activate '{tab_aria_label}' tab: {type(e).__name__}: {e!r}")
+            return
+
+    page_num = 2  # page 1 was already parsed from the initial page load
+    while page_num <= MAX_PAGES:
+        if should_stop():
+            _log(f"⚠ Time budget reached during {app_type_label} pagination, "
+                 f"stopping at page {page_num}")
+            break
+        try:
+            # Both tabs' "Next" links share the same aria-label text —
+            # scope the search to links currently visible or with a
+            # module matching this type isn't reliable via aria-label
+            # alone, so rely on the tab already being active/scrolled
+            # into the right panel via the tab click above (or
+            # Planning's default-active state).
+            next_link = page.locator("a[aria-label='Next Page.']:visible")
+            if await next_link.count() == 0:
+                _log(f"{app_type_label}: no visible 'Next' link — stopping "
+                     f"at page {page_num - 1}")
+                break
+            await next_link.first.click(timeout=10_000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10_000)
+            except PlaywrightTimeout:
+                pass
+            await asyncio.sleep(0.5)
+        except Exception as e:
+            _log(f"⚠ {app_type_label}: could not click Next at page "
+                 f"{page_num}: {type(e).__name__}: {e!r}")
+            break
+
+        html = await page.content()
+        page_apps = _parse_results_page(html, link_prefix, app_type_label)
+        if not page_apps:
+            _log(f"⚠ {app_type_label} page {page_num}: 0 apps parsed after "
+                 f"clicking Next — stopping")
+            break
+
+        new_count = 0
+        for a in page_apps:
+            if a["reference"] not in seen_refs:
+                seen_refs.add(a["reference"])
+                all_apps.append(a)
+                new_count += 1
+        _log(f"{app_type_label} page {page_num}: {new_count} new "
+             f"(running total {len(all_apps)})")
+
+        if new_count == 0:
+            _log(f"⚠ {app_type_label} page {page_num}: 0 NEW apps — stopping")
+            break
+        page_num += 1
+
+
 async def scrape() -> list[dict]:
     today = date.today()
     start = today - timedelta(days=DAYS_BACK)
@@ -231,67 +312,33 @@ async def scrape() -> list[dict]:
             await browser.close()
             return []
 
+        # Real, confirmed: BOTH tables (Planning, Building Control) are
+        # present in the DOM from this single initial page load,
+        # regardless of which tab is visually active — page-1 data for
+        # both types comes free, no extra request needed.
         html = await page.content()
-        page_apps = _parse_results_page(html)
-        for a in page_apps:
+        planning_page1 = _parse_results_page(html, "/Planning/Display/", "Planning")
+        bc_page1 = _parse_results_page(html, "/BuildingControl/Display/", "Building Control")
+
+        for a in planning_page1:
             if a["reference"] not in seen_refs:
                 seen_refs.add(a["reference"])
                 all_apps.append(a)
-        _log(f"Page 1: {len(page_apps)} found (running total {len(all_apps)})")
+        _log(f"Planning page 1: {len(planning_page1)} found (running total {len(all_apps)})")
 
-        page_num = 2
-        while page_num <= MAX_PAGES:
-            if should_stop():
-                _log(f"⚠ Time budget reached, stopping at page {page_num}")
-                break
+        for a in bc_page1:
+            if a["reference"] not in seen_refs:
+                seen_refs.add(a["reference"])
+                all_apps.append(a)
+        _log(f"Building Control page 1: {len(bc_page1)} found (running total {len(all_apps)})")
 
-            # REAL FIX (2026-08-31) — first live run silently stopped
-            # after page 1 (only 10 of the confirmed real 40 Planning
-            # applications saved). The pagination links carry a
-            # data-ajax-target attribute, meaning they're AJAX partial-
-            # loads driven by the site's own JS — navigating directly
-            # to /Search/ResultsPage/N?module=PLA via page.goto()
-            # didn't return the same real content a genuine click does.
-            # Clicking the real "Next" link instead, same approach
-            # already proven for Central Beds' AJAX-driven pagination.
-            try:
-                next_link = page.locator("a[aria-label='Next Page.']")
-                if await next_link.count() == 0:
-                    _log(f"No 'Next' link found — stopping at page {page_num - 1} "
-                         f"(this may be genuinely the last page, or a real "
-                         f"structural change worth checking)")
-                    break
-                await next_link.first.click(timeout=10_000)
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=10_000)
-                except PlaywrightTimeout:
-                    pass
-                await asyncio.sleep(0.5)  # let the AJAX partial fully render
-            except Exception as e:
-                _log(f"⚠ Could not click Next at page {page_num}: {type(e).__name__}: {e!r}")
-                break
+        # Planning tab is active by default — no tab click needed
+        await _paginate(page, all_apps, seen_refs, "/Planning/Display/", "Planning")
 
-            html = await page.content()
-            page_apps = _parse_results_page(html)
-            if not page_apps:
-                _log(f"⚠ Page {page_num}: 0 apps parsed after clicking Next — "
-                     f"stopping (real structure may differ from page 1's)")
-                break
-
-            new_count = 0
-            for a in page_apps:
-                if a["reference"] not in seen_refs:
-                    seen_refs.add(a["reference"])
-                    all_apps.append(a)
-                    new_count += 1
-            _log(f"Page {page_num}: {new_count} new (running total {len(all_apps)})")
-
-            if new_count == 0:
-                _log(f"⚠ Page {page_num}: 0 NEW apps (all already seen) — "
-                     f"stopping, likely reached the end or Next didn't "
-                     f"actually advance")
-                break
-            page_num += 1
+        # Building Control tab needs activating first — its pagination
+        # controls aren't clickable until its panel is visible
+        await _paginate(page, all_apps, seen_refs, "/BuildingControl/Display/",
+                         "Building Control", tab_aria_label="Building Control results")
 
         await context.close()
         await browser.close()
@@ -346,6 +393,7 @@ async def main():
             "address": a.get("address") or None,
             "postcode": a.get("postcode"),
             "description": a.get("description") or None,
+            "application_type": a.get("application_type"),
             "status": a["status"],
             "council_url": a.get("council_url"),
             "lat": lat,
