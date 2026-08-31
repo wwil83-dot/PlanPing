@@ -244,22 +244,38 @@ async def scrape() -> list[dict]:
             if should_stop():
                 _log(f"⚠ Time budget reached, stopping at page {page_num}")
                 break
+
+            # REAL FIX (2026-08-31) — first live run silently stopped
+            # after page 1 (only 10 of the confirmed real 40 Planning
+            # applications saved). The pagination links carry a
+            # data-ajax-target attribute, meaning they're AJAX partial-
+            # loads driven by the site's own JS — navigating directly
+            # to /Search/ResultsPage/N?module=PLA via page.goto()
+            # didn't return the same real content a genuine click does.
+            # Clicking the real "Next" link instead, same approach
+            # already proven for Central Beds' AJAX-driven pagination.
             try:
-                await page.goto(
-                    f"{BASE_URL}/Search/ResultsPage/{page_num}?module=PLA",
-                    wait_until="domcontentloaded", timeout=30_000,
-                )
+                next_link = page.locator("a[aria-label='Next Page.']")
+                if await next_link.count() == 0:
+                    _log(f"No 'Next' link found — stopping at page {page_num - 1} "
+                         f"(this may be genuinely the last page, or a real "
+                         f"structural change worth checking)")
+                    break
+                await next_link.first.click(timeout=10_000)
                 try:
                     await page.wait_for_load_state("networkidle", timeout=10_000)
                 except PlaywrightTimeout:
                     pass
+                await asyncio.sleep(0.5)  # let the AJAX partial fully render
             except Exception as e:
-                _log(f"⚠ Pagination request failed at page {page_num}: {e}")
+                _log(f"⚠ Could not click Next at page {page_num}: {type(e).__name__}: {e!r}")
                 break
 
             html = await page.content()
             page_apps = _parse_results_page(html)
             if not page_apps:
+                _log(f"⚠ Page {page_num}: 0 apps parsed after clicking Next — "
+                     f"stopping (real structure may differ from page 1's)")
                 break
 
             new_count = 0
@@ -271,9 +287,11 @@ async def scrape() -> list[dict]:
             _log(f"Page {page_num}: {new_count} new (running total {len(all_apps)})")
 
             if new_count == 0:
+                _log(f"⚠ Page {page_num}: 0 NEW apps (all already seen) — "
+                     f"stopping, likely reached the end or Next didn't "
+                     f"actually advance")
                 break
             page_num += 1
-            await asyncio.sleep(0.5)
 
         await context.close()
         await browser.close()
