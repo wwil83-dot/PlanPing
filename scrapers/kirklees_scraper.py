@@ -96,7 +96,17 @@ def _parse_results_page_generic(html: str) -> list[dict]:
                     "council_url": urljoin(BASE_URL, link["href"]),
                 })
 
-    return apps
+    # Defensive dedup — matches the real fix applied to
+    # redcar_cleveland_scraper.py after its first live run hit a real
+    # Postgres "ON CONFLICT DO UPDATE...affect row a second time"
+    # error from a repeated reference match.
+    seen_refs: set[str] = set()
+    deduped = []
+    for a in apps:
+        if a["reference"] not in seen_refs:
+            seen_refs.add(a["reference"])
+            deduped.append(a)
+    return deduped
 
 
 def _h():
