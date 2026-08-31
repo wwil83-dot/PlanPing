@@ -31,7 +31,7 @@ a duplicate.
 """
 
 COUNCIL_DB_IDS: dict[str, int | None] = {
-    "Kirklees Council": None,
+    "Kirklees Council": 177,
 }
 
 SEARCH_URL = (
