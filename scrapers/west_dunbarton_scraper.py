@@ -14,6 +14,7 @@ fields. Pure httpx — no Playwright needed anywhere.
 import asyncio
 import os
 import re
+import ssl
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -38,6 +39,24 @@ HTTP_HEADERS = {
         "Chrome/124.0.0.0 Safari/537.36"
     ),
 }
+
+
+def _legacy_ssl_context() -> ssl.SSLContext:
+    """REAL FIX (2026-08-31) — the first live run failed with a bare
+    ConnectError('') even with verify=False. That points past
+    certificate validation to TLS version negotiation itself: this old
+    council server likely only supports TLS 1.0/1.1, which modern
+    Python's default SSL context refuses to negotiate at all (OpenSSL
+    3.x defaults reject anything below TLS 1.2). Playwright's Chromium
+    engine tolerates legacy TLS; plain httpx's default context doesn't.
+    Lowering the minimum version (and keeping cert checks off, since
+    that was already established as needed) matches what a real
+    browser does here."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    ctx.minimum_version = ssl.TLSVersion.TLSv1
+    return ctx
 
 START_TIME = time.monotonic()
 
@@ -220,13 +239,7 @@ async def scrape() -> list[dict]:
 
     async with httpx.AsyncClient(
         headers=HTTP_HEADERS, timeout=30, follow_redirects=True,
-        # NOTE: recon used Playwright with ignore_https_errors=True and
-        # had no trouble; the first live run here (plain httpx, which
-        # verifies certs by default) failed with a blank error message
-        # — consistent with a certificate verification failure on this
-        # council's older infrastructure. Matching the same tolerance
-        # Playwright already had, rather than a new risk.
-        verify=False,
+        verify=_legacy_ssl_context(),
     ) as client:
         params = {
             # Dummy but present — real evidence shows the actual filter
