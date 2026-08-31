@@ -26,7 +26,7 @@ UNCONFIRMED:
 """
 
 COUNCIL_DB_IDS: dict[str, int | None] = {
-    "Telford and Wrekin Council": None,
+    "Telford and Wrekin Council": 533,
 }
 
 SEARCH_URL = "https://secure.telford.gov.uk/planningsearch/"
