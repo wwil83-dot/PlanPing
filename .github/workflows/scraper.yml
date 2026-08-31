@@ -28,6 +28,8 @@ on:
     - cron: '55 8 * * *'  # Redcar and Cleveland nightly scrape
     - cron: '56 8 * * *'  # Kirklees nightly scrape
     - cron: '57 8 * * *'  # Amber Valley nightly scrape
+    - cron: '58 8 * * *'  # South Derbyshire (Livewire) nightly scrape
+    - cron: '59 8 * * *'  # Fylde (Planning + Building Control) nightly scrape
     - cron: '0 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     # CHANGED 2026-08-18 — both moved to a shared every-5-days cadence
@@ -3092,15 +3094,22 @@ jobs:
           retention-days: 14
 
   south_derbyshire_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live. HIGH CONFIDENCE build — backlog_batch_recon4.py
-    # CONFIRMED real Livewire UI interaction genuinely filters the
-    # dataset (real total dropped from 32,240 to 83 for a test
-    # window), and the exact wire:effects JSON structure was validated
-    # against real captured data before this was written. HONEST
-    # LIMITATION: pagination not yet implemented (perPage capped at
-    # 100) — see south_derbyshire_scraper.py's module docstring.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'south_derbyshire_scraper'
+    # PROMOTED to the nightly schedule (2026-08-31) after a confirmed
+    # clean production run — 83 real applications saved, zero errors,
+    # 0.2 minutes total. Real Livewire UI interaction (select dateType,
+    # fill now-enabled date fields) genuinely filters the dataset —
+    # confirmed real total dropped from 32,240 unfiltered down to a
+    # real, correct 83 for the requested window. Real bug caught and
+    # fixed before this ever ran live: two wire:effects elements exist
+    # on the page (one empty, one real) — querySelector() alone grabbed
+    # the wrong one; fixed to search all of them for the one with real
+    # dispatch data. HONEST LIMITATION: pagination not yet implemented
+    # (perPage capped at 100) — see south_derbyshire_scraper.py's
+    # module docstring. Manual trigger kept available too, same as
+    # every other platform's job, for ad-hoc reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'south_derbyshire_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '58 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -3124,16 +3133,27 @@ jobs:
         run: cd scrapers && python south_derbyshire_scraper.py
 
   fylde_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live. HIGH CONFIDENCE build — backlog_batch_recon4.py
-    # CONFIRMED a real date-range submission returns real, structured
-    # results (40 real Planning applications for a test window), and
-    # the exact results-table structure (including how to distinguish
-    # Planning from Building Control rows sharing an identical table
-    # layout) was validated against real captured data before this was
-    # written. Same platform family as Redcar and Cleveland Borough
-    # Council — near-identical field names.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'fylde_scraper'
+    # PROMOTED to the nightly schedule (2026-08-31) after a confirmed
+    # clean production run — 327 real applications saved (50 Planning
+    # + 277 Building Control), zero errors, 0.8 minutes total. Two real
+    # bugs caught and fixed along the way: (1) navigating directly to
+    # the AJAX-backed /Search/ResultsPage/N?module=... URLs silently
+    # returned nothing beyond page 1 — fixed by clicking the real
+    # "Next" link instead; (2) even with real clicks, a race condition
+    # between the AJAX swap completing and page.content() being read
+    # caused premature "0 new" stops (confirmed via a spot real-count
+    # check from the user's own browser: 638 real Building Control
+    # apps in a 61-day window vs only 20 captured) — fixed with a
+    # longer settle time plus an explicit stale-content detection/
+    # retry. MAX_PAGES also raised from 20 to 50 for Building Control's
+    # real volume. Includes Building Control (dormer extensions,
+    # extensions, etc.) alongside Planning per explicit request — see
+    # fylde_scraper.py's module docstring. Manual trigger kept
+    # available too, same as every other platform's job, for ad-hoc
+    # reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'fylde_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '59 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
