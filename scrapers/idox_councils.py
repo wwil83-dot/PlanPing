@@ -230,6 +230,7 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Luton Borough Council":                                 417,
     "Torridge District Council":                             418,
     "Cumberland Council (Carlisle)":                          436,
+    "Gedling Borough Council":                                529,
 }
 
 IDOX_COUNCILS = [
@@ -1905,6 +1906,20 @@ IDOX_COUNCILS = [
 
     ("North Northamptonshire Council",
      "https://publicaccess.northnorthants.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # ADDED 2026-08-30 — real URL confirmed via the user's own manual
+    # recon (not web search — an earlier web-search pass on this same
+    # council found a stale/decommissioned Idox instance for a
+    # DIFFERENT council, Fylde, which turned out not to be Idox at
+    # all; Gedling's URL below is directly user-confirmed). No
+    # existing DB row on any platform. Run this file's INSERT SQL —
+    # no COUNCIL_DB_IDS entry added yet, relying on idox_scraper.py's
+    # live name-match fallback until a real id is confirmed, same as
+    # this project's other recent Idox additions.
+    # -------------------------------------------------------------------------
+    ("Gedling Borough Council",
+     "https://pawam.gedling.gov.uk/online-applications"),
 
 ]
 
