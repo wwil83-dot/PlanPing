@@ -45,7 +45,7 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     # `SELECT id FROM councils WHERE name = 'West Dunbartonshire Council';`
     # and replace this None with the real returned id before running
     # west_dunbarton_scraper.py.
-    "West Dunbartonshire Council": None,
+    "West Dunbartonshire Council": 530,
 }
 
 RESULTS_URL = "https://apps.west-dunbarton.gov.uk/dcdisplayinitial.asp"
