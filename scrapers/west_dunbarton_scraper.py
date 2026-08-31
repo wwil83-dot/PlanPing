@@ -218,7 +218,16 @@ async def scrape() -> list[dict]:
     start_str = start.strftime("%d/%m/%Y")
     end_str = today.strftime("%d/%m/%Y")
 
-    async with httpx.AsyncClient(headers=HTTP_HEADERS, timeout=30, follow_redirects=True) as client:
+    async with httpx.AsyncClient(
+        headers=HTTP_HEADERS, timeout=30, follow_redirects=True,
+        # NOTE: recon used Playwright with ignore_https_errors=True and
+        # had no trouble; the first live run here (plain httpx, which
+        # verifies certs by default) failed with a blank error message
+        # — consistent with a certificate verification failure on this
+        # council's older infrastructure. Matching the same tolerance
+        # Playwright already had, rather than a new risk.
+        verify=False,
+    ) as client:
         params = {
             # Dummy but present — real evidence shows the actual filter
             # is vDateRcvFr/vDateRcvTo, not this value; kept non-empty
@@ -233,7 +242,7 @@ async def scrape() -> list[dict]:
             r = await client.get(RESULTS_URL, params=params)
             r.raise_for_status()
         except Exception as e:
-            _log(f"⚠ Results request failed: {e}")
+            _log(f"⚠ Results request failed: {type(e).__name__}: {e!r}")
             return []
 
         apps = _parse_results_page(r.text)
