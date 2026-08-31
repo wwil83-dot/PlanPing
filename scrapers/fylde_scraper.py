@@ -54,7 +54,7 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "15"))
 DAYS_BACK    = int(os.environ.get("DAYS_BACK", "30"))
-MAX_PAGES    = int(os.environ.get("MAX_PAGES", "20"))
+MAX_PAGES    = int(os.environ.get("MAX_PAGES", "50"))
 
 COUNCIL_NAME = "Fylde Council"
 
@@ -288,6 +288,18 @@ async def _paginate(page, all_apps: list, seen_refs: set, link_prefix: str,
             break
         last_page_first_ref = this_page_first_ref
         page_num += 1
+
+    if page_num > MAX_PAGES:
+        # REAL BUG FIX (2026-08-31) — first run with MAX_PAGES=20 hit
+        # this exact silent cap on Building Control (real volume: 638
+        # apps / ~2 months, meaningfully more than 20 pages' worth for
+        # a 30-day window) with no log line explaining why it stopped —
+        # looked identical to a genuine "reached the end" stop. Now
+        # explicit, so a real future undercount is diagnosable instead
+        # of silently swallowed.
+        _log(f"⚠ {app_type_label}: hit MAX_PAGES cap ({MAX_PAGES}) while "
+             f"still finding new results — real data may extend further. "
+             f"Consider raising MAX_PAGES if this happens often.")
 
 
 async def scrape() -> list[dict]:
