@@ -30,7 +30,8 @@ on:
     - cron: '57 8 * * *'  # Amber Valley nightly scrape
     - cron: '58 8 * * *'  # South Derbyshire (Livewire) nightly scrape
     - cron: '59 8 * * *'  # Fylde (Planning + Building Control) nightly scrape
-    - cron: '0 9 * * *'   # alerts
+    - cron: '0 9 * * *'   # Ribble Valley nightly scrape
+    - cron: '1 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     # CHANGED 2026-08-18 — both moved to a shared every-5-days cadence
     # (real evidence: repeated frequent runs during development caused
@@ -494,9 +495,13 @@ jobs:
           retention-days: 7
 
   alerts:
+    # CHANGED 2026-09-01 — shifted from 0 9 to 1 9 to make room for
+    # Ribble Valley (0.7 min real runtime) right before it, since the
+    # entire 8am hour is now packed. One minute later daily is a
+    # trivial, low-risk shift.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'alerts') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '1 9 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -3210,18 +3215,24 @@ jobs:
           retention-days: 14
 
   ribblevalley_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live. HIGH CONFIDENCE build — ribblevalley_recon.py
-    # confirmed a real end-to-end pass (search -> results -> detail
-    # page) all in one recon run, and every part of the parsing logic
-    # was validated against that real captured data before this was
-    # written. Genuinely the simplest tier in the project — plain GET
+    # PROMOTED to the nightly schedule (2026-09-01) after a confirmed
+    # clean production run — 66 real applications saved across 7 pages
+    # (pagination confirmed exact, matching the real total precisely),
+    # zero errors, 0.7 minutes total. Genuinely the simplest tier in
+    # the project alongside Ipswich/West Dunbartonshire/NI — plain GET
     # requests throughout, no Playwright/session/CSRF needed anywhere.
+    # Real status vocabulary discovered and added: "PERMISSION NOT
+    # REQUIRED" is a genuine positive decided outcome, mapped to
+    # 'approved' (similar real-world case to Ipswich's "No Objection").
     # HONEST LIMITATION: the only date-range search is by DECISION
     # date, not received/submitted date — recently-submitted-but-
     # undecided applications may be under-covered. See
-    # ribblevalley_councils.py's module docstring.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ribblevalley_scraper'
+    # ribblevalley_councils.py's module docstring. Manual trigger kept
+    # available too, same as every other platform's job, for ad-hoc
+    # reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ribblevalley_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
