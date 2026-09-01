@@ -274,6 +274,23 @@ async def scrape_council(browser: Browser, council_name: str, slug: str) -> list
             except Exception:
                 pass
 
+        # REAL FIX (2026-09-01) — Barnet's first live run found ZERO
+        # <article> or <dl> tags anywhere in the page, despite the real
+        # body text clearly showing the genuine "Recently published
+        # applications" heading and real pagination (confirming this IS
+        # the right page, just captured before its content rendered).
+        # Medway's identical wait (networkidle, 10s) was apparently
+        # sufficient for ITS deployment, but Barnet's specific instance
+        # likely loads the actual cards via an async client-side fetch
+        # that takes longer. Explicitly waiting for a real <article> to
+        # appear (rather than just network activity settling) before
+        # parsing — falls through gracefully to the existing diagnostic
+        # if genuinely nothing ever appears.
+        try:
+            await page.wait_for_selector("article", timeout=8_000)
+        except PlaywrightTimeout:
+            pass  # let the existing empty-page diagnostic below report this
+
         html = await page.content()
         page_apps, has_next = _parse_cards(html, base_url)
 
