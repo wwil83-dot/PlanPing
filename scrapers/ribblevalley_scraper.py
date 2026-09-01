@@ -88,6 +88,13 @@ def _normalise_rv_status(decision_text: str, planning_status: str) -> str:
         key = decision_text.lower()
         if any(x in key for x in ("approv", "grant", "permit")):
             return "approved"
+        # CONFIRMED 2026-09-01, first real production run: "PERMISSION
+        # NOT REQUIRED" is a real, definitively-decided positive
+        # outcome (the council confirming the proposed works don't
+        # need planning permission) — similar real-world case to
+        # Ipswich's "No Objection" -> approved mapping.
+        if "not required" in key:
+            return "approved"
         if any(x in key for x in ("refus", "reject")):
             return "refused"
         if "withdraw" in key:
