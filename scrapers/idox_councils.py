@@ -231,6 +231,10 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Torridge District Council":                             418,
     "Cumberland Council (Carlisle)":                          436,
     "Gedling Borough Council":                                529,
+    "Bromsgrove and Redditch":                                538,
+    "Monmouthshire County Council":                           327,
+    "Merthyr Tydfil County Borough Council":                  540,
+    "Rhondda Cynon Taf County Borough Council":                541,
 }
 
 IDOX_COUNCILS = [
@@ -1325,8 +1329,18 @@ IDOX_COUNCILS = [
     ("Torfaen County Borough Council",
      "https://publicaccess.torfaen.gov.uk/online-applications"),
 
-    ("Monmouthshire County Council",
-     "https://publicaccess.monmouthshire.gov.uk/online-applications"),
+    # REMOVED 2026-09-01 — duplicate. This old, undated entry
+    # (publicaccess.monmouthshire.gov.uk) had no verification trail at
+    # all, unlike the fresh, direct confirmation of
+    # planningonline.monmouthshire.gov.uk added further down this file
+    # via idox_candidate_verify.py (genuine 200, real "Weekly List"
+    # title, real Idox markers). Same "trust fresh evidence over old
+    # unconfirmed assumptions" discipline as the Caerphilly correction
+    # just above. Kept only the confirmed-working URL to avoid
+    # duplicate-scraping the same council under two different (possibly
+    # one dead) URLs.
+    # ("Monmouthshire County Council",
+    #  "https://publicaccess.monmouthshire.gov.uk/online-applications"),
 
     ("Swansea Council",
      "https://property.swansea.gov.uk/online-applications"),
@@ -1920,6 +1934,33 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     ("Gedling Borough Council",
      "https://pawam.gedling.gov.uk/online-applications"),
+
+    # -------------------------------------------------------------------------
+    # ADDED 2026-09-01 — 4 of 20 candidates from the user's newest
+    # manual recon list. Real, CONFIRMED via idox_candidate_verify.py
+    # (with proper 6-second inter-request pacing, matching the same
+    # discipline already proven necessary for idox_scraper.py's
+    # --targeted mode) — genuine 200 status, real "Weekly List" title,
+    # real Idox page markers, no block/redirect. The other 16
+    # candidates from that same batch are PARKED, not abandoned — 15
+    # failed with a deterministic (identical across two separate runs,
+    # regardless of pacing) navigation timeout, most likely this
+    # project's already-documented "IP/datacenter-range block" category
+    # (the same kind of WAF rule that blocks known hosting-provider IP
+    # ranges outright, regardless of request timing) — a residential
+    # static proxy (confirmed available, not yet wired up) is the most
+    # promising next step for those, not more pacing tweaks. 1 more
+    # (Braintree) hit a real, distinct Cloudflare "Just a moment..."
+    # challenge — a different, separately-known category.
+    # -------------------------------------------------------------------------
+    ("Bromsgrove and Redditch",
+     "https://publicaccess.bromsgroveandredditch.gov.uk/online-applications"),
+    ("Monmouthshire County Council",
+     "https://planningonline.monmouthshire.gov.uk/online-applications"),
+    ("Merthyr Tydfil County Borough Council",
+     "https://publicaccess.merthyr.gov.uk/online-applications"),
+    ("Rhondda Cynon Taf County Borough Council",
+     "https://planonline.rctcbc.gov.uk/online-applications"),
 
 ]
 
