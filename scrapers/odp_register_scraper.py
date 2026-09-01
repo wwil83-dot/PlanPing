@@ -279,6 +279,31 @@ async def scrape_council(browser: Browser, council_name: str, slug: str) -> list
 
         if not page_apps:
             _log(f"Page {page_num}: no real cards found — stopping")
+            if page_num == 1:
+                # DIAGNOSTIC — real evidence needed rather than guessing.
+                # Barnet's first live run found zero cards despite a
+                # direct web fetch beforehand confirming real pagination
+                # (4 pages) exists on this exact page — something about
+                # the real markup, a consent banner, or a client-side
+                # JS render delay may differ from what Medway's already-
+                # proven selector expects. Printing enough of the real
+                # page to diagnose rather than guess a fix blind.
+                body_text = ""
+                try:
+                    body_text = (await page.locator("body").inner_text())[:1500]
+                except Exception:
+                    pass
+                _log(f"⚠ EMPTY-PAGE DIAGNOSTIC: real body text (first 1500 "
+                     f"chars): {body_text!r}")
+                # Also check for the card class under a couple of
+                # plausible alternate names/structures, in case this
+                # council's instance genuinely differs from Medway's.
+                soup_check = BeautifulSoup(html, "html.parser")
+                any_article = soup_check.find_all("article")
+                any_dl = soup_check.find_all("dl")
+                _log(f"⚠ EMPTY-PAGE DIAGNOSTIC: real <article> tag count "
+                     f"(any class): {len(any_article)}, real <dl> tag "
+                     f"count: {len(any_dl)}")
             break
 
         new_count = 0
@@ -374,10 +399,27 @@ async def process_council(browser: Browser, council_name: str, slug: str, cid: i
     raw_apps = await scrape_council(browser, council_name, slug)
 
     cutoff = date.today() - timedelta(days=DAYS_BACK)
+    before_filter_count = len(raw_apps)
     raw_apps = [
         a for a in raw_apps
         if not a.get("submitted_date") or date.fromisoformat(a["submitted_date"]) >= cutoff
     ]
+    if before_filter_count != len(raw_apps):
+        # REAL FIX (2026-09-01) — first live run's log looked
+        # contradictory: "1 new" during fetch, then "nothing to save"
+        # with no explanation in between. This platform sorts by
+        # PUBLISHED date, not received date (same real finding already
+        # proven for Medway), so an application can be found during
+        # pagination but then correctly filtered out here for having a
+        # real submitted_date outside the DAYS_BACK window. Logging
+        # this explicitly so it reads as honest filtering, not a
+        # silent/confusing drop.
+        _log(f"Date-window filter: {before_filter_count - len(raw_apps)} of "
+             f"{before_filter_count} found application(s) had a real "
+             f"submitted_date outside the last {DAYS_BACK} days — filtered "
+             f"out (this platform sorts by published date, not received "
+             f"date, same real finding already proven for Medway)")
+
     recheck_updates = await recheck_pending(browser, council_name, pending)
 
     if not raw_apps and not recheck_updates:
