@@ -1103,8 +1103,20 @@ IDOX_COUNCILS = [
     # Idox." Legacy Wycombe portal (publicaccess.wycombe.gov.uk/idoxpa-web)
     # deliberately NOT added separately, being phased out into this one.
     # -------------------------------------------------------------------------
-    ("Buckinghamshire Council",
-     "https://publicaccess.buckinghamshire.gov.uk/online-applications"),
+    # PARKED 2026-09-01 — confirmed genuinely blocked via
+    # idox_candidate_verify.py: deterministic net::ERR_TIMED_OUT,
+    # unchanged by inter-request pacing AND unchanged even through a
+    # genuine residential proxy IP (both theories directly tested and
+    # disproven) — the council's OWN home-connection test confirmed the
+    # site works fine for a normal residential ISP, pointing at
+    # sophisticated bot/proxy-fingerprint detection, not a simple IP
+    # block. Buckinghamshire's real data now comes from a genuinely
+    # separate, unrelated platform instead — see
+    # odp_register_councils.py (planningregister.org/buckinghamshire,
+    # Open Digital Planning pilot register). This existing row (id 381)
+    # is reused there via ON CONFLICT DO UPDATE, not duplicated.
+    # ("Buckinghamshire Council",
+    #  "https://publicaccess.buckinghamshire.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # LINCOLNSHIRE
@@ -1642,8 +1654,17 @@ IDOX_COUNCILS = [
     ("London Borough of Brent",
      "https://pa.brent.gov.uk/online-applications"),
 
-    ("London Borough of Barnet",
-     "https://publicaccess.barnet.gov.uk/online-applications"),
+    # PARKED 2026-09-01 — confirmed genuinely blocked via
+    # idox_candidate_verify.py: deterministic net::ERR_TIMED_OUT,
+    # unchanged by inter-request pacing AND unchanged even through a
+    # genuine residential proxy IP (both theories directly tested and
+    # disproven) — same evidence trail as Buckinghamshire just above.
+    # Barnet's real data now comes from a genuinely separate, unrelated
+    # platform instead — see odp_register_councils.py
+    # (planningregister.org/barnet, Open Digital Planning pilot
+    # register).
+    # ("London Borough of Barnet",
+    #  "https://publicaccess.barnet.gov.uk/online-applications"),
 
     ("London Borough of Enfield",
      "https://planningandbuildingcontrol.enfield.gov.uk/online-applications"),
