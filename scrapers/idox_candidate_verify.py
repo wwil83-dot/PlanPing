@@ -146,12 +146,27 @@ async def main():
     print(f"[{datetime.now(timezone.utc).isoformat()}] Idox candidate batch verification "
           f"— {len(TARGETS)} candidates\n")
 
+    # REAL FIX (2026-09-01) — first run fired all 20 navigations back-
+    # to-back with zero delay and hit a wall of navigation timeouts
+    # from item 8 onward (Swansea and everything after), while the
+    # first 7 were a genuine mix of real successes and real one-off
+    # failures. That shape — clean-ish start, then EVERYTHING fails
+    # identically regardless of destination — matches cumulative
+    # rate-limiting across Idox's shared hosting platform, not any one
+    # council's own WAF. This project already solved exactly this
+    # problem for idox_scraper.py's --targeted mode via CONCURRENCY=1 +
+    # REQUEST_DELAY_SECONDS=5 — applying the same proven pacing here,
+    # which this script skipped the first time.
+    REQUEST_DELAY_SECONDS = 6
+
     results = []
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
         print(f"Chromium launched: {browser.version}")
 
-        for name, url in TARGETS:
+        for i, (name, url) in enumerate(TARGETS):
+            if i > 0:
+                await asyncio.sleep(REQUEST_DELAY_SECONDS)
             result = await recon_one(browser, name, url)
             results.append(result)
 
