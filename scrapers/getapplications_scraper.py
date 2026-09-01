@@ -148,6 +148,26 @@ RECHECK_LIMIT = int(os.environ.get("RECHECK_LIMIT", "100"))  # bounded detail-pa
                                                                 # each is a separate
                                                                 # real HTTP request,
                                                                 # keep this modest
+COUNCIL_DELAY_SECONDS = int(os.environ.get("COUNCIL_DELAY_SECONDS", "8"))  # REAL FIX
+    # (2026-09-01) — a 12-council production run saved Liverpool
+    # cleanly then got HTTP 405 "Human Verification" on EVERY
+    # subsequent council, including 3 previously-confirmed-working ones
+    # (Warrington, Newcastle, Blackburn with Darwen). An isolation
+    # diagnostic (getapplications_isolation_diagnostic.py) then
+    # confirmed Warrington saves cleanly BOTH alone and alongside
+    # Liverpool — ruling out anything wrong with Warrington or the
+    # platform itself. Root cause: even at CONCURRENCY=1, asyncio.gather
+    # + a Semaphore has each council's task acquire the lock and start
+    # with ZERO delay the instant the previous one releases it — rapidly
+    # visiting many DIFFERENT council domains on this shared hosting
+    # platform in quick succession is a classic distributed-scraping
+    # fingerprint that centralized, cross-tenant bot detection would
+    # specifically watch for. Same category of fix already proven
+    # necessary for idox_scraper.py's --targeted mode
+    # (REQUEST_DELAY_SECONDS) and for this scraper's own within-council
+    # per-week pacing (see scrape_weekly_lists' existing 4s sleep) — now
+    # applied across councils too, not just within one council's own
+    # requests.
 
 START_TIME = time.monotonic()
 
@@ -504,10 +524,26 @@ class GetApplicationsPortal:
             self._log(f"⚠ Could not load search page (WAF challenge may not be "
                       f"solved, subsequent requests likely to fail): {e}")
 
-        for monday in _mondays_back(weeks_back):
+        for i, monday in enumerate(_mondays_back(weeks_back)):
             if should_stop():
                 self._log(f"⚠ Time budget reached, stopping at week {monday}")
                 break
+
+            if i > 0:
+                # REAL EVIDENCE (2026-08-17): Newcastle's own first
+                # production run succeeded on its FIRST week's request,
+                # then got HTTP 405 "Human Verification" on every
+                # request after — all within this SAME sequential loop,
+                # zero delay between them at the time. That pattern
+                # (fine, then degrading, entirely within one council's
+                # own requests) points at rate/behavioural detection
+                # tied to request frequency, not just cross-council
+                # concurrency (which was also a live factor in that run
+                # and has its own separate fix in scrape.yml). A real
+                # pause between weeks, same discipline as idox_scraper.
+                # py's own request-pacing fix, addresses this
+                # independently of the concurrency setting.
+                await asyncio.sleep(4)
 
             week_str = monday.strftime("%d-%m-%Y")
             # Real fetch() executed INSIDE the browser page — mechanical
@@ -615,6 +651,13 @@ async def process_council(portal: GetApplicationsPortal, browser: Browser,
                            sem: asyncio.Semaphore, weeks_back: int,
                            pending_recheck: Optional[list[dict]] = None) -> int:
     async with sem:
+        # REAL FIX (2026-09-01) — see COUNCIL_DELAY_SECONDS' definition
+        # above for the full evidence trail. Applied unconditionally
+        # (including before the very first council) for simplicity —
+        # a few seconds of harmless startup delay is a trivial cost
+        # against the real risk of retriggering the cross-domain block.
+        await asyncio.sleep(COUNCIL_DELAY_SECONDS)
+
         cid = portal.db_council_id
         print(f"\n[{portal.council_name}] (council_id={cid})")
 
