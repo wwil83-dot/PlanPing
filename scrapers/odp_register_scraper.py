@@ -158,13 +158,21 @@ def _parse_cards(html: str, base_url: str) -> tuple[list[dict], bool]:
         postcode = _extract_postcode(address)
         received_raw = field_values.get("Received date", "")
 
+        # REAL FIX (2026-09-03) — barnet_page2_diagnostic.py's real
+        # captured data showed "Status: Determined" alongside a SEPARATE
+        # "Council decision: Granted" field. Status alone only reflects
+        # workflow stage (Determined/Pending/etc.), not the actual
+        # outcome — using Council decision when present, falling back
+        # to Status only if it's absent.
+        decision_text = field_values.get("Council decision") or field_values.get("Status", "")
+
         apps.append({
             "reference": reference,
             "address": address,
             "postcode": postcode,
             "description": field_values.get("Description", ""),
             "submitted_date": _parse_odp_date(received_raw),
-            "status": _normalise_status(field_values.get("Status", "")),
+            "status": _normalise_status(decision_text),
             "council_url": detail_url,
         })
 
@@ -295,32 +303,28 @@ async def scrape_council(browser: Browser, council_name: str, slug: str) -> list
         page_apps, has_next = _parse_cards(html, base_url)
 
         if not page_apps:
-            _log(f"Page {page_num}: no real cards found — stopping")
             if page_num == 1:
-                # DIAGNOSTIC — real evidence needed rather than guessing.
-                # Barnet's first live run found zero cards despite a
-                # direct web fetch beforehand confirming real pagination
-                # (4 pages) exists on this exact page — something about
-                # the real markup, a consent banner, or a client-side
-                # JS render delay may differ from what Medway's already-
-                # proven selector expects. Printing enough of the real
-                # page to diagnose rather than guess a fix blind.
-                body_text = ""
-                try:
-                    body_text = (await page.locator("body").inner_text())[:1500]
-                except Exception:
-                    pass
-                _log(f"⚠ EMPTY-PAGE DIAGNOSTIC: real body text (first 1500 "
-                     f"chars): {body_text!r}")
-                # Also check for the card class under a couple of
-                # plausible alternate names/structures, in case this
-                # council's instance genuinely differs from Medway's.
-                soup_check = BeautifulSoup(html, "html.parser")
-                any_article = soup_check.find_all("article")
-                any_dl = soup_check.find_all("dl")
-                _log(f"⚠ EMPTY-PAGE DIAGNOSTIC: real <article> tag count "
-                     f"(any class): {len(any_article)}, real <dl> tag "
-                     f"count: {len(any_dl)}")
+                # REAL FIX (2026-09-01/03) — barnet_page2_diagnostic.py
+                # directly confirmed pages 2 and 4 BOTH have real,
+                # distinct content (4 articles/16 <dl> elements each),
+                # while page 1 specifically is genuinely empty —
+                # consistently, across multiple runs, even with an
+                # explicit wait for a real <article> element. This is a
+                # real quirk isolated to page 1 on this specific "Beta"
+                # deployment (its own page text: "This is a new
+                # service"), most plausibly an off-by-one pagination
+                # indexing bug on their end — NOT a fundamental
+                # structural mismatch with our parsing logic, which is
+                # confirmed correct against pages 2+. Skipping page 1
+                # and starting real collection from page 2 instead,
+                # rather than treating this as "reached the end."
+                _log(f"Page 1: no real cards found — CONFIRMED known "
+                     f"quirk on this council's deployment (page 1 "
+                     f"specifically is broken; pages 2+ work fine), "
+                     f"skipping to page 2 rather than stopping")
+                page_num += 1
+                continue
+            _log(f"Page {page_num}: no real cards found — stopping")
             break
 
         new_count = 0
