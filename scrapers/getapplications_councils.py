@@ -76,6 +76,12 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     "Nuneaton and Bedworth Borough Council":      494,
     "Coventry City Council":                      187,
     "Breckland Council":                          496,
+    # ADDED 2026-09-03 — confirmed via platform_family_verify.py: real
+    # HTTP 200/202, real title, real live "Recent Planning Applications"
+    # table already visible on load with genuine references
+    # (P/2026/0178 etc.) matching this platform's exact known column
+    # structure. Genuinely new — no existing DB row found.
+    "Blaenau Gwent County Borough Council":       544,
 }
 
 # (council_name_as_in_supabase_db, base_url — host only, no path)
@@ -92,6 +98,7 @@ GETAPPLICATIONS_COUNCILS = [
     ("Nuneaton and Bedworth Borough Council", "https://idoxcloud.nuneatonandbedworth.gov.uk"),
     ("Coventry City Council",                "https://planandregulatory.coventry.gov.uk"),
     ("Breckland Council",                    "https://publicportal.breckland.gov.uk"),
+    ("Blaenau Gwent County Borough Council",  "https://developmentservices.blaenau-gwent.gov.uk"),
 ]
 
 
@@ -117,7 +124,8 @@ VALUES
   ('Stoke-on-Trent City Council','stoke-on-trent-city-council','getapplications','england','https://development.stoke.gov.uk/planning/index.html','pending',true),
   ('Nuneaton and Bedworth Borough Council','nuneaton-and-bedworth-borough-council','getapplications','england','https://idoxcloud.nuneatonandbedworth.gov.uk/planning/index.html','pending',true),
   ('Coventry City Council','coventry-city-council','getapplications','england','https://planandregulatory.coventry.gov.uk/planning/index.html','pending',true),
-  ('Breckland Council','breckland-council','getapplications','england','https://publicportal.breckland.gov.uk/planning/index.html','pending',true)
+  ('Breckland Council','breckland-council','getapplications','england','https://publicportal.breckland.gov.uk/planning/index.html','pending',true),
+  ('Blaenau Gwent County Borough Council','blaenau-gwent-county-borough-council','getapplications','wales','https://developmentservices.blaenau-gwent.gov.uk/planning/index.html','pending',true)
 ON CONFLICT (name) DO UPDATE SET
   system = 'getapplications',
   active = true,
