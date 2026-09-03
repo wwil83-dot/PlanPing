@@ -247,6 +247,20 @@ ARCUS_COUNCILS = [
     # loop over BOTH categories (see scrape()'s dispatch block) rather
     # than just one, since the original Eastleigh/Anglesey design only
     # ever needed a single category per council.
+    # FLAGGED 2026-09-03 — a different real URL was found via the user's
+    # newest manual recon: development.wiltshire.gov.uk/pr3/s/be-register-view
+    # (note "/pr3/s" and "/be-register-view", vs this entry's "/pr/s").
+    # Confirmed real and live via platform_family_verify.py — genuine
+    # "Register View" title, same Arcus wording as Milton Keynes — but
+    # its body text describes a Quick Search + Map Search layout, not
+    # confirmed to still have the tabbed Quick/Advanced/Weekly-List
+    # structure this entry's mode="tabbed_weekly_list" depends on. Same
+    # "found a different real URL, don't swap without more evidence"
+    # situation as Anglesey's flag above — this entry IS confirmed
+    # working via its active coverage_source, so not changed here.
+    # Worth a direct recon of the /pr3/s URL before deciding whether to
+    # switch (newer instance replacing this one) or whether both
+    # genuinely run in parallel.
     ("Wiltshire Council",
      "https://development.wiltshire.gov.uk/pr/s",
      "tabbed_weekly_list",
