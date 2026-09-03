@@ -31,7 +31,8 @@ on:
     - cron: '58 8 * * *'  # South Derbyshire (Livewire) nightly scrape
     - cron: '59 8 * * *'  # Fylde (Planning + Building Control) nightly scrape
     - cron: '0 9 * * *'   # Ribble Valley nightly scrape
-    - cron: '1 9 * * *'   # alerts
+    - cron: '1 9 * * *'   # ODP Register nightly scrape (Barnet + Buckinghamshire)
+    - cron: '2 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     # CHANGED 2026-08-18 — both moved to a shared every-5-days cadence
     # (real evidence: repeated frequent runs during development caused
@@ -495,13 +496,12 @@ jobs:
           retention-days: 7
 
   alerts:
-    # CHANGED 2026-09-01 — shifted from 0 9 to 1 9 to make room for
-    # Ribble Valley (0.7 min real runtime) right before it, since the
-    # entire 8am hour is now packed. One minute later daily is a
-    # trivial, low-risk shift.
+    # CHANGED 2026-09-03 — shifted again from 1 9 to 2 9 to make room
+    # for the ODP Register scraper (Barnet + Buckinghamshire) right
+    # before it.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'alerts') ||
-      (github.event_name == 'schedule' && github.event.schedule == '1 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '2 9 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -1176,23 +1176,27 @@ jobs:
           retention-days: 14
 
   odp_register_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform
-    # addition, never run live. HIGH CONFIDENCE build — direct fetches
-    # of both planningregister.org/barnet and
-    # planningregister.org/buckinghamshire confirmed identical real
-    # structure to Medway's already-proven, currently-live scraper
-    # (same branding, same real "Not all planning applications are
-    # available" caveat text, same recently-published-applications
-    # listing). Found while investigating alternate routes for
-    # councils blocked on their own Idox instance — see
-    # odp_register_councils.py's module docstring for the full context.
-    # Reuses medway_scraper.py's already-proven parsing logic directly,
-    # generalised to loop over multiple council slugs. Kept as a
-    # SEPARATE script from medway_scraper.py deliberately — Medway's
-    # own job is already live and scheduled nightly, safer not to touch
-    # a working production job while adding new councils to the same
-    # platform.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'odp_register_scraper'
+    # PROMOTED to the nightly schedule (2026-09-03) after confirmed
+    # clean technical execution across 3 real live runs — zero errors,
+    # 0.1-0.4 minutes total. Two real bugs found and fixed along the
+    # way: (1) Barnet's specific deployment has a genuine quirk where
+    # page 1 is broken (confirmed via barnet_page2_diagnostic.py —
+    # pages 2+ have real content, page 1 consistently doesn't) — fixed
+    # by skipping page 1 rather than treating it as "reached the end";
+    # (2) status was reading only the 'Status' field (workflow stage,
+    # e.g. 'Determined') rather than the separate 'Council decision'
+    # field (actual outcome, e.g. 'Granted') — fixed to use the richer
+    # field. HONEST NOTE: 0 applications saved in testing so far is the
+    # correct, expected outcome for a newly-onboarded pilot register
+    # whose "recently published" feed is currently a batch of older
+    # backlogged applications (same known-incomplete-pilot situation
+    # already documented for Medway) — not a bug, should resolve
+    # naturally as the backlog clears in future nightly runs. Manual
+    # trigger kept available too, same as every other platform's job,
+    # for ad-hoc reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'odp_register_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '1 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
