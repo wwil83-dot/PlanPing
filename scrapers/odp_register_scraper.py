@@ -29,11 +29,22 @@ HONEST LIMITATIONS (same as Medway):
     odp_register_councils.py's module docstring for that evidence
     trail).
   - Real "Status" values are workflow stages, not final decisions —
-    defaults to 'pending'. Recheck logic uses a defensive keyword
-    search since real detail-page field labels were never directly
-    recon'd for these two specifically (only Medway's detail page
-    structure was ever directly inspected) — same discipline as before
-    a detail page has been directly seen elsewhere in this project.
+    _normalise_status() prefers the real 'Council decision' field
+    (e.g. 'Granted') when present, falling back to 'Status' only if
+    absent.
+  - DELIBERATELY captures ALL available applications regardless of how
+    old their submitted_date is — NOT filtered to DAYS_BACK. Real
+    evidence: this platform's "recently published" feed sorts by
+    publish date, not submission date, and these specific pilot
+    councils appear to have batch-published a historical backlog
+    (Barnet's most recently published applications all had received
+    dates from ~20 months prior) rather than continuously publishing
+    new ones. Filtering by submitted_date discarded 100% of real,
+    genuinely usable data (real references, addresses, decisions)
+    every single run. Deliberately kept as historical content instead,
+    matching PlanFind's own "Street History" feature (historical
+    search, not just "what's new right now") — better to store real
+    data than discard it for being old.
 
 DELIBERATELY a separate script from medway_scraper.py rather than a
 merge — Medway's job is already live and scheduled nightly; safer not
@@ -419,27 +430,22 @@ async def process_council(browser: Browser, council_name: str, slug: str, cid: i
 
     raw_apps = await scrape_council(browser, council_name, slug)
 
-    cutoff = date.today() - timedelta(days=DAYS_BACK)
-    before_filter_count = len(raw_apps)
-    raw_apps = [
-        a for a in raw_apps
-        if not a.get("submitted_date") or date.fromisoformat(a["submitted_date"]) >= cutoff
-    ]
-    if before_filter_count != len(raw_apps):
-        # REAL FIX (2026-09-01) — first live run's log looked
-        # contradictory: "1 new" during fetch, then "nothing to save"
-        # with no explanation in between. This platform sorts by
-        # PUBLISHED date, not received date (same real finding already
-        # proven for Medway), so an application can be found during
-        # pagination but then correctly filtered out here for having a
-        # real submitted_date outside the DAYS_BACK window. Logging
-        # this explicitly so it reads as honest filtering, not a
-        # silent/confusing drop.
-        _log(f"Date-window filter: {before_filter_count - len(raw_apps)} of "
-             f"{before_filter_count} found application(s) had a real "
-             f"submitted_date outside the last {DAYS_BACK} days — filtered "
-             f"out (this platform sorts by published date, not received "
-             f"date, same real finding already proven for Medway)")
+    # DELIBERATE DESIGN DECISION (2026-09-03) — earlier versions filtered
+    # by submitted_date >= cutoff (matching medway_scraper.py's original
+    # logic), but real evidence showed this discarding EVERYTHING every
+    # run: this platform's "recently published" feed sorts by publish
+    # date, not submission date, and these specific pilot councils
+    # appear to have batch-published a historical backlog rather than
+    # continuously publishing new applications. Real references, real
+    # addresses, real decisions — genuinely usable historical content,
+    # matching PlanFind's own "Street History" feature (historical
+    # search, not just "what's new right now"). Storing everything the
+    # register actually has rather than discarding it for being old;
+    # DAYS_BACK is kept as a config option (for potential future
+    # platforms where it's meaningful) but deliberately unused here.
+    if raw_apps:
+        _log(f"Capturing {len(raw_apps)} application(s) as historical "
+             f"content — no date filter applied (see module docstring)")
 
     recheck_updates = await recheck_pending(browser, council_name, pending)
 
