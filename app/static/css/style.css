@@ -35,7 +35,14 @@ body {
   padding: .75rem 1.5rem;
   position: sticky;
   top: 0;
-  z-index: 50;
+  /* REAL FIX — was z-index: 50. Leaflet's own map panes use default
+     z-index values up to ~700 (tooltipPane: 650, popupPane: 700). A
+     sticky header with a lower z-index than that will get visually
+     overlapped by the map during scroll, even though it appears
+     "below" the map in normal document flow — the two sit in
+     different stacking contexts. Raised comfortably above Leaflet's
+     ceiling so the nav reliably stays on top. */
+  z-index: 1000;
   box-shadow: 0 2px 8px rgba(0,0,0,.06);
 }
 .nav-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; row-gap: .5rem; }
