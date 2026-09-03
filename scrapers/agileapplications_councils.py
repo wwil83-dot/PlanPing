@@ -54,6 +54,27 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     "Rugby Borough Council":              491,
     "Dudley Metropolitan Borough Council": 191,
     "Peterborough City Council":           216,
+    # ADDED 2026-09-03 — confirmed via agile_criteria_url_test.py: same
+    # domain/company as the 6 above, but their real front-facing UI
+    # (radio buttons, date-range picker, a Terms & Conditions gate)
+    # looked structurally different from the confirmed criteria-URL +
+    # ng-table pattern the other 6 use. Tested directly: the SAME
+    # ?criteria={JSON}&page=1 URL shape works identically here too (20
+    # real animate-repeat rows returned for both, real references/
+    # addresses/proposals/dates confirmed) — the visible form is just
+    # an alternate UI on the same underlying API, not a different
+    # platform generation. Genuinely new — no existing DB rows found.
+    # NOTE on naming: the T&Cs consent banner says "Pembrokeshire Coast
+    # National Park" but the page's own footer copyright says
+    # "Pembrokeshire County Council" — genuinely two separate planning
+    # authorities in Wales (the Park covers only the coastline). Real,
+    # confirmed sample data included an application at Narberth, an
+    # inland town well outside the Park boundary — direct evidence this
+    # portal's real data is the full county's, not just the Park's; the
+    # T&Cs banner text is most likely shared/generic boilerplate. Named
+    # accordingly below.
+    "Pembrokeshire County Council":        545,
+    "Slough Borough Council":              546,
 }
 
 # (council_name, agileapplications council-slug)
@@ -64,6 +85,8 @@ AGILE_COUNCILS = [
     ("Rugby Borough Council",              "rugby"),
     ("Dudley Metropolitan Borough Council", "dudley"),
     ("Peterborough City Council",           "peterborough"),
+    ("Pembrokeshire County Council",        "pembrokeshire"),
+    ("Slough Borough Council",              "slough"),
 ]
 
 INSERT_SQL = """
@@ -74,7 +97,9 @@ VALUES
   ('Cannock Chase District Council','cannock-chase-district-council','agileapplications','england','https://planning.agileapplications.co.uk/cannock/search-applications','pending',true),
   ('Rugby Borough Council','rugby-borough-council','agileapplications','england','https://planning.agileapplications.co.uk/rugby/search-applications','pending',true),
   ('Dudley Metropolitan Borough Council','dudley-metropolitan-borough-council','agileapplications','england','https://planning.agileapplications.co.uk/dudley/search-applications','pending',true),
-  ('Peterborough City Council','peterborough-city-council','agileapplications','england','https://planning.agileapplications.co.uk/peterborough/search-applications','pending',true)
+  ('Peterborough City Council','peterborough-city-council','agileapplications','england','https://planning.agileapplications.co.uk/peterborough/search-applications','pending',true),
+  ('Pembrokeshire County Council','pembrokeshire-county-council','agileapplications','wales','https://planning.agileapplications.co.uk/pembrokeshire/search-applications','pending',true),
+  ('Slough Borough Council','slough-borough-council','agileapplications','england','https://planning.agileapplications.co.uk/slough/search-applications','pending',true)
 ON CONFLICT (name) DO UPDATE SET
   system = 'agileapplications',
   active = true,
