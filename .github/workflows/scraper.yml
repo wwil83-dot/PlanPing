@@ -49,6 +49,7 @@ on:
     # sensitive endpoints daily.
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
     - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
+    - cron: '40 10 */3 * *'  # Highland Council — weekly-list PDFs, checked every ~3 days (real data only changes weekly)
   workflow_dispatch:
     inputs:
       job:
@@ -496,9 +497,12 @@ jobs:
           retention-days: 7
 
   alerts:
-    # CHANGED 2026-09-03 — shifted again from 1 9 to 2 9 to make room
-    # for the ODP Register scraper (Barnet + Buckinghamshire) right
-    # before it.
+    # CHANGED 2026-09-04 — reverted from 5 9 back to 2 9. Highland
+    # moved off the nightly batch entirely (real data only changes
+    # weekly — checking nightly was wastefully redundant 6-7x over;
+    # moved to the every-~3-days slot alongside the other genuinely
+    # infrequent jobs instead), so alerts no longer needs the extra
+    # buffer that move required.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'alerts') ||
       (github.event_name == 'schedule' && github.event.schedule == '2 9 * * *')
@@ -1599,19 +1603,25 @@ jobs:
         run: cd scrapers && python highland_pdf_recon.py
 
   highland_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live. HIGH CONFIDENCE build — highland_pdf_recon.py
-    # confirmed real, clean PDF downloads (no WAF/challenge at all,
-    # unlike Glasgow's equivalent path) with genuine August 2026 data,
-    # and every regex field extraction was validated against that real
-    # captured text before this was written (two real bugs caught and
-    # fixed in that validation: mangled case-officer names, and a
-    # misleading postcode fallback that borrowed the applicant's
-    # address instead of honestly falling back to the council
-    # centroid). HONEST LIMITATION: this is a received-applications-only
+    # PROMOTED (2026-09-04) after a confirmed clean production run —
+    # 335 real applications saved across 6 weekly PDFs, zero errors.
+    # Real, honest geocoding split confirmed too: 163 real postcodes,
+    # 173 council-centroid fallback — expected for rural/agricultural
+    # Highland site addresses, not a parsing gap. Runs every ~3 days,
+    # NOT nightly — Highland only publishes a new weekly-list PDF once
+    # a week, so a nightly run would just re-download and re-parse the
+    # same unchanged PDFs 6-7x over for no benefit, competing
+    # needlessly with everything else in the tight nightly batch.
+    # Every ~3 days gives two checks per real publish cycle as a safety
+    # margin against the exact publish day drifting slightly week to
+    # week. HONEST LIMITATION: this is a received-applications-only
     # weekly list — no decision/status field exists; everything files
-    # as 'pending'. See highland_councils.py's module docstring.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'highland_scraper'
+    # as 'pending'. See highland_councils.py's module docstring. Manual
+    # trigger kept available too, same as every other platform's job,
+    # for ad-hoc reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'highland_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '40 10 */3 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
