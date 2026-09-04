@@ -48,6 +48,7 @@ CONTEXT_OPTIONS = {
     "viewport": {"width": 1280, "height": 900},
     "locale": "en-GB",
     "ignore_https_errors": True,
+    "accept_downloads": True,
 }
 
 
@@ -108,8 +109,16 @@ async def main():
             await browser.close()
             return
 
-        # Real page navigation for each download, matching the approach
-        # that finally worked for Glasgow's equivalent file-serving path
+        # REAL FIX (2026-09-04) — the first attempt treated this like
+        # Glasgow's file-serving path (a real page.goto() navigation)
+        # and got a real, informative error: "Download is starting".
+        # That's NOT a block — Highland's server sends a real
+        # Content-Disposition: attachment header, which makes the
+        # browser trigger an actual file download rather than
+        # navigating normally. Genuinely much simpler than Glasgow's
+        # Cloudflare situation — no WAF/challenge at all here, just a
+        # different technical detail needing Playwright's proper
+        # download-handling API instead of a plain navigation.
         for text, url in pdf_links[:2]:
             print(f"\n{'=' * 70}")
             print(f"DOWNLOADING: {text!r}")
@@ -117,15 +126,18 @@ async def main():
             print("=" * 70)
 
             try:
-                pdf_response = await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-                print(f"Real download HTTP status: {pdf_response.status if pdf_response else 'None'}")
-                content = await pdf_response.body() if pdf_response else b""
-                print(f"Real content size: {len(content)} bytes")
+                async with page.expect_download(timeout=30_000) as download_info:
+                    try:
+                        await page.goto(url, timeout=30_000)
+                    except Exception:
+                        pass  # the goto itself is expected to "fail" once the download starts
+                download = await download_info.value
+                download_path = await download.path()
+                print(f"Real download saved to: {download_path}")
 
-                if not pdf_response or pdf_response.status != 200:
-                    preview = content[:300].decode("utf-8", errors="replace")
-                    print(f"⚠ Non-200 download — real body preview: {preview!r}")
-                    continue
+                with open(download_path, "rb") as f:
+                    content = f.read()
+                print(f"Real content size: {len(content)} bytes")
 
                 with pdfplumber.open(io.BytesIO(content)) as pdf:
                     print(f"Real page count: {len(pdf.pages)}")
