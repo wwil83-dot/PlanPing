@@ -61,20 +61,37 @@ async def test_lancashire(client: httpx.AsyncClient):
     print("TESTING: Lancashire — Planning_Applications_County_Council")
     print("=" * 70)
 
-    try:
-        r = await client.get(f"{LANCASHIRE_SERVICE}?f=json")
-        print(f"Real service root HTTP status: {r.status_code}")
-        if r.status_code == 200:
-            data = r.json()
-            if "error" in data:
-                print(f"⚠ Real API error: {data['error']}")
-                return
-            layers = data.get("layers", [])
-            print(f"Real layers found: {len(layers)}")
-            for l in layers:
-                print(f"  id={l.get('id')} name={l.get('name')!r}")
-    except Exception as e:
-        print(f"⚠ Service root request failed: {type(e).__name__}: {e!r}")
+    # REAL RETRY (2026-09-04) — first attempt hit a ConnectTimeout, a
+    # more ambiguous signature than a clean success or an explicit
+    # block (could be a transient network blip, an overloaded server,
+    # or a real silent block). One attempt with a standard timeout
+    # isn't enough to conclude anything — retrying with a longer
+    # timeout and a couple of attempts before drawing any conclusion.
+    last_error = None
+    for attempt in range(1, 4):
+        try:
+            print(f"\nAttempt {attempt}/3 (60s timeout)...")
+            r = await client.get(f"{LANCASHIRE_SERVICE}?f=json", timeout=60)
+            print(f"Real service root HTTP status: {r.status_code}")
+            if r.status_code == 200:
+                data = r.json()
+                if "error" in data:
+                    print(f"⚠ Real API error: {data['error']}")
+                    return
+                layers = data.get("layers", [])
+                print(f"Real layers found: {len(layers)}")
+                for l in layers:
+                    print(f"  id={l.get('id')} name={l.get('name')!r}")
+                break
+        except Exception as e:
+            last_error = e
+            print(f"⚠ Attempt {attempt} failed: {type(e).__name__}: {e!r}")
+            if attempt < 3:
+                await asyncio.sleep(5)
+    else:
+        print(f"\n⚠ All 3 attempts failed with a timeout/connection error — "
+              f"this looks like a genuine, consistent block or an unreachable "
+              f"host, not a one-off blip. Last error: {last_error!r}")
         return
 
     query_url = f"{LANCASHIRE_SERVICE}/0/query"
@@ -96,14 +113,12 @@ async def test_lancashire(client: httpx.AsyncClient):
 
 
 async def main():
-    print(f"[{datetime.now(timezone.utc).isoformat()}] Durham/Lancashire ArcGIS recon\n")
+    print(f"[{datetime.now(timezone.utc).isoformat()}] Lancashire ArcGIS retest\n")
+    print("(Durham already conclusively resolved in the previous run — full "
+          "service directory browsed, no planning-application service found "
+          "anywhere. Not re-checking here.)\n")
 
     async with httpx.AsyncClient(timeout=30) as client:
-        print(f"{'=' * 70}")
-        print("BROWSING: Durham County Council ArcGIS service directory")
-        print("=" * 70)
-        await browse_folder(client, DURHAM_SERVICES_ROOT)
-
         await test_lancashire(client)
 
     print(f"\n{'=' * 70}")
