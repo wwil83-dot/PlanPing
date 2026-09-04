@@ -32,7 +32,8 @@ on:
     - cron: '59 8 * * *'  # Fylde (Planning + Building Control) nightly scrape
     - cron: '0 9 * * *'   # Ribble Valley nightly scrape
     - cron: '1 9 * * *'   # ODP Register nightly scrape (Barnet + Buckinghamshire)
-    - cron: '2 9 * * *'   # alerts
+    - cron: '2 9 * * *'   # Fife Council nightly scrape (ArcGIS, genuinely syncs nightly)
+    - cron: '3 9 * * *'   # alerts
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     # CHANGED 2026-08-18 — both moved to a shared every-5-days cadence
     # (real evidence: repeated frequent runs during development caused
@@ -497,15 +498,13 @@ jobs:
           retention-days: 7
 
   alerts:
-    # CHANGED 2026-09-04 — reverted from 5 9 back to 2 9. Highland
-    # moved off the nightly batch entirely (real data only changes
-    # weekly — checking nightly was wastefully redundant 6-7x over;
-    # moved to the every-~3-days slot alongside the other genuinely
-    # infrequent jobs instead), so alerts no longer needs the extra
-    # buffer that move required.
+    # CHANGED 2026-09-04 — shifted from 2 9 to 3 9 to make room for
+    # Fife Council right before it (confirmed genuinely syncs nightly,
+    # unlike Highland's weekly cadence, so it belongs in this batch
+    # rather than the every-~3-days slot).
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'alerts') ||
-      (github.event_name == 'schedule' && github.event.schedule == '2 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -1685,16 +1684,24 @@ jobs:
         run: cd scrapers && python multi_council_arcgis_recon2.py
 
   fife_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live. HIGH CONFIDENCE build — multi_council_arcgis_
-    # recon.py and its round 2 confirmed real, rich, genuinely fresh
-    # data (DATE_UPLOADED timestamps from the day before testing),
-    # public and queryable with zero scraping/WAF resistance once a
-    # real but non-adversarial obstacle (an expired server certificate)
-    # was worked around. Every parsing function was validated against
-    # that real captured data before this was written. Pure httpx — no
-    # Playwright needed at all.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'fife_scraper'
+    # PROMOTED to the nightly schedule (2026-09-04) after a confirmed
+    # clean production run — 249 real applications saved, zero errors.
+    # Genuinely one of the best sources in this whole project — real
+    # specific decision text, clean status categories, real detail
+    # links back to Fife's own public Idox portal, confirmed genuinely
+    # fresh (DATE_UPLOADED timestamps from the day before testing). Two
+    # real bugs found and fixed along the way: (1) raw epoch-ms
+    # integers in a WHERE clause against ArcGIS Server's date-typed
+    # column hit a real server error — fixed by sorting newest-first
+    # server-side and filtering the date window in Python instead; (2)
+    # a real, non-adversarial obstacle (Fife's own server certificate
+    # has genuinely expired) needed certificate verification relaxed,
+    # same legitimate fix already used for West Dunbartonshire. Manual
+    # trigger kept available too, same as every other platform's job,
+    # for ad-hoc reruns.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'fife_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '2 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
