@@ -14,22 +14,23 @@ REAL FIX (2026-09-04) — a plain httpx GET hit a real Cloudflare "Just a
 moment..." JS challenge (403, "Enable JavaScript and cookies to
 continue") — same category of block already confirmed for Braintree
 elsewhere in this project. Plain HTTP clients can't execute the
-JavaScript Cloudflare requires; switched the initial page load to
-Playwright (a real browser), which can often pass this lighter-tier
-challenge where a plain client can't. Kept httpx for the actual PDF
-binary downloads once real URLs are found, since PDF downloads
-typically aren't behind the same JS challenge as the HTML page.
+JavaScript Cloudflare requires; switched to Playwright throughout,
+including the PDF downloads themselves (a first attempt tried a
+separate httpx client for those specifically and hit the exact same
+challenge again, since a fresh HTTP client has none of the cf_clearance
+cookie the browser just earned). Using the SAME browser context's own
+request API for both the page load and the PDF downloads keeps that
+cookie throughout, since it's tied to the browser session.
 
 This recon: loads the real weekly-lists page via Playwright, finds the
-real PDF href for the most recent 2 weeks, downloads them via httpx,
-and dumps the actual extracted table structure via pdfplumber — before
-any parser gets built around it.
+real PDF href for the most recent 2 weeks, downloads them via the same
+authenticated browser context, and dumps the actual extracted table
+structure via pdfplumber — before any parser gets built around it.
 """
 import asyncio
 import io
 from datetime import datetime, timezone
 
-import httpx
 import pdfplumber
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
 
@@ -46,8 +47,6 @@ CONTEXT_OPTIONS = {
     "locale": "en-GB",
     "ignore_https_errors": True,
 }
-
-HTTP_HEADERS = {"User-Agent": CONTEXT_OPTIONS["user_agent"]}
 
 
 async def main():
@@ -103,15 +102,21 @@ async def main():
         for text, url in pdf_links[:10]:
             print(f"  {text!r} -> {url}")
 
-        await browser.close()
+        if not pdf_links:
+            print("\n⚠ No PDF links found even after passing the challenge — "
+                  "real page structure may differ from expected.")
+            await browser.close()
+            return
 
-    if not pdf_links:
-        print("\n⚠ No PDF links found even after passing the challenge — "
-              "real page structure may differ from expected.")
-        return
-
-    # Download and inspect the most recent 2 real PDFs via plain httpx
-    async with httpx.AsyncClient(headers=HTTP_HEADERS, timeout=30, follow_redirects=True) as client:
+        # REAL FIX (2026-09-04) — first attempt switched to a fresh
+        # httpx client for the actual PDF downloads and hit the SAME
+        # Cloudflare challenge again (403, "Just a moment..." on every
+        # single PDF request) — a plain httpx client starts a brand new,
+        # unauthenticated session with none of the cf_clearance cookie
+        # the browser just earned passing the challenge above. Reusing
+        # THIS SAME browser context's own request API keeps that
+        # cookie, since it's tied to the browser session, not a
+        # separate HTTP client — no need for a second browser launch.
         for text, url in pdf_links[:2]:
             print(f"\n{'=' * 70}")
             print(f"DOWNLOADING: {text!r}")
@@ -119,15 +124,17 @@ async def main():
             print("=" * 70)
 
             try:
-                pdf_r = await client.get(url)
-                print(f"Real download HTTP status: {pdf_r.status_code}")
-                print(f"Real content size: {len(pdf_r.content)} bytes")
+                pdf_r = await context.request.get(url)
+                print(f"Real download HTTP status: {pdf_r.status}")
+                content = await pdf_r.body()
+                print(f"Real content size: {len(content)} bytes")
 
-                if pdf_r.status_code != 200:
-                    print(f"⚠ Non-200 download — real body preview: {pdf_r.text[:300]!r}")
+                if pdf_r.status != 200:
+                    preview = content[:300].decode("utf-8", errors="replace")
+                    print(f"⚠ Non-200 download — real body preview: {preview!r}")
                     continue
 
-                with pdfplumber.open(io.BytesIO(pdf_r.content)) as pdf:
+                with pdfplumber.open(io.BytesIO(content)) as pdf:
                     print(f"Real page count: {len(pdf.pages)}")
                     for i, page_obj in enumerate(pdf.pages[:2]):
                         print(f"\n  --- Page {i + 1} real extracted text (first 1500 chars) ---")
@@ -143,6 +150,8 @@ async def main():
 
             except Exception as e:
                 print(f"⚠ Download/parse failed: {type(e).__name__}: {e!r}")
+
+        await browser.close()
 
     print(f"\n{'=' * 70}")
     print("RECON COMPLETE")
