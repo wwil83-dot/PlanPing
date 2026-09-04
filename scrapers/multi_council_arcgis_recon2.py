@@ -28,15 +28,16 @@ async def query_recent(client: httpx.AsyncClient, name: str, base_url: str,
 
     query_url = f"{base_url}/{layer}/query"
     params = {
-        "where": "1=1",
+        # REAL FIX (2026-09-04), round 4 — City of London's round 3
+        # result showed EVERY "most recent" record with a NULL date
+        # field, floating to the top of the DESC sort (a common
+        # database behaviour, not proof recent data doesn't exist).
+        # Explicitly excluding nulls is the only way to get a
+        # meaningful answer.
+        "where": f"{date_field} IS NOT NULL",
         "outFields": "*",
         "f": "json",
         "resultRecordCount": "5",
-        # REAL FIX (2026-09-04) — sorting by the reference field (text)
-        # doesn't correlate with recency at all: a literal "TEST"
-        # record and odd "R10(2)"/"BC-5170L" references sorted first
-        # purely alphabetically. Sorting by the real DATE field
-        # directly is the only way to confirm genuinely recent data.
         "orderByFields": f"{date_field} DESC",
     }
     try:
