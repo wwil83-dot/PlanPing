@@ -1545,9 +1545,13 @@ jobs:
     # 403 access-control wall (glasgow_arcgis_recon7.py) and was
     # parked. Glasgow's own weekly-list PDFs (glasgow.gov.uk/article/
     # 2095) are the alternative — covers ALL applications, not just the
-    # major/significant tier. Finds the real PDF links, downloads the
-    # 2 most recent, and dumps the actual pdfplumber-extracted table
-    # structure before any parser gets built around it.
+    # major/significant tier. A first attempt via plain httpx hit a
+    # real Cloudflare "Just a moment..." JS challenge (same category
+    # already confirmed for Braintree) — switched to Playwright for the
+    # initial page load, keeping httpx only for the actual PDF
+    # downloads. Finds the real PDF links, downloads the 2 most recent,
+    # and dumps the actual pdfplumber-extracted table structure before
+    # any parser gets built around it.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'glasgow_pdf_recon'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 10
@@ -1556,7 +1560,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install httpx beautifulsoup4 pdfplumber
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright pdfplumber
+      - run: playwright install --with-deps chromium
       - name: Find and inspect Glasgow's real weekly-list PDFs
         run: cd scrapers && python glasgow_pdf_recon.py
 
