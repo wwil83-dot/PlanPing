@@ -1,38 +1,23 @@
 #!/usr/bin/env python3
 """
-PlanFind — Tonbridge & Malling / City of London / Fife ArcGIS recon,
-round 2 (2026-09-04).
+PlanFind — Tonbridge & Malling / City of London recent-data recon,
+round 3 (2026-09-04).
 
-Round 1 confirmed both Tonbridge & Malling and City of London have
-real, rich, queryable data — but the default (unsorted) sample records
-returned were old (1999/2000, 2004), since no ORDER BY or date filter
-was applied. This queries both with ORDER BY DESC to confirm genuinely
-current data exists too.
+Round 2 sorted by the reference field (text) to try to confirm recent
+data exists for these two councils, but that doesn't correlate with
+recency at all — a literal "TEST" record and odd "R10(2)"/"BC-5170L"
+references sorted first purely alphabetically. This sorts by the real
+DATE field directly instead, the only reliable way to confirm
+genuinely recent (2026) data exists.
 
-Round 1 also found Fife's service (both candidates) fails with a
-different, non-adversarial error: [SSL: CERTIFICATE_VERIFY_FAILED]
-certificate has expired. This is Fife's OWN server having a genuinely
-expired certificate — a real accidental misconfiguration that would
-affect any legitimate client, not deliberate protection. Testing with
-certificate verification relaxed, same legitimate category of fix
-already used for West Dunbartonshire's old/broken cert earlier this
-project.
+(Fife was separately fully confirmed working in round 2 — real,
+genuinely fresh data with DATE_UPLOADED timestamps from the day before
+testing — see fife_councils.py / fife_scraper.py, already built.)
 """
 import asyncio
-import ssl
 from datetime import datetime, timezone
 
 import httpx
-
-
-def _legacy_ssl_context() -> ssl.SSLContext:
-    """Same real, legitimate fix already used for West Dunbartonshire —
-    tolerating a genuinely expired/broken certificate on an old
-    council server, not bypassing deliberate protection."""
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return ctx
 
 
 async def query_recent(client: httpx.AsyncClient, name: str, base_url: str,
@@ -46,8 +31,13 @@ async def query_recent(client: httpx.AsyncClient, name: str, base_url: str,
         "where": "1=1",
         "outFields": "*",
         "f": "json",
-        "resultRecordCount": "3",
-        "orderByFields": f"{ref_field} DESC",
+        "resultRecordCount": "5",
+        # REAL FIX (2026-09-04) — sorting by the reference field (text)
+        # doesn't correlate with recency at all: a literal "TEST"
+        # record and odd "R10(2)"/"BC-5170L" references sorted first
+        # purely alphabetically. Sorting by the real DATE field
+        # directly is the only way to confirm genuinely recent data.
+        "orderByFields": f"{date_field} DESC",
     }
     try:
         r = await client.get(query_url, params=params)
@@ -71,47 +61,8 @@ async def query_recent(client: httpx.AsyncClient, name: str, base_url: str,
         print(f"⚠ Query failed: {type(e).__name__}: {e!r}")
 
 
-async def test_fife(client: httpx.AsyncClient, name: str, base_url: str, layer: int):
-    print(f"\n{'=' * 70}")
-    print(f"FIFE RETEST (relaxed cert verification): {name}")
-    print("=" * 70)
-
-    try:
-        r = await client.get(f"{base_url}?f=json")
-        print(f"Real service root HTTP status: {r.status_code}")
-        if r.status_code == 200:
-            data = r.json()
-            if "error" in data:
-                print(f"⚠ Real API error: {data['error']}")
-                return
-            layers = data.get("layers", [])
-            print(f"Real layers found: {len(layers)}")
-            for l in layers:
-                print(f"  id={l.get('id')} name={l.get('name')!r}")
-    except Exception as e:
-        print(f"⚠ Service root request failed: {type(e).__name__}: {e!r}")
-        return
-
-    query_url = f"{base_url}/{layer}/query"
-    params = {"where": "1=1", "outFields": "*", "f": "json", "resultRecordCount": "3"}
-    try:
-        r = await client.get(query_url, params=params)
-        print(f"\nReal query HTTP status: {r.status_code}")
-        if r.status_code == 200:
-            data = r.json()
-            if "error" in data:
-                print(f"⚠ Real query error: {data['error']}")
-            else:
-                features = data.get("features", [])
-                print(f"Real sample records returned: {len(features)}")
-                for feat in features[:2]:
-                    print(f"  {feat.get('attributes', {})}")
-    except Exception as e:
-        print(f"⚠ Query failed: {type(e).__name__}: {e!r}")
-
-
 async def main():
-    print(f"[{datetime.now(timezone.utc).isoformat()}] Multi-council ArcGIS recon round 2\n")
+    print(f"[{datetime.now(timezone.utc).isoformat()}] Tonbridge/City of London recent-data recon (round 3)\n")
 
     async with httpx.AsyncClient(timeout=30) as client:
         await query_recent(
@@ -123,19 +74,6 @@ async def main():
             client, "City of London Corporation",
             "https://www.mapping.cityoflondon.gov.uk/arcgis/rest/services/COMPASS_Planning_Planning_Applications/MapServer",
             0, "DATEAPPVAL", "REFVAL",
-        )
-
-    # Separate client with relaxed cert verification for Fife specifically
-    async with httpx.AsyncClient(timeout=30, verify=_legacy_ssl_context()) as fife_client:
-        await test_fife(
-            fife_client, "Planning_Pro ('All Apps' layer)",
-            "https://arcgis-live-as.fife.gov.uk/server/rest/services/Planning_Pro/MapServer",
-            7,
-        )
-        await test_fife(
-            fife_client, "Planning_Applications_LinkGISLIVE",
-            "https://arcgis-live-as.fife.gov.uk/server/rest/services/Planning_Applications_LinkGISLIVE/MapServer",
-            0,
         )
 
     print(f"\n{'=' * 70}")
