@@ -62,6 +62,38 @@ async def query_recent(client: httpx.AsyncClient, name: str, base_url: str,
         print(f"⚠ Query failed: {type(e).__name__}: {e!r}")
 
 
+async def retest_original_query(client: httpx.AsyncClient, name: str, base_url: str, layer: int):
+    """Real, differential test: this exact query (no WHERE filter, no
+    sort) worked fine in round 1. Retrying it NOW isolates whether the
+    WHERE-clause-filtered query specifically triggered the 'Token
+    Required' error, or whether something else (rate-limit, session
+    timing) unrelated to query shape did."""
+    print(f"\n{'=' * 70}")
+    print(f"DIFFERENTIAL RETEST (original round-1 query, unchanged): {name}")
+    print("=" * 70)
+
+    query_url = f"{base_url}/{layer}/query"
+    params = {"where": "1=1", "outFields": "*", "f": "json", "resultRecordCount": "3"}
+    try:
+        r = await client.get(query_url, params=params)
+        print(f"Real query HTTP status: {r.status_code}")
+        if r.status_code == 200:
+            data = r.json()
+            if "error" in data:
+                print(f"⚠ Real query error: {data['error']}")
+                print("  -> If this ALSO now fails, the trigger is unrelated to "
+                      "query shape (rate-limit/session timing). If it still "
+                      "WORKS, the WHERE clause specifically was the trigger.")
+            else:
+                features = data.get("features", [])
+                print(f"Real sample records returned: {len(features)}")
+                print("  -> This still working confirms the WHERE clause "
+                      "specifically triggered the token requirement, not "
+                      "something time/rate-based.")
+    except Exception as e:
+        print(f"⚠ Query failed: {type(e).__name__}: {e!r}")
+
+
 async def main():
     print(f"[{datetime.now(timezone.utc).isoformat()}] Tonbridge/City of London recent-data recon (round 3)\n")
 
@@ -75,6 +107,11 @@ async def main():
             client, "City of London Corporation",
             "https://www.mapping.cityoflondon.gov.uk/arcgis/rest/services/COMPASS_Planning_Planning_Applications/MapServer",
             0, "DATEAPPVAL", "REFVAL",
+        )
+        await retest_original_query(
+            client, "City of London Corporation",
+            "https://www.mapping.cityoflondon.gov.uk/arcgis/rest/services/COMPASS_Planning_Planning_Applications/MapServer",
+            0,
         )
 
     print(f"\n{'=' * 70}")
