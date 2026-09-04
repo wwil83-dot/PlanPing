@@ -157,15 +157,26 @@ async def geocode(postcodes: list[str]) -> dict:
 async def scrape() -> list[dict]:
     today = date.today()
     start = today - timedelta(days=DAYS_BACK)
-    start_ms = int(datetime(start.year, start.month, start.day, tzinfo=timezone.utc).timestamp() * 1000)
-    end_ms = int(datetime(today.year, today.month, today.day, 23, 59, 59, tzinfo=timezone.utc).timestamp() * 1000)
 
     query_url = f"{BASE_URL}/{ALL_APPS_LAYER}/query"
     params = {
-        "where": f"DATE_RECEIVED >= {start_ms} AND DATE_RECEIVED <= {end_ms}",
+        # REAL FIX (2026-09-04) — the first live run hit a real ArcGIS
+        # Server error (400, extendedCode -2147220985) using raw
+        # epoch-millisecond integers directly in a WHERE clause on the
+        # DATE_RECEIVED field. This specific service is an on-prem
+        # ArcGIS Server (not a hosted AGOL layer) — those often reject
+        # that syntax on a genuine date-typed column, even though they
+        # happily RETURN dates as epoch integers in results. Sidestepping
+        # the uncertainty around the correct date-literal SQL syntax for
+        # this specific backend entirely: fetch without a WHERE date
+        # filter, sort newest-first (already confirmed working via
+        # ORDER BY in recon), and filter to the real DAYS_BACK window in
+        # plain Python afterward instead.
+        "where": "1=1",
         "outFields": "*",
         "f": "json",
         "resultRecordCount": "2000",
+        "orderByFields": "DATE_RECEIVED DESC",
     }
 
     async with httpx.AsyncClient(timeout=30, verify=_legacy_ssl_context()) as client:
@@ -181,9 +192,28 @@ async def scrape() -> list[dict]:
             _log(f"⚠ Real API error: {data['error']}")
             return []
 
-        features = data.get("features", [])
-        _log(f"Real records returned for the last {DAYS_BACK} days: {len(features)}")
-        return [f.get("attributes", {}) for f in features]
+        all_features = data.get("features", [])
+        _log(f"Real records fetched (newest-first, unfiltered): {len(all_features)}")
+        if len(all_features) >= 2000:
+            _log(f"⚠ PAGINATION DIAGNOSTIC: fetched exactly the requested cap "
+                 f"(2000) — ArcGIS Server often silently limits results to its "
+                 f"own configured maxRecordCount regardless of what's requested. "
+                 f"Some real records within the {DAYS_BACK}-day window may be "
+                 f"missing if the true count exceeds this — pagination "
+                 f"(resultOffset) not yet implemented.")
+
+        filtered = []
+        for f in all_features:
+            attrs = f.get("attributes", {})
+            received_ms = attrs.get("DATE_RECEIVED")
+            if not received_ms or not isinstance(received_ms, (int, float)):
+                continue
+            received_date = datetime.fromtimestamp(received_ms / 1000, tz=timezone.utc).date()
+            if received_date >= start:
+                filtered.append(attrs)
+
+        _log(f"Real records within the last {DAYS_BACK} days: {len(filtered)}")
+        return filtered
 
 
 async def main():
