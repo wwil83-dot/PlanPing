@@ -10,22 +10,29 @@ dashboard route (glasgow_arcgis_recon1-7.py) hit a genuine, definitive
 simpler, complete alternative (covers ALL applications, not just the
 major/significant tier the dashboard was limited to anyway).
 
-REAL FIX (2026-09-04) — a plain httpx GET hit a real Cloudflare "Just a
-moment..." JS challenge (403, "Enable JavaScript and cookies to
-continue") — same category of block already confirmed for Braintree
-elsewhere in this project. Plain HTTP clients can't execute the
-JavaScript Cloudflare requires; switched to Playwright throughout,
-including the PDF downloads themselves (a first attempt tried a
-separate httpx client for those specifically and hit the exact same
-challenge again, since a fresh HTTP client has none of the cf_clearance
-cookie the browser just earned). Using the SAME browser context's own
-request API for both the page load and the PDF downloads keeps that
-cookie throughout, since it's tied to the browser session.
+REAL FIX (2026-09-04), round 1 — a plain httpx GET hit a real
+Cloudflare "Just a moment..." JS challenge (403, "Enable JavaScript and
+cookies to continue") — same category of block already confirmed for
+Braintree elsewhere in this project. Plain HTTP clients can't execute
+the JavaScript Cloudflare requires; switched the page load to
+Playwright, which passed it. But a first attempt then used
+context.request.get() for the actual PDF downloads and hit the exact
+SAME 403 again, despite sharing the browser's cookies.
+
+REAL FIX, round 2 — Playwright's APIRequestContext (context.request)
+doesn't route through Chromium's actual browser engine network stack
+at all; it's a separate, lightweight HTTP client with a different
+underlying fingerprint from a genuine browser request, even while
+correctly carrying the right cookies. Cloudflare's bot detection on
+this stricter /media/ CDN path can apparently tell the difference.
+Using a REAL page navigation (page.goto()) for the PDF downloads
+instead guarantees Chromium's actual network stack handles the
+request — reading the response body directly from that navigation.
 
 This recon: loads the real weekly-lists page via Playwright, finds the
-real PDF href for the most recent 2 weeks, downloads them via the same
-authenticated browser context, and dumps the actual extracted table
-structure via pdfplumber — before any parser gets built around it.
+real PDF href for the most recent 2 weeks, downloads them via real page
+navigations in the same browser session, and dumps the actual extracted
+table structure via pdfplumber — before any parser gets built around it.
 """
 import asyncio
 import io
@@ -108,15 +115,20 @@ async def main():
             await browser.close()
             return
 
-        # REAL FIX (2026-09-04) — first attempt switched to a fresh
-        # httpx client for the actual PDF downloads and hit the SAME
-        # Cloudflare challenge again (403, "Just a moment..." on every
-        # single PDF request) — a plain httpx client starts a brand new,
-        # unauthenticated session with none of the cf_clearance cookie
-        # the browser just earned passing the challenge above. Reusing
-        # THIS SAME browser context's own request API keeps that
-        # cookie, since it's tied to the browser session, not a
-        # separate HTTP client — no need for a second browser launch.
+        # REAL FIX (2026-09-04), round 2 — reusing the SAME context's
+        # cookies via context.request.get() STILL hit the identical 403
+        # challenge. This points to something more specific:
+        # Playwright's APIRequestContext doesn't route through
+        # Chromium's actual browser engine network stack at all — it's
+        # a separate, lightweight HTTP client under the hood, with a
+        # different underlying TLS/fingerprint from a genuine browser
+        # request, even while correctly carrying the right cookies.
+        # Cloudflare's bot detection on this stricter /media/ CDN path
+        # can apparently tell the difference. Using a REAL page
+        # navigation instead guarantees Chromium's actual network stack
+        # handles the request — the response object from a real
+        # navigation still gives us the raw body regardless of how
+        # Chromium would otherwise try to display a PDF.
         for text, url in pdf_links[:2]:
             print(f"\n{'=' * 70}")
             print(f"DOWNLOADING: {text!r}")
@@ -124,12 +136,12 @@ async def main():
             print("=" * 70)
 
             try:
-                pdf_r = await context.request.get(url)
-                print(f"Real download HTTP status: {pdf_r.status}")
-                content = await pdf_r.body()
+                pdf_response = await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+                print(f"Real download HTTP status: {pdf_response.status if pdf_response else 'None'}")
+                content = await pdf_response.body() if pdf_response else b""
                 print(f"Real content size: {len(content)} bytes")
 
-                if pdf_r.status != 200:
+                if not pdf_response or pdf_response.status != 200:
                     preview = content[:300].decode("utf-8", errors="replace")
                     print(f"⚠ Non-200 download — real body preview: {preview!r}")
                     continue
