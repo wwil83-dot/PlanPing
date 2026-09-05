@@ -1149,6 +1149,171 @@ async def coverage_gaps(request: Request):
     })
 
 
+# ---------------------------------------------------------------------
+# Town pages — ADDED 2026-09-05. Real UK towns/villages sourced from OS
+# Open Names (see import_towns.py), stored in the `towns` table with
+# real coordinates. Deliberately reuses _fetch_applications() directly
+# — the exact same function the postcode search already uses — with the
+# town's own stored lat/lng in place of a postcode_lookup() result. No
+# new query logic: a town page is functionally identical to a postcode
+# search anchored at a fixed point instead of a user-entered postcode.
+# ---------------------------------------------------------------------
+
+TOWN_RADIUS_MILES = 3.0  # wider than postcode search's 1-mile default —
+                          # a town/city genuinely covers more ground than
+                          # a single postcode, and OS Open Names gives us
+                          # one coordinate for the whole place, not a
+                          # precise centre-of-town point.
+TOWN_DAYS_BACK = 30
+
+
+@app.get("/towns", response_class=HTMLResponse)
+async def towns_index(request: Request, q: Optional[str] = None):
+    """Browse/search all towns — real name search via the pg_trgm index
+    already added in the schema migration, falling back to an
+    alphabetical-by-county browse when no query is given."""
+    q_clean = (q or "").strip()
+
+    async with get_db() as db:
+        if q_clean and len(q_clean) >= 2:
+            rows = await db.fetch("""
+                SELECT name, slug, county, region
+                FROM towns
+                WHERE name ILIKE '%' || $1 || '%'
+                ORDER BY similarity(name, $1) DESC, name
+                LIMIT 50
+            """, q_clean)
+        else:
+            rows = await db.fetch("""
+                SELECT name, slug, county, region
+                FROM towns
+                ORDER BY name
+                LIMIT 100
+            """)
+
+        total_towns = await db.fetchval("SELECT COUNT(*) FROM towns")
+        # Real counties list for a browse-by-county dropdown, matching
+        # the pattern already liked from Planning Signal's directory.
+        counties = await db.fetch("""
+            SELECT DISTINCT county FROM towns
+            WHERE county IS NOT NULL AND county != ''
+            ORDER BY county
+        """)
+
+    return render("towns.html", {
+        "request": request,
+        "q": q_clean,
+        "towns": [dict(r) for r in rows],
+        "total_towns": total_towns,
+        "counties": [c["county"] for c in counties],
+        "searched": bool(q_clean),
+    })
+
+
+@app.get("/towns/county/{county_slug}", response_class=HTMLResponse)
+async def towns_by_county(request: Request, county_slug: str):
+    """Real county browse — county_slug matches the same slugify()
+    pattern used for town slugs (lowercase, hyphenated), matched against
+    the real stored county name case-insensitively."""
+    county_name = county_slug.replace("-", " ")
+
+    async with get_db() as db:
+        rows = await db.fetch("""
+            SELECT name, slug, county, region
+            FROM towns
+            WHERE county ILIKE $1
+            ORDER BY name
+        """, county_name)
+
+    if not rows:
+        raise HTTPException(404, "County not found")
+
+    return render("towns.html", {
+        "request": request,
+        "q": "",
+        "towns": [dict(r) for r in rows],
+        "total_towns": len(rows),
+        "counties": [],
+        "searched": False,
+        "county_filter": rows[0]["county"],  # real stored casing, not the slug
+    })
+
+
+@app.get("/towns/{slug}", response_class=HTMLResponse)
+async def town_page(request: Request, slug: str, radius: float = TOWN_RADIUS_MILES,
+                     days: int = TOWN_DAYS_BACK, status: Optional[str] = None,
+                     app_type: Optional[str] = None, keyword: Optional[str] = None,
+                     sort: Optional[str] = None, date_from: Optional[str] = None,
+                     date_to: Optional[str] = None):
+    date_from_parsed = _parse_date_param(date_from)
+    date_to_parsed = _parse_date_param(date_to)
+
+    async with get_db() as db:
+        town = await db.fetchrow("SELECT * FROM towns WHERE slug = $1", slug)
+        if not town:
+            raise HTTPException(404, "Town not found")
+
+        # Real, exact same function the postcode search already uses —
+        # only the coordinate source differs (town's own stored lat/lng,
+        # not a fresh postcode_lookup() call).
+        applications = await _fetch_applications(
+            db, town["lat"], town["lng"], radius, days, status, app_type,
+            keyword, sort, date_from_parsed, date_to_parsed,
+        )
+
+        # Real nearest council match, same real ILIKE approach already
+        # used by the postcode /search route — town names and council
+        # names don't always match directly (a town can straddle or sit
+        # within a differently-named council), so this is a best-effort
+        # real lookup, not guaranteed to always find one.
+        council = None
+        if town["county"]:
+            council = await db.fetchrow("""
+                SELECT id, name, slug, coverage_source, portal_url, system
+                FROM councils
+                WHERE name ILIKE $1
+                LIMIT 1
+            """, f"%{town['county']}%")
+
+    map_markers = [
+        {
+            "id": a["id"],
+            "lat": a["lat"],
+            "lng": a["lng"],
+            "reference": a.get("reference") or "",
+            "address": a.get("address") or "",
+            "is_centroid": a.get("geocode_quality") == "centroid",
+        }
+        for a in applications
+        if a.get("lat") is not None and a.get("lng") is not None
+    ]
+
+    coverage = _coverage_message(council, town["county"] or "") if council else None
+
+    return render("town.html", {
+        "request": request,
+        "town": dict(town),
+        "radius": radius,
+        "days": days,
+        "status": status,
+        "app_type": app_type,
+        "keyword": keyword or "",
+        "sort": sort or DEFAULT_SORT,
+        "sort_options": SORT_OPTIONS,
+        "date_from": date_from_parsed.isoformat() if date_from_parsed else "",
+        "date_to": date_to_parsed.isoformat() if date_to_parsed else "",
+        "status_options": STATUS_FILTER_OPTIONS,
+        "type_options": TYPE_FILTER_OPTIONS,
+        "applications": applications,
+        "map_markers": map_markers,
+        "total": len(applications),
+        "lat": town["lat"],
+        "lng": town["lng"],
+        "council": dict(council) if council else None,
+        "coverage": coverage,
+    })
+
+
 @app.post("/api/alert")
 async def create_alert(
     request: Request,
