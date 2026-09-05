@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Planning Applications by Town — PlanPing{% endblock %}
+{% block content %}
+<main class="main">
+  <div style="margin-bottom:1.75rem">
+    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">
+      {% if county_filter %}Towns in {{ county_filter }}{% else %}Planning Applications by Town{% endif %}
+    </h1>
+    <p style="color:var(--muted)">
+      {% if county_filter %}
+      {{ total_towns }} town{{ 's' if total_towns != 1 }} in {{ county_filter }}. <a href="/towns">Browse all towns →</a>
+      {% else %}
+      Search {{ total_towns }}+ UK towns and villages to see recent planning applications nearby.
+      {% endif %}
+    </p>
+  </div>
+
+  {% if not county_filter %}
+  <form action="/towns" method="get" style="margin-bottom:1.5rem;max-width:420px">
+    <input type="text" name="q" class="form-input" placeholder="Search for a town or village…"
+      value="{{ q }}" style="padding:.7rem .9rem">
+  </form>
+  {% endif %}
+
+  {% if searched and not towns %}
+  <p style="font-size:.85rem;color:var(--muted);margin-bottom:1.5rem">
+    No towns matching "{{ q }}" — try a different spelling, or
+    <a href="/towns">browse all towns</a>.
+  </p>
+  {% endif %}
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem;margin-bottom:2rem">
+    {% for t in towns %}
+    <a href="/towns/{{ t.slug }}" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:.8rem 1rem;text-decoration:none;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.04)">
+      <div style="font-size:.9rem;font-weight:600">{{ t.name }}</div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:2px">{{ t.county }}</div>
+    </a>
+    {% endfor %}
+  </div>
+
+  {% if counties %}
+  <div style="margin-top:2rem">
+    <h2 style="font-size:1rem;font-weight:600;color:var(--blue-dark);margin-bottom:.75rem">Browse by county</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+      {% for c in counties %}
+      <a href="/towns/county/{{ c|lower|replace(' ', '-') }}" class="btn btn-sm">{{ c }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</main>
+{% endblock %}

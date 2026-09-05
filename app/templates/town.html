@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block title %}Planning applications in {{ town.name }}, {{ town.county }} — PlanPing{% endblock %}
+{% block head_extra %}
+{% if total > 0 %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+{% endif %}
+<meta name="description" content="Recent planning applications in {{ town.name }}, {{ town.county }}. See what's being built nearby — extensions, new builds, conversions and more.">
+{% endblock %}
+
+{% block content %}
+<header class="hero hero-compact">
+  <div class="hero-inner">
+    <h1 style="font-family:'Fraunces', serif;font-size:1.9rem;color:#fff;margin-bottom:.3rem">
+      Planning applications in <em style="font-style:italic;color:#7dd98a">{{ town.name }}</em>
+    </h1>
+    <p class="hero-sub" style="margin-bottom:1rem">
+      {{ town.county }}{{ ', ' + town.region if town.region and town.region != town.county }}
+      · Looking for a specific address instead?
+      <a href="/" style="color:#fff;text-decoration:underline">Search by postcode</a>
+    </p>
+  </div>
+</header>
+
+<main class="main">
+
+  {# Coverage message — same real logic/banners as results.html, just
+     keyed off the town's own county rather than a postcode lookup's
+     council name. Only shown when a real council match was found. #}
+  {% if coverage %}
+    {% if coverage.type == 'covered' %}
+    <div class="banner banner-green">✓ {{ coverage.message }}</div>
+    {% elif coverage.type in ('partial', 'pending') %}
+    <div class="banner banner-amber">
+      ⚠ {{ coverage.message }}
+      {% if coverage.portal_url %}
+        <a href="{{ coverage.portal_url }}" target="_blank" rel="noopener">
+          Visit the council's planning portal →
+        </a>
+      {% endif %}
+    </div>
+    {% endif %}
+  {% endif %}
+
+  {# Results header #}
+  <div class="results-header">
+    <div>
+      <h2 class="results-title">
+        {% if total > 0 %}
+          {{ total }} application{{ 's' if total != 1 }} within {{ radius }} mile{{ 's' if radius != 1 }} of {{ town.name }}
+        {% else %}
+          No applications found near {{ town.name }}
+        {% endif %}
+      </h2>
+      <p class="results-sub">{{
+        {14: 'Last 14 days', 30: 'Last 30 days', 90: 'Last 3 months',
+         180: 'Last 6 months', 365: 'Last 12 months'}.get(days, 'Last ' + days|string + ' days')
+      }}</p>
+    </div>
+  </div>
+
+  {# Filter bar — identical pattern to results.html, hidden fields
+     reference the town slug (via this page's own URL) rather than a
+     postcode/radius/days triple, since those all come from THIS route
+     already. #}
+  {% if total > 0 or status or app_type or keyword or date_from or date_to %}
+  <form action="/towns/{{ town.slug }}" method="get" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.25rem;padding:.85rem 1rem;background:#fff;border:1px solid var(--border);border-radius:8px">
+    <input type="hidden" name="radius" value="{{ radius }}">
+    <input type="hidden" name="days" value="{{ days }}">
+
+    <label style="font-size:.8rem;color:var(--muted);font-weight:600">Filter:</label>
+
+    <input type="text" name="keyword" class="form-input" style="max-width:180px"
+      placeholder="Keyword, e.g. solar, barn, HMO"
+      value="{{ keyword }}"
+      aria-label="Filter by keyword in description or address">
+
+    <select name="status" class="form-input" style="max-width:150px" onchange="this.form.submit()">
+      <option value="">Any status</option>
+      {% for opt in status_options %}
+      <option value="{{ opt }}" {{ 'selected' if status == opt }}>{{ opt|title }}</option>
+      {% endfor %}
+    </select>
+
+    <select name="app_type" class="form-input" style="max-width:170px" onchange="this.form.submit()">
+      <option value="">Any type</option>
+      {% for opt in type_options %}
+      <option value="{{ opt }}" {{ 'selected' if app_type == opt }}>{{ opt|title }}</option>
+      {% endfor %}
+    </select>
+
+    <select name="sort" class="form-input" style="max-width:170px" onchange="this.form.submit()" aria-label="Sort results by">
+      <option value="date_desc" {{ 'selected' if sort == 'date_desc' }}>Newest first</option>
+      <option value="date_asc" {{ 'selected' if sort == 'date_asc' }}>Oldest first</option>
+      <option value="distance" {{ 'selected' if sort == 'distance' }}>Nearest first</option>
+    </select>
+
+    <span style="display:flex;align-items:center;gap:.35rem">
+      <label for="filter-date-from" style="font-size:.78rem;color:var(--muted)">From</label>
+      <input type="date" id="filter-date-from" name="date_from" class="form-input" style="max-width:150px"
+        value="{{ date_from }}" aria-label="Submitted from this date">
+      <label for="filter-date-to" style="font-size:.78rem;color:var(--muted)">to</label>
+      <input type="date" id="filter-date-to" name="date_to" class="form-input" style="max-width:150px"
+        value="{{ date_to }}" aria-label="Submitted up to this date">
+    </span>
+
+    <button type="submit" class="btn btn-sm">Apply</button>
+
+    {% if status or app_type or keyword or date_from or date_to %}
+    <a href="/towns/{{ town.slug }}?radius={{ radius }}&days={{ days }}" class="btn-link" style="font-size:.8rem">Clear filters</a>
+    {% endif %}
+  </form>
+  {% endif %}
+
+  {% if total == 0 %}
+  <div class="empty-state">
+    <div class="empty-icon">📭</div>
+    <h3>No applications found</h3>
+    {% if keyword %}
+    <p>No planning applications matching "<strong>{{ keyword }}</strong>" were found within {{ radius }} mile{{ 's' if radius != 1 }} of {{ town.name }} in the last {{ days }} days.</p>
+    {% else %}
+    <p>No planning applications were submitted within {{ radius }} mile{{ 's' if radius != 1 }} of {{ town.name }} in the last {{ days }} days.</p>
+    {% endif %}
+    <p>This could mean the local council isn't yet covered, or there genuinely haven't been any applications recently.</p>
+  </div>
+  {% else %}
+
+  {# Map view — identical pattern to results.html #}
+  <div style="margin-bottom:1rem">
+    <button class="btn btn-sm" id="map-toggle-btn" onclick="toggleResultsMap()">🗺️ Show map</button>
+  </div>
+  <div id="results-map" style="display:none;height:420px;border-radius:10px;border:1px solid var(--border);margin-bottom:1.25rem"></div>
+
+  <div class="app-list">
+    {% for app in applications %}
+    <article class="app-card status-{{ app.status_class }}" id="app-card-{{ app.id }}">
+      <div class="app-card-top">
+        <div class="app-meta">
+          <span class="app-ref">{{ app.reference }}</span>
+          <span class="app-council">{{ app.council_name }}</span>
+          <span class="app-distance">{{ app.distance_miles }} mi</span>
+        </div>
+        <div class="app-badges">
+          <span class="badge badge-type badge-{{ app.type_badge }}">{{ app.application_type or 'Unknown type' }}</span>
+          <span class="badge badge-status badge-{{ app.status_class }}">{{ app.status | title }}</span>
+        </div>
+      </div>
+
+      <h3 class="app-address">{{ app.address or 'Address not available' }}</h3>
+      <p class="app-description">{{ app.description or 'No description provided' }}</p>
+
+      <div class="app-footer">
+        {% if app.date_unavailable_note %}
+        <span class="app-date" title="This council doesn't publish an application date in the data we can access">
+          Date not shown by council
+          {% if app.council_url %}· <a href="{{ app.council_url }}" target="_blank" rel="noopener">check portal</a>{% endif %}
+        </span>
+        {% else %}
+        <span class="app-date">{{ app.days_ago }}</span>
+        {% endif %}
+        <div class="app-actions">
+          {% if app.council_url %}
+          <a href="{{ app.council_url }}" target="_blank" rel="noopener" class="btn btn-sm">
+            View on council portal →
+          </a>
+          {% endif %}
+          <a href="/application/{{ app.id }}" class="btn btn-sm">Details</a>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="coverage-note" style="margin-top:2rem">
+    <strong>Know {{ town.name }} well?</strong>
+    Search a specific postcode for tighter results, or
+    <a href="/towns">browse other towns</a>.
+  </div>
+
+</main>
+{% endblock %}
+
+{% block scripts %}
+{% if total > 0 %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  var _resultsMapInitialized = false;
+
+  function toggleResultsMap() {
+    var mapDiv = document.getElementById('results-map');
+    var btn = document.getElementById('map-toggle-btn');
+    var showing = mapDiv.style.display !== 'none';
+
+    if (showing) {
+      mapDiv.style.display = 'none';
+      btn.textContent = '🗺️ Show map';
+      return;
+    }
+
+    mapDiv.style.display = 'block';
+    btn.textContent = '📋 Hide map';
+
+    if (_resultsMapInitialized) return;
+    _resultsMapInitialized = true;
+
+    var searchLat = {{ lat }};
+    var searchLng = {{ lng }};
+    var apps = {{ map_markers | tojson }};
+
+    var map = L.map('results-map').setView([searchLat, searchLng], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    L.circleMarker([searchLat, searchLng], {
+      radius: 8, color: '#1a3a5c', fillColor: '#1a3a5c', fillOpacity: 1, weight: 2
+    }).addTo(map).bindPopup('{{ town.name }}');
+
+    var bounds = [[searchLat, searchLng]];
+
+    apps.forEach(function (app) {
+      var isCentroid = app.is_centroid;
+      var marker = L.circleMarker([app.lat, app.lng], {
+        radius: isCentroid ? 5 : 7,
+        color: isCentroid ? '#999' : '#c0392b',
+        fillColor: isCentroid ? '#ccc' : '#e74c3c',
+        fillOpacity: isCentroid ? 0.5 : 0.85,
+        weight: 1.5
+      }).addTo(map);
+
+      var popupHtml = '<strong>' + (app.reference || '') + '</strong><br>' +
+        (app.address || '') +
+        (isCentroid ? '<br><em style="font-size:.75rem">Approximate location</em>' : '') +
+        '<br><a href="/application/' + app.id + '">View details →</a>';
+      marker.bindPopup(popupHtml);
+
+      marker.on('click', function () {
+        var card = document.getElementById('app-card-' + app.id);
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+
+      bounds.push([app.lat, app.lng]);
+    });
+
+    if (bounds.length > 1) {
+      map.fitBounds(bounds, { padding: [30, 30] });
+    }
+  }
+</script>
+{% endif %}
+{% endblock %}
