@@ -1378,6 +1378,41 @@ GUIDE_CATEGORY_SEARCH_URL = {
     "large_sites": "/large-sites",
 }
 
+# ADDED (2026-09-06) — real, direct request: national annual context
+# next to PlanFind's own live count, not just our own number in
+# isolation. These are official MHCLG statistics, not something this
+# app can query live — genuinely static facts that update maybe once a
+# year when MHCLG publishes new figures, not every page load. Verified
+# directly against MHCLG's own "Housing supply: net additional
+# dwellings, England: 2024 to 2025" release and the "Planning
+# applications in England: January to March 2026" release before
+# writing — both real, accredited official statistics, not a guess.
+# HONEST LIMITATION: these will go stale as MHCLG publishes newer
+# releases (they do so quarterly/annually) — the source + period is
+# shown directly on the stat so nobody mistakes this for PlanFind's own
+# live data, and it should be revisited when next year's release comes
+# out.
+GUIDE_CATEGORY_NATIONAL_STAT = {
+    "farm_diversification": {
+        "number": "462",
+        "label": "new homes from agricultural building conversions in England",
+        "period": "2024–25",
+        "source": "MHCLG, Housing Supply: Net Additional Dwellings",
+    },
+    "commercial_conversion": {
+        "number": "6,202",
+        "label": "new homes from office and commercial building conversions in England",
+        "period": "2024–25",
+        "source": "MHCLG, Housing Supply: Net Additional Dwellings",
+    },
+    "large_sites": {
+        "number": "206,000",
+        "label": "housing units applied for via outline applications in England",
+        "period": "year to Dec 2025",
+        "source": "MHCLG Planning Applications Statistics",
+    },
+}
+
 
 @app.get("/guides", response_class=HTMLResponse)
 async def guides_index(request: Request):
@@ -1411,6 +1446,7 @@ async def guides_index(request: Request):
         "category_meta": GUIDE_CATEGORY_META,
         "category_counts": category_counts,
         "category_search_url": GUIDE_CATEGORY_SEARCH_URL,
+        "category_national_stat": GUIDE_CATEGORY_NATIONAL_STAT,
     })
 
 
