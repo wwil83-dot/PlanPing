@@ -5,6 +5,7 @@ Run with: uvicorn app.main:app --reload
 import os
 import csv
 import io
+import markdown as _markdown_lib
 from datetime import datetime, date
 from typing import Optional
 from jinja2 import Environment, FileSystemLoader
@@ -1324,6 +1325,85 @@ async def town_page(request: Request, slug: str, radius: float = TOWN_RADIUS_MIL
         "lng": town["lng"],
         "council": dict(council) if council else None,
         "coverage": coverage,
+    })
+
+
+# ---------------------------------------------------------------------
+# Guides — ADDED 2026-09-06. Real, researched content covering both the
+# general planning process (for the large majority of basic-search
+# users) and PlanFind's own differentiated niches (farm diversification,
+# commercial conversion, large sites). Body content is stored as
+# Markdown in the database and rendered to HTML at request time via
+# Python's `markdown` library — friendlier for writing/editing future
+# guides than raw HTML, without needing a full CMS.
+# ---------------------------------------------------------------------
+
+GUIDE_CATEGORY_META = {
+    "getting_started": {
+        "title": "Getting Started",
+        "description": "The basics of applying for planning permission and how the process works.",
+    },
+    "farm_diversification": {
+        "title": "Farm Diversification",
+        "description": "Converting agricultural buildings under permitted development.",
+    },
+    "commercial_conversion": {
+        "title": "Commercial Conversion",
+        "description": "Converting commercial buildings to residential use.",
+    },
+    "large_sites": {
+        "title": "Large Sites",
+        "description": "Major applications, large developments, and how they differ.",
+    },
+}
+
+
+@app.get("/guides", response_class=HTMLResponse)
+async def guides_index(request: Request):
+    async with get_db() as db:
+        rows = await db.fetch("""
+            SELECT slug, category, title, summary, reading_minutes
+            FROM guides
+            ORDER BY category, title
+        """)
+
+    guides_by_category: dict[str, list[dict]] = {}
+    for r in rows:
+        guides_by_category.setdefault(r["category"], []).append(dict(r))
+
+    return render("guides.html", {
+        "request": request,
+        "guides_by_category": guides_by_category,
+        "category_meta": GUIDE_CATEGORY_META,
+    })
+
+
+@app.get("/guides/{slug}", response_class=HTMLResponse)
+async def guide_detail(request: Request, slug: str):
+    async with get_db() as db:
+        guide = await db.fetchrow("SELECT * FROM guides WHERE slug = $1", slug)
+        if not guide:
+            raise HTTPException(404, "Guide not found")
+
+        # Real, simple "related guides" — same category, excluding this
+        # one — so each guide page has a natural next step rather than
+        # a dead end.
+        related = await db.fetch("""
+            SELECT slug, title, summary
+            FROM guides
+            WHERE category = $1 AND slug != $2
+            ORDER BY title
+            LIMIT 3
+        """, guide["category"], slug)
+
+    body_html = _markdown_lib.markdown(guide["body_markdown"])
+
+    return render("guide.html", {
+        "request": request,
+        "guide": dict(guide),
+        "body_html": body_html,
+        "category_meta": GUIDE_CATEGORY_META.get(guide["category"], {}),
+        "related": [dict(r) for r in related],
     })
 
 
