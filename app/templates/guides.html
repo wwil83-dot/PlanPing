@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Planning Guides — PlanFind{% endblock %}
+{% block content %}
+<main class="main">
+  <div style="margin-bottom:2rem">
+    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Planning Guides</h1>
+    <p style="color:var(--muted);max-width:640px">Clear, practical guides to how the UK planning system actually works — from a first-time application to farm diversification and large-site developments.</p>
+  </div>
+
+  {% for cat_key, meta in category_meta.items() %}
+  {% if cat_key in guides_by_category %}
+  <div style="margin-bottom:2.5rem">
+    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">{{ meta.title }}</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">{{ meta.description }}</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.75rem">
+      {% for g in guides_by_category[cat_key] %}
+      <a href="/guides/{{ g.slug }}" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:1.1rem 1.25rem;text-decoration:none;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.04);display:flex;flex-direction:column">
+        <div style="font-size:.95rem;font-weight:600;color:var(--blue-dark);margin-bottom:.4rem">{{ g.title }}</div>
+        <div style="font-size:.82rem;color:var(--muted);line-height:1.55;flex:1">{{ g.summary }}</div>
+        {% if g.reading_minutes %}
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.75rem">{{ g.reading_minutes }} min read</div>
+        {% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</main>
+{% endblock %}

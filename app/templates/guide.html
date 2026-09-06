@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ guide.title }} — PlanFind Guides{% endblock %}
+{% block head_extra %}
+<meta name="description" content="{{ guide.summary }}">
+<style>
+  .guide-body h2 { font-size: 1.2rem; font-weight: 700; color: var(--blue-dark); margin: 1.75rem 0 .6rem; }
+  .guide-body h2:first-child { margin-top: 0; }
+  .guide-body p { font-size: .92rem; color: var(--text); line-height: 1.75; margin-bottom: 1rem; }
+  .guide-body ul { margin: 0 0 1rem 1.25rem; }
+  .guide-body li { font-size: .92rem; color: var(--text); line-height: 1.7; margin-bottom: .4rem; }
+  .guide-body strong { color: var(--blue-dark); }
+</style>
+{% endblock %}
+{% block content %}
+<main class="main" style="max-width:760px">
+  <div style="margin-bottom:.75rem;font-size:.8rem">
+    <a href="/guides" style="color:var(--muted)">Guides</a>
+    <span style="color:var(--muted)"> / </span>
+    <span style="color:var(--muted)">{{ category_meta.title }}</span>
+  </div>
+
+  <h1 style="font-size:1.7rem;font-weight:700;color:var(--blue-dark);margin-bottom:.5rem;line-height:1.25">{{ guide.title }}</h1>
+  <p style="font-size:.85rem;color:var(--muted);margin-bottom:1.75rem">
+    {% if guide.reading_minutes %}{{ guide.reading_minutes }} min read{% endif %}
+  </p>
+
+  <div class="guide-body">
+    {{ body_html | safe }}
+  </div>
+
+  {% if related %}
+  <div style="margin-top:2.5rem;padding-top:1.75rem;border-top:1px solid var(--border)">
+    <h3 style="font-size:1rem;font-weight:600;color:var(--blue-dark);margin-bottom:.9rem">More in {{ category_meta.title }}</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem">
+      {% for r in related %}
+      <a href="/guides/{{ r.slug }}" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:.85rem 1rem;text-decoration:none;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.04)">
+        <div style="font-size:.88rem;font-weight:600;color:var(--blue-dark);margin-bottom:.3rem">{{ r.title }}</div>
+        <div style="font-size:.78rem;color:var(--muted);line-height:1.5">{{ r.summary }}</div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="coverage-note" style="margin-top:2.5rem">
+    Ready to see what's actually happening near you?
+    <a href="/postcode-search">Search by postcode</a> or <a href="/towns">browse by town</a>.
+  </div>
+</main>
+{% endblock %}
