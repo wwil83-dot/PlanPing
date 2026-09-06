@@ -19,6 +19,8 @@
     <span style="color:var(--muted)">{{ category_meta.title }}</span>
   </div>
 
+  <span class="guide-category-pill cat-{{ guide.category }}">{{ category_meta.title }}</span>
+
   <h1 style="font-size:1.7rem;font-weight:700;color:var(--blue-dark);margin-bottom:.5rem;line-height:1.25">{{ guide.title }}</h1>
   <p style="font-size:.85rem;color:var(--muted);margin-bottom:1.75rem">
     {% if guide.reading_minutes %}{{ guide.reading_minutes }} min read{% endif %}
@@ -33,9 +35,9 @@
     <h3 style="font-size:1rem;font-weight:600;color:var(--blue-dark);margin-bottom:.9rem">More in {{ category_meta.title }}</h3>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem">
       {% for r in related %}
-      <a href="/guides/{{ r.slug }}" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:.85rem 1rem;text-decoration:none;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.04)">
-        <div style="font-size:.88rem;font-weight:600;color:var(--blue-dark);margin-bottom:.3rem">{{ r.title }}</div>
-        <div style="font-size:.78rem;color:var(--muted);line-height:1.5">{{ r.summary }}</div>
+      <a href="/guides/{{ r.slug }}" class="guide-card cat-{{ guide.category }}">
+        <div class="guide-card-title" style="font-size:.88rem">{{ r.title }}</div>
+        <div class="guide-card-summary" style="font-size:.78rem">{{ r.summary }}</div>
       </a>
       {% endfor %}
     </div>
