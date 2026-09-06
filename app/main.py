@@ -48,6 +48,19 @@ async def index(request: Request):
     })
 
 
+# ADDED (2026-09-06) — real, direct request: every other "Planning
+# Search" dropdown item (Today's Activity, Street History, Towns, Bulk
+# Search) leads to a focused, single-purpose page — Postcode was the
+# odd one out, dumping people back on the full marketing homepage
+# (hero image, stats, features, coverage map) every time. This gives it
+# the same clean, focused treatment as the others. The actual search
+# form still posts to the exact same /search route — no backend search
+# logic changes at all, just a lighter-weight entry point.
+@app.get("/postcode-search", response_class=HTMLResponse)
+async def postcode_search_page(request: Request):
+    return render("postcode_search.html", {"request": request})
+
+
 def _normalize_keyword(keyword: Optional[str]) -> Optional[str]:
     """Empty or whitespace-only input becomes None (no filter) — same
     lesson already learned once this session for status/app_type: a
