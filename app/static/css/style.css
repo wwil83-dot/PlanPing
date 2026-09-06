@@ -455,15 +455,15 @@ h1 em { font-style: italic; color: #7dd98a; }
    green for farm work, amber for commercial, blue-dark for large
    sites) rather than inventing anything new. */
 .guide-category-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
-  margin-bottom: .6rem;
+  margin-bottom: .7rem;
 }
+.guide-category-icon svg { width: 22px; height: 22px; }
 .guide-category-icon.cat-getting_started       { background: var(--blue-light);  color: var(--blue); }
 .guide-category-icon.cat-farm_diversification  { background: var(--green-light); color: var(--green); }
 .guide-category-icon.cat-commercial_conversion { background: var(--amber-bg);    color: var(--amber); }
