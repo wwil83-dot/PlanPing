@@ -12,20 +12,32 @@
   {% for cat_key, meta in category_meta.items() %}
   {% if cat_key in guides_by_category %}
   <div style="margin-bottom:2.5rem">
-    <div class="guide-category-icon cat-{{ cat_key }}">
-      {% if cat_key == 'getting_started' %}
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6a2 2 0 0 1 2 2v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a2 2 0 0 1 2-2Z"/><path d="M9 12l2 2 4-4"/></svg>
-      {% elif cat_key == 'farm_diversification' %}
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 4 13c0-4 3-8 8-13 5 5 8 9 8 13a7 7 0 0 1-7 7z"/><path d="M11 20v-8"/></svg>
-      {% elif cat_key == 'commercial_conversion' %}
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v18"/><path d="M6 12h12"/><path d="M6 8h12"/><path d="M6 16h12"/><path d="M10 22v-4h4v4"/></svg>
-      {% elif cat_key == 'large_sites' %}
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:.3rem">
+      <div>
+        <div class="guide-category-icon cat-{{ cat_key }}">
+          {% if cat_key == 'getting_started' %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6a2 2 0 0 1 2 2v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a2 2 0 0 1 2-2Z"/><path d="M9 12l2 2 4-4"/></svg>
+          {% elif cat_key == 'farm_diversification' %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 4 13c0-4 3-8 8-13 5 5 8 9 8 13a7 7 0 0 1-7 7z"/><path d="M11 20v-8"/></svg>
+          {% elif cat_key == 'commercial_conversion' %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v18"/><path d="M6 12h12"/><path d="M6 8h12"/><path d="M6 16h12"/><path d="M10 22v-4h4v4"/></svg>
+          {% elif cat_key == 'large_sites' %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+          {% endif %}
+        </div>
+        <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">{{ meta.title }}</h2>
+        <p style="font-size:.85rem;color:var(--muted)">{{ meta.description }}</p>
+      </div>
+
+      {% if cat_key in category_counts %}
+      <a href="{{ category_search_url[cat_key] }}" class="guide-stat-badge cat-{{ cat_key }}">
+        <span class="guide-stat-number">{{ "{:,}".format(category_counts[cat_key]) }}</span>
+        <span class="guide-stat-label">tracked now →</span>
+      </a>
       {% endif %}
     </div>
-    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">{{ meta.title }}</h2>
-    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">{{ meta.description }}</p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.75rem">
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.75rem;margin-top:1rem">
       {% for g in guides_by_category[cat_key] %}
       <a href="/guides/{{ g.slug }}" class="guide-card cat-{{ cat_key }}">
         <div class="guide-card-title">{{ g.title }}</div>
