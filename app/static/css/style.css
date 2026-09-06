@@ -446,6 +446,69 @@ h1 em { font-style: italic; color: #7dd98a; }
   .nav-dropdown:hover .nav-dropdown-menu:not(.open) { display: none; }
 }
 
+/* ── Guides ── */
+/* ADDED (2026-09-06) — real, direct request: the guides pages felt flat
+   (plain inline-styled cards, no hover feedback at all — inline styles
+   can't support :hover regardless) and lacked the colour the rest of
+   the site uses. Category colours reused directly from tokens already
+   established elsewhere (blue for the general/getting-started content,
+   green for farm work, amber for commercial, blue-dark for large
+   sites) rather than inventing anything new. */
+.guide-category-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  margin-bottom: .6rem;
+}
+.guide-category-icon.cat-getting_started       { background: var(--blue-light);  color: var(--blue); }
+.guide-category-icon.cat-farm_diversification  { background: var(--green-light); color: var(--green); }
+.guide-category-icon.cat-commercial_conversion { background: var(--amber-bg);    color: var(--amber); }
+.guide-category-icon.cat-large_sites           { background: var(--blue-light);  color: var(--blue-dark); }
+
+.guide-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  text-decoration: none;
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0,0,0,.04);
+  display: flex;
+  flex-direction: column;
+  transition: transform .15s, box-shadow .15s, border-left-color .15s;
+}
+.guide-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0,0,0,.1);
+}
+.guide-card.cat-getting_started:hover       { border-left-color: var(--blue); }
+.guide-card.cat-farm_diversification:hover  { border-left-color: var(--green); }
+.guide-card.cat-commercial_conversion:hover { border-left-color: var(--amber); }
+.guide-card.cat-large_sites:hover           { border-left-color: var(--blue-dark); }
+
+.guide-card-title { font-size: .95rem; font-weight: 600; color: var(--blue-dark); margin-bottom: .4rem; }
+.guide-card-summary { font-size: .82rem; color: var(--muted); line-height: 1.55; flex: 1; }
+.guide-card-meta { font-size: .72rem; color: var(--muted); margin-top: .75rem; }
+
+.guide-category-pill {
+  display: inline-block;
+  font-size: .75rem;
+  font-weight: 600;
+  padding: 3px 11px;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+}
+.guide-category-pill.cat-getting_started       { background: var(--blue-light);  color: var(--blue); }
+.guide-category-pill.cat-farm_diversification  { background: var(--green-light); color: var(--green); }
+.guide-category-pill.cat-commercial_conversion { background: var(--amber-bg);    color: var(--amber); }
+.guide-category-pill.cat-large_sites           { background: var(--blue-light);  color: var(--blue-dark); }
+
+
 /* ── About page ── */
 .about-card {
   background: #fff;
