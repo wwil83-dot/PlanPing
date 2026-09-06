@@ -12,20 +12,21 @@
 </style>
 {% endblock %}
 {% block content %}
-<main class="main" style="max-width:760px">
-  <div style="margin-bottom:.75rem;font-size:.8rem">
-    <a href="/guides" style="color:var(--muted)">Guides</a>
-    <span style="color:var(--muted)"> / </span>
-    <span style="color:var(--muted)">{{ category_meta.title }}</span>
+<header class="hero hero-compact">
+  <div class="hero-inner">
+    <div style="font-size:.8rem;margin-bottom:.75rem">
+      <a href="/guides" style="color:rgba(255,255,255,.75)">Guides</a>
+      <span style="color:rgba(255,255,255,.5)"> / </span>
+      <span style="color:rgba(255,255,255,.75)">{{ category_meta.title }}</span>
+    </div>
+    <h1 style="font-size:1.7rem;margin-bottom:.4rem">{{ guide.title }}</h1>
+    {% if guide.reading_minutes %}
+    <p class="hero-sub" style="margin-bottom:0;font-size:.85rem">{{ guide.reading_minutes }} min read</p>
+    {% endif %}
   </div>
+</header>
 
-  <span class="guide-category-pill cat-{{ guide.category }}">{{ category_meta.title }}</span>
-
-  <h1 style="font-size:1.7rem;font-weight:700;color:var(--blue-dark);margin-bottom:.5rem;line-height:1.25">{{ guide.title }}</h1>
-  <p style="font-size:.85rem;color:var(--muted);margin-bottom:1.75rem">
-    {% if guide.reading_minutes %}{{ guide.reading_minutes }} min read{% endif %}
-  </p>
-
+<main class="main" style="max-width:760px">
   <div class="guide-body">
     {{ body_html | safe }}
   </div>
