@@ -10,15 +10,22 @@
   {% for cat_key, meta in category_meta.items() %}
   {% if cat_key in guides_by_category %}
   <div style="margin-bottom:2.5rem">
+    <div class="guide-category-icon cat-{{ cat_key }}">
+      {% if cat_key == 'getting_started' %}📋
+      {% elif cat_key == 'farm_diversification' %}🌾
+      {% elif cat_key == 'commercial_conversion' %}🏢
+      {% elif cat_key == 'large_sites' %}🏗️
+      {% endif %}
+    </div>
     <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">{{ meta.title }}</h2>
     <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">{{ meta.description }}</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.75rem">
       {% for g in guides_by_category[cat_key] %}
-      <a href="/guides/{{ g.slug }}" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:1.1rem 1.25rem;text-decoration:none;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.04);display:flex;flex-direction:column">
-        <div style="font-size:.95rem;font-weight:600;color:var(--blue-dark);margin-bottom:.4rem">{{ g.title }}</div>
-        <div style="font-size:.82rem;color:var(--muted);line-height:1.55;flex:1">{{ g.summary }}</div>
+      <a href="/guides/{{ g.slug }}" class="guide-card cat-{{ cat_key }}">
+        <div class="guide-card-title">{{ g.title }}</div>
+        <div class="guide-card-summary">{{ g.summary }}</div>
         {% if g.reading_minutes %}
-        <div style="font-size:.72rem;color:var(--muted);margin-top:.75rem">{{ g.reading_minutes }} min read</div>
+        <div class="guide-card-meta">{{ g.reading_minutes }} min read</div>
         {% endif %}
       </a>
       {% endfor %}
