@@ -1357,6 +1357,27 @@ GUIDE_CATEGORY_META = {
     },
 }
 
+# ADDED (2026-09-06) — real, direct request: show a live count of
+# currently-tracked applications next to the 3 categories that
+# genuinely have one, linking straight through to the matching search
+# page. Deliberately explicit rather than assumed identical: the real
+# tag stored in planning_applications.tags is "large_site" (singular,
+# see TAG_META above), while this guide category is "large_sites"
+# (plural) — using the guide category key directly as the tag would
+# have silently returned zero for Large Sites specifically. No stat
+# for "getting_started" — it's general process content, not tied to
+# any single application tag.
+GUIDE_CATEGORY_TAG = {
+    "farm_diversification": "farm_diversification",
+    "commercial_conversion": "commercial_conversion",
+    "large_sites": "large_site",
+}
+GUIDE_CATEGORY_SEARCH_URL = {
+    "farm_diversification": "/farm-diversification",
+    "commercial_conversion": "/commercial-conversion",
+    "large_sites": "/large-sites",
+}
+
 
 @app.get("/guides", response_class=HTMLResponse)
 async def guides_index(request: Request):
@@ -1367,6 +1388,19 @@ async def guides_index(request: Request):
             ORDER BY category, title
         """)
 
+        # Real, live counts — one query per real tag, reusing the exact
+        # same tags @> ARRAY[...] pattern _fetch_tag_council_options and
+        # _fetch_tagged_applications already use elsewhere, so this
+        # count can never silently disagree with what the matching
+        # search page itself would show.
+        category_counts: dict[str, int] = {}
+        for cat_key, tag in GUIDE_CATEGORY_TAG.items():
+            count = await db.fetchval(
+                "SELECT COUNT(*) FROM planning_applications WHERE tags @> ARRAY[$1]::text[]",
+                tag,
+            )
+            category_counts[cat_key] = count
+
     guides_by_category: dict[str, list[dict]] = {}
     for r in rows:
         guides_by_category.setdefault(r["category"], []).append(dict(r))
@@ -1375,6 +1409,8 @@ async def guides_index(request: Request):
         "request": request,
         "guides_by_category": guides_by_category,
         "category_meta": GUIDE_CATEGORY_META,
+        "category_counts": category_counts,
+        "category_search_url": GUIDE_CATEGORY_SEARCH_URL,
     })
 
 
