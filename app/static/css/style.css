@@ -508,33 +508,39 @@ h1 em { font-style: italic; color: #7dd98a; }
 .guide-category-pill.cat-commercial_conversion { background: var(--amber-bg);    color: var(--amber); }
 .guide-category-pill.cat-large_sites           { background: var(--blue-light);  color: var(--blue-dark); }
 
-/* ADDED (2026-09-06) — real, live count of currently-tracked
-   applications next to each relevant category, linking through to the
-   matching search page. A real stat, not decorative — reuses the same
-   tags @> ARRAY[...] query the search pages themselves run, so this
-   can never silently disagree with what clicking through actually
-   shows. */
-.guide-stat-badge {
+/* ADDED (2026-09-06) — real, direct request: these need to be bold and
+   centre-stage, sitting in the same grid row as the guide cards (not a
+   small badge tucked in the header) — achieved simply by making the
+   panel just another grid item, so it naturally takes its place
+   alongside the cards via the same auto-fill grid. Pairs PlanFind's
+   own live count with a real national annual statistic for context —
+   two different numbers, so the two rows are visually distinguished by
+   size/weight rather than just colour. */
+.guide-stat-panel {
+  background: #fff;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  text-decoration: none;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  text-decoration: none;
-  padding: .6rem 1rem;
-  border-radius: 10px;
-  transition: transform .15s;
-  flex: 0 0 auto;
+  transition: transform .15s, box-shadow .15s;
+  box-shadow: 0 1px 4px rgba(0,0,0,.04);
 }
-.guide-stat-badge:hover { transform: translateY(-2px); }
-.guide-stat-badge.cat-getting_started       { background: var(--blue-light); }
-.guide-stat-badge.cat-farm_diversification  { background: var(--green-light); }
-.guide-stat-badge.cat-commercial_conversion { background: var(--amber-bg); }
-.guide-stat-badge.cat-large_sites           { background: var(--blue-light); }
-.guide-stat-number { font-size: 1.3rem; font-weight: 700; line-height: 1; }
-.guide-stat-badge.cat-getting_started .guide-stat-number,
-.guide-stat-badge.cat-large_sites .guide-stat-number       { color: var(--blue-dark); }
-.guide-stat-badge.cat-farm_diversification .guide-stat-number  { color: var(--green); }
-.guide-stat-badge.cat-commercial_conversion .guide-stat-number { color: var(--amber); }
-.guide-stat-label { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+.guide-stat-panel:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,.12); }
+.guide-stat-panel.cat-farm_diversification  { border-color: var(--green); background: var(--green-light); }
+.guide-stat-panel.cat-commercial_conversion { border-color: var(--amber); background: var(--amber-bg); }
+.guide-stat-panel.cat-large_sites           { border-color: var(--blue-dark); background: var(--blue-light); }
+
+.guide-stat-panel-row { display: flex; align-items: baseline; gap: .6rem; }
+.guide-stat-panel-number { font-size: 1.7rem; font-weight: 700; line-height: 1.1; white-space: nowrap; }
+.guide-stat-panel.cat-farm_diversification  .guide-stat-panel-number { color: var(--green); }
+.guide-stat-panel.cat-commercial_conversion .guide-stat-panel-number { color: var(--amber); }
+.guide-stat-panel.cat-large_sites           .guide-stat-panel-number { color: var(--blue-dark); }
+.guide-stat-panel-text { font-size: .8rem; color: var(--text); line-height: 1.4; }
+.guide-stat-panel-period { color: var(--muted); }
+.guide-stat-panel-divider { height: 1px; background: rgba(0,0,0,.08); margin: .75rem 0; }
+.guide-stat-panel-source { font-size: .68rem; color: var(--muted); margin-top: .75rem; font-style: italic; }
 
 
 /* ── About page ── */
