@@ -48,9 +48,83 @@ body {
 .nav-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; row-gap: .5rem; }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--blue-dark); font-weight: 700; font-size: 1.2rem; letter-spacing: -.3px; }
 .brand-logo { height: 38px; width: auto; display: block; }
-.nav-links { display: flex; flex-wrap: wrap; column-gap: 1.1rem; row-gap: .4rem; }
-.nav-links a { color: var(--muted); text-decoration: none; font-size: .9rem; font-weight: 500; white-space: nowrap; }
-.nav-links a:hover { color: var(--blue); }
+.nav-links { display: flex; flex-wrap: wrap; align-items: center; column-gap: 1.1rem; row-gap: .4rem; }
+.nav-links > a { color: var(--muted); text-decoration: none; font-size: .9rem; font-weight: 500; white-space: nowrap; }
+.nav-links > a:hover { color: var(--blue); }
+
+/* ── Nav dropdowns ── */
+/* ADDED (2026-09-06) — real, direct request: group the growing flat
+   link list into dropdown categories. Trigger styled to look identical
+   to a plain nav link (same font-size/weight/color) despite being a
+   real <button>, so it doesn't visually stand out as a different kind
+   of control. A small caret distinguishes it from a plain link without
+   needing an icon font/image. */
+.nav-dropdown { position: relative; }
+.nav-dropdown-trigger {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--muted);
+  font-size: .9rem;
+  font-weight: 500;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.nav-dropdown-trigger:hover,
+.nav-dropdown.open .nav-dropdown-trigger { color: var(--blue); }
+.nav-dropdown-trigger::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform .15s;
+}
+.nav-dropdown.open .nav-dropdown-trigger::after { transform: rotate(-135deg) translateY(1px); }
+
+.nav-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 14px);
+  left: 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.1);
+  min-width: 200px;
+  padding: .4rem;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity .15s, transform .15s, visibility .15s;
+  z-index: 10;
+}
+.nav-dropdown-menu a {
+  color: var(--text);
+  text-decoration: none;
+  font-size: .88rem;
+  font-weight: 500;
+  padding: .55rem .7rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.nav-dropdown-menu a:hover { background: var(--page); color: var(--blue); }
+
+/* Real hover reveal for desktop/mouse users — click-to-toggle (see
+   base.html's script) covers touch devices and anyone who prefers to
+   click, and both work fine side by side. */
+.nav-dropdown:hover .nav-dropdown-menu,
+.nav-dropdown.open .nav-dropdown-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
 
 /* ── Hero ── */
 .hero {
@@ -363,6 +437,13 @@ h1 em { font-style: italic; color: #7dd98a; }
   .step-arrow { transform: rotate(90deg); }
   .step { max-width: 100%; }
   .nav-links { column-gap: .8rem; font-size: .85rem; }
+  /* ADDED (2026-09-06) — on narrow screens a hover-only dropdown is
+     unreachable anyway (no mouse), and an absolutely-positioned panel
+     can overflow off the edge of a small screen. Anchoring full-width
+     below the trigger keeps it fully on-screen and easy to tap. */
+  .nav-dropdown-menu { position: static; min-width: 100%; box-shadow: none; border: none; padding: 0 0 0 .75rem; margin-top: .3rem; opacity: 1; visibility: visible; transform: none; display: none; }
+  .nav-dropdown.open .nav-dropdown-menu { display: flex; }
+  .nav-dropdown:hover .nav-dropdown-menu:not(.open) { display: none; }
 }
 
 /* ── About page ── */
