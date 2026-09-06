@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Search by Postcode — PlanFind{% endblock %}
+{% block content %}
+<main class="main">
+  <div style="margin-bottom:1.75rem">
+    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Search by Postcode</h1>
+    <p style="color:var(--muted)">Find planning applications near any UK postcode — extensions, new builds, HMOs, phone masts and more.</p>
+  </div>
+
+  <div style="background:linear-gradient(135deg, var(--blue-dark) 0%, var(--blue-mid) 60%, #1a7a5e 100%);border-radius:16px;padding:2rem 1.75rem;margin-bottom:1.5rem">
+    <form class="search-form" action="/search" method="get">
+      <input type="text" name="postcode" class="search-input"
+        placeholder="Enter your postcode, e.g. WN1 2RD"
+        autocomplete="postal-code" required autofocus>
+      <select name="days" class="form-input" style="max-width:160px;flex:0 0 auto" aria-label="How far back to search">
+        <option value="14">Last 14 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 3 months</option>
+        <option value="180">Last 6 months</option>
+        <option value="365">Last 12 months</option>
+      </select>
+      <button type="submit" class="btn-search">Search</button>
+    </form>
+    <div class="hero-trust" style="margin-top:1rem">
+      <span>✓ Free</span>
+      <span>✓ No account needed</span>
+      <span>✓ England, Scotland, Wales &amp; NI</span>
+    </div>
+  </div>
+
+  <div class="coverage-note">
+    Not sure of the exact postcode? Try <a href="/towns">searching by town</a> instead, or use
+    <a href="/bulk-search">Bulk Search</a> to check several postcodes at once.
+  </div>
+</main>
+{% endblock %}
