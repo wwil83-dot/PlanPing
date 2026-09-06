@@ -508,6 +508,34 @@ h1 em { font-style: italic; color: #7dd98a; }
 .guide-category-pill.cat-commercial_conversion { background: var(--amber-bg);    color: var(--amber); }
 .guide-category-pill.cat-large_sites           { background: var(--blue-light);  color: var(--blue-dark); }
 
+/* ADDED (2026-09-06) — real, live count of currently-tracked
+   applications next to each relevant category, linking through to the
+   matching search page. A real stat, not decorative — reuses the same
+   tags @> ARRAY[...] query the search pages themselves run, so this
+   can never silently disagree with what clicking through actually
+   shows. */
+.guide-stat-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-decoration: none;
+  padding: .6rem 1rem;
+  border-radius: 10px;
+  transition: transform .15s;
+  flex: 0 0 auto;
+}
+.guide-stat-badge:hover { transform: translateY(-2px); }
+.guide-stat-badge.cat-getting_started       { background: var(--blue-light); }
+.guide-stat-badge.cat-farm_diversification  { background: var(--green-light); }
+.guide-stat-badge.cat-commercial_conversion { background: var(--amber-bg); }
+.guide-stat-badge.cat-large_sites           { background: var(--blue-light); }
+.guide-stat-number { font-size: 1.3rem; font-weight: 700; line-height: 1; }
+.guide-stat-badge.cat-getting_started .guide-stat-number,
+.guide-stat-badge.cat-large_sites .guide-stat-number       { color: var(--blue-dark); }
+.guide-stat-badge.cat-farm_diversification .guide-stat-number  { color: var(--green); }
+.guide-stat-badge.cat-commercial_conversion .guide-stat-number { color: var(--amber); }
+.guide-stat-label { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+
 
 /* ── About page ── */
 .about-card {
