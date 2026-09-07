@@ -1499,9 +1499,11 @@ PROFESSIONAL_TRADE_LABELS = {
 
 
 @app.get("/find-a-professional", response_class=HTMLResponse)
-async def find_a_professional(request: Request, trade: Optional[str] = None, town: Optional[str] = None):
+async def find_a_professional(request: Request, trade: Optional[str] = None, town: Optional[str] = None,
+                                keyword: Optional[str] = None):
     trade = trade or None
     town = town or None
+    keyword = _normalize_keyword(keyword)
 
     async with get_db() as db:
         professionals = await db.fetch("""
@@ -1512,8 +1514,9 @@ async def find_a_professional(request: Request, trade: Optional[str] = None, tow
             JOIN towns t ON t.id = p.town_id
             WHERE ($1::text IS NULL OR p.trade_category = $1)
             AND ($2::text IS NULL OR t.slug = $2)
+            AND ($3::text IS NULL OR p.company_name ILIKE '%' || $3 || '%')
             ORDER BY t.name, p.trade_category, p.company_name
-        """, trade, town)
+        """, trade, town, keyword)
 
         # Real town options — only towns that genuinely have at least
         # one professional, same pattern already used for tag pages'
@@ -1551,6 +1554,7 @@ async def find_a_professional(request: Request, trade: Optional[str] = None, tow
         "map_markers": map_markers,
         "trade": trade,
         "town": town,
+        "keyword": keyword or "",
         "trade_options": PROFESSIONAL_TRADE_LABELS,
         "town_options": [dict(r) for r in town_options],
         "last_synced": last_synced,
