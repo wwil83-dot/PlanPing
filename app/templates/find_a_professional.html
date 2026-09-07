@@ -46,12 +46,14 @@
       {% endfor %}
     </select>
 
-    <select name="town" class="form-input" style="max-width:200px" onchange="this.form.submit()">
-      <option value="">Any town</option>
+    <input type="text" name="town" class="form-input" style="max-width:200px"
+      placeholder="Type a town..." list="town-list"
+      value="{{ town or '' }}">
+    <datalist id="town-list">
       {% for t in town_options %}
-      <option value="{{ t.slug }}" {{ 'selected' if town == t.slug }}>{{ t.name }}</option>
+      <option value="{{ t.name }}">
       {% endfor %}
-    </select>
+    </datalist>
 
     <button type="submit" class="btn btn-sm">Apply</button>
 
