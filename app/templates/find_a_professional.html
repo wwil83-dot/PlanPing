@@ -15,6 +15,36 @@
     border-color: var(--green) !important;
     transition: background .3s, border-color .3s;
   }
+
+  /* ADDED (2026-09-06) — real, direct request: keep the autocomplete
+     functionality, but not as a native <datalist> — with hundreds of
+     towns, that rendered as an uncontrollable full-page browser popup
+     that visually overlapped the nav bar. This is a small, fully
+     CSS-controlled dropdown instead — capped height with its own
+     scrollbar, anchored directly below the input, never larger than
+     it needs to be. */
+  .town-autocomplete {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 220px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 20px rgba(0,0,0,.12);
+    z-index: 20;
+  }
+  .town-autocomplete.open { display: block; }
+  .town-autocomplete-item {
+    padding: 8px 12px;
+    font-size: .85rem;
+    cursor: pointer;
+  }
+  .town-autocomplete-item:hover,
+  .town-autocomplete-item.active { background: var(--page); color: var(--blue); }
 </style>
 {% endblock %}
 {% block content %}
@@ -46,14 +76,12 @@
       {% endfor %}
     </select>
 
-    <input type="text" name="town" class="form-input" style="max-width:200px"
-      placeholder="Type a town..." list="town-list"
-      value="{{ town or '' }}">
-    <datalist id="town-list">
-      {% for t in town_options %}
-      <option value="{{ t.name }}"></option>
-      {% endfor %}
-    </datalist>
+    <div style="position:relative">
+      <input type="text" name="town" id="town-input" class="form-input" style="max-width:200px"
+        placeholder="Type a town..." autocomplete="off"
+        value="{{ town or '' }}">
+      <div id="town-suggestions" class="town-autocomplete"></div>
+    </div>
 
     <button type="submit" class="btn btn-sm">Apply</button>
 
@@ -98,6 +126,83 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+  // ADDED (2026-09-06) — real, direct request: keep town autocomplete
+  // as a real feature, but not as a native <datalist> (see the CSS
+  // comment above for why). Deliberately OUTSIDE the {% if total > 0 %}
+  // block below — the filter form (and this input) is always visible
+  // regardless of result count, so this needs to run every time, not
+  // just when there happen to be results.
+  (function () {
+    var allTowns = {{ town_names | tojson }};
+    var input = document.getElementById('town-input');
+    var box = document.getElementById('town-suggestions');
+    if (!input || !box) return;
+
+    var activeIndex = -1;
+
+    function render(matches) {
+      box.innerHTML = '';
+      activeIndex = -1;
+      if (matches.length === 0) {
+        box.classList.remove('open');
+        return;
+      }
+      matches.slice(0, 8).forEach(function (name) {
+        var item = document.createElement('div');
+        item.className = 'town-autocomplete-item';
+        item.textContent = name;
+        item.addEventListener('mousedown', function (e) {
+          e.preventDefault();  // fires before input's blur, so the click registers
+          input.value = name;
+          box.classList.remove('open');
+        });
+        box.appendChild(item);
+      });
+      box.classList.add('open');
+    }
+
+    input.addEventListener('input', function () {
+      var q = input.value.trim().toLowerCase();
+      if (q.length < 2) {
+        box.classList.remove('open');
+        return;
+      }
+      var matches = allTowns.filter(function (name) {
+        return name.toLowerCase().indexOf(q) !== -1;
+      });
+      render(matches);
+    });
+
+    input.addEventListener('keydown', function (e) {
+      var items = box.querySelectorAll('.town-autocomplete-item');
+      if (!items.length) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeIndex = Math.min(activeIndex + 1, items.length - 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIndex = Math.max(activeIndex - 1, 0);
+      } else if (e.key === 'Enter' && activeIndex >= 0) {
+        e.preventDefault();
+        input.value = items[activeIndex].textContent;
+        box.classList.remove('open');
+        return;
+      } else {
+        return;
+      }
+
+      items.forEach(function (el, i) { el.classList.toggle('active', i === activeIndex); });
+    });
+
+    input.addEventListener('blur', function () {
+      // Small delay so a click on a suggestion (mousedown, above)
+      // still registers before the list disappears.
+      setTimeout(function () { box.classList.remove('open'); }, 100);
+    });
+  })();
+</script>
 {% if total > 0 %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
