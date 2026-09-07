@@ -508,39 +508,53 @@ h1 em { font-style: italic; color: #7dd98a; }
 .guide-category-pill.cat-commercial_conversion { background: var(--amber-bg);    color: var(--amber); }
 .guide-category-pill.cat-large_sites           { background: var(--blue-light);  color: var(--blue-dark); }
 
-/* ADDED (2026-09-06) — real, direct request: these need to be bold and
-   centre-stage, sitting in the same grid row as the guide cards (not a
-   small badge tucked in the header) — achieved simply by making the
-   panel just another grid item, so it naturally takes its place
-   alongside the cards via the same auto-fill grid. Pairs PlanFind's
-   own live count with a real national annual statistic for context —
-   two different numbers, so the two rows are visually distinguished by
-   size/weight rather than just colour. */
+/* CHANGED (2026-09-06) — real, direct feedback: the panel was stuck
+   at one grid-column's width regardless of empty space next to it
+   (CSS grid items don't auto-expand to fill unused space just because
+   it's there), leaving an awkward gap. grid-column is now set inline
+   per-category (see guides.html) to span from right after the last
+   guide card to the end of the row, so it genuinely fills the
+   remaining width. Numbers now use Fraunces — the same serif display
+   font already used for the big homepage headline — at a much larger
+   size, and the two stats sit side by side now that there's real
+   width to use, rather than stacked with empty space beside them. */
 .guide-stat-panel {
   background: #fff;
   border: 2px solid var(--border);
   border-radius: 10px;
-  padding: 1.1rem 1.25rem;
+  padding: 1.5rem 1.75rem;
   text-decoration: none;
   display: flex;
   flex-direction: column;
   transition: transform .15s, box-shadow .15s;
   box-shadow: 0 1px 4px rgba(0,0,0,.04);
 }
-.guide-stat-panel:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,.12); }
+.guide-stat-panel:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(0,0,0,.14); }
 .guide-stat-panel.cat-farm_diversification  { border-color: var(--green); background: var(--green-light); }
 .guide-stat-panel.cat-commercial_conversion { border-color: var(--amber); background: var(--amber-bg); }
 .guide-stat-panel.cat-large_sites           { border-color: var(--blue-dark); background: var(--blue-light); }
 
-.guide-stat-panel-row { display: flex; align-items: baseline; gap: .6rem; }
-.guide-stat-panel-number { font-size: 1.7rem; font-weight: 700; line-height: 1.1; white-space: nowrap; }
+.guide-stat-panel-cols { display: flex; align-items: center; gap: 1.75rem; flex-wrap: wrap; }
+.guide-stat-panel-col { flex: 1; min-width: 200px; }
+.guide-stat-panel-number {
+  font-family: 'Fraunces', serif;
+  font-weight: 700;
+  font-size: 2.9rem;
+  line-height: 1;
+  margin-bottom: .3rem;
+}
 .guide-stat-panel.cat-farm_diversification  .guide-stat-panel-number { color: var(--green); }
 .guide-stat-panel.cat-commercial_conversion .guide-stat-panel-number { color: var(--amber); }
 .guide-stat-panel.cat-large_sites           .guide-stat-panel-number { color: var(--blue-dark); }
-.guide-stat-panel-text { font-size: .8rem; color: var(--text); line-height: 1.4; }
-.guide-stat-panel-period { color: var(--muted); }
-.guide-stat-panel-divider { height: 1px; background: rgba(0,0,0,.08); margin: .75rem 0; }
-.guide-stat-panel-source { font-size: .68rem; color: var(--muted); margin-top: .75rem; font-style: italic; }
+.guide-stat-panel-text { font-size: .88rem; color: var(--text); line-height: 1.45; font-weight: 500; }
+.guide-stat-panel-period { color: var(--muted); font-weight: 400; }
+.guide-stat-panel-vdivider { width: 1px; align-self: stretch; background: rgba(0,0,0,.1); }
+.guide-stat-panel-source { font-size: .7rem; color: var(--muted); margin-top: 1.1rem; font-style: italic; }
+
+@media (max-width: 640px) {
+  .guide-stat-panel-cols { flex-direction: column; align-items: flex-start; gap: 1rem; }
+  .guide-stat-panel-vdivider { display: none; }
+}
 
 
 /* ── About page ── */
