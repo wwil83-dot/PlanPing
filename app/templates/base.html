@@ -90,6 +90,12 @@
     </div>
   </nav>
   {% block content %}{% endblock %}
+  <!-- ADDED (2026-09-06) — real, direct request: some pages (results
+       lists, guides, this directory) can scroll a long way down,
+       making it slow to get back to the nav/filters. Added globally
+       here rather than per-page, since any long page benefits from
+       it, not just the one it was first noticed on. -->
+  <button id="back-to-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})" aria-label="Back to top">↑</button>
   <footer class="footer">
     <div class="footer-inner">
       <p>© 2026 PlanFind · Planning Application Search Made Easy · <a href="/about">About</a> · <a href="/privacy">Privacy</a> · <a href="/councils">Coverage</a> · <a href="/coverage-gaps">Coverage Gaps</a></p>
@@ -125,6 +131,17 @@
         finally { btn.disabled = false; }
       });
     });
+
+    // ADDED (2026-09-06) — shows the back-to-top button only once
+    // there's genuinely somewhere to scroll back TO, rather than
+    // cluttering short pages where it'd never be useful.
+    (function () {
+      var btn = document.getElementById('back-to-top');
+      if (!btn) return;
+      window.addEventListener('scroll', function () {
+        btn.classList.toggle('visible', window.scrollY > 400);
+      });
+    })();
 
     // ADDED (2026-09-06) — dropdown nav behaviour. Desktop gets a real
     // hover reveal via CSS alone (see style.css); this JS handles what
