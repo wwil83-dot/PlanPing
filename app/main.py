@@ -1500,7 +1500,7 @@ PROFESSIONAL_TRADE_LABELS = {
 
 @app.get("/find-a-professional", response_class=HTMLResponse)
 async def find_a_professional(request: Request, trade: Optional[str] = None, town: Optional[str] = None,
-                                keyword: Optional[str] = None):
+                                keyword: Optional[str] = None, page: int = 1):
     trade = trade or None
     # CHANGED (2026-09-06) — real, direct request: type a town name
     # directly rather than scroll through a dropdown. Matches by real
@@ -1508,20 +1508,50 @@ async def find_a_professional(request: Request, trade: Optional[str] = None, tow
     # instead of requiring an exact slug selected from a <select>.
     town = (town or "").strip() or None
     keyword = _normalize_keyword(keyword)
+    has_filter = bool(trade or town or keyword)
+
+    # URGENT REAL FIX (2026-09-07) — a real live run just took this
+    # from 22,089 to 158,592 professionals after fixing the town-
+    # matching bug, and the very next real visit to this page with NO
+    # filters applied returned a 503 — the route was trying to load
+    # and render all 158,592 rows in one unfiltered request, which
+    # very likely exhausted Render's request timeout or memory limit.
+    # Two real protections now: nothing is queried at all until at
+    # least one filter is set, and even a single broad filter (e.g.
+    # "Architects" alone, which could still span thousands of rows
+    # across many towns) is paginated rather than loaded unbounded.
+    PAGE_SIZE = 50
+    page = max(1, page)
+    offset = (page - 1) * PAGE_SIZE
+
+    professionals = []
+    total_count = 0
+
+    if has_filter:
+        async with get_db() as db:
+            total_count = await db.fetchval("""
+                SELECT COUNT(*)
+                FROM professionals p
+                JOIN towns t ON t.id = p.town_id
+                WHERE ($1::text IS NULL OR p.trade_category = $1)
+                AND ($2::text IS NULL OR t.name ILIKE '%' || $2 || '%')
+                AND ($3::text IS NULL OR p.company_name ILIKE '%' || $3 || '%')
+            """, trade, town, keyword)
+
+            professionals = await db.fetch("""
+                SELECT p.id, p.company_name, p.trade_category, p.postcode,
+                       p.address, p.lat, p.lng, p.incorporated_date,
+                       t.name AS town_name, t.slug AS town_slug, t.county
+                FROM professionals p
+                JOIN towns t ON t.id = p.town_id
+                WHERE ($1::text IS NULL OR p.trade_category = $1)
+                AND ($2::text IS NULL OR t.name ILIKE '%' || $2 || '%')
+                AND ($3::text IS NULL OR p.company_name ILIKE '%' || $3 || '%')
+                ORDER BY t.name, p.trade_category, p.company_name
+                LIMIT $4 OFFSET $5
+            """, trade, town, keyword, PAGE_SIZE, offset)
 
     async with get_db() as db:
-        professionals = await db.fetch("""
-            SELECT p.id, p.company_name, p.trade_category, p.postcode,
-                   p.address, p.lat, p.lng, p.incorporated_date,
-                   t.name AS town_name, t.slug AS town_slug, t.county
-            FROM professionals p
-            JOIN towns t ON t.id = p.town_id
-            WHERE ($1::text IS NULL OR p.trade_category = $1)
-            AND ($2::text IS NULL OR t.name ILIKE '%' || $2 || '%')
-            AND ($3::text IS NULL OR p.company_name ILIKE '%' || $3 || '%')
-            ORDER BY t.name, p.trade_category, p.company_name
-        """, trade, town, keyword)
-
         # Real town names, only ones that genuinely have at least one
         # professional — used by the custom autocomplete dropdown
         # (see find_a_professional.html). A plain <datalist> was tried
@@ -1566,6 +1596,10 @@ async def find_a_professional(request: Request, trade: Optional[str] = None, tow
         "trade_options": PROFESSIONAL_TRADE_LABELS,
         "town_names": [r["name"] for r in town_names],
         "last_synced": last_synced,
+        "has_filter": has_filter,
+        "page": page,
+        "total_count": total_count,
+        "total_pages": max(1, (total_count + PAGE_SIZE - 1) // PAGE_SIZE),
     })
 
 
