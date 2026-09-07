@@ -1502,7 +1502,11 @@ PROFESSIONAL_TRADE_LABELS = {
 async def find_a_professional(request: Request, trade: Optional[str] = None, town: Optional[str] = None,
                                 keyword: Optional[str] = None):
     trade = trade or None
-    town = town or None
+    # CHANGED (2026-09-06) — real, direct request: type a town name
+    # directly rather than scroll through a dropdown. Matches by real
+    # name text now (ILIKE), same approach /towns itself already uses,
+    # instead of requiring an exact slug selected from a <select>.
+    town = (town or "").strip() or None
     keyword = _normalize_keyword(keyword)
 
     async with get_db() as db:
@@ -1513,7 +1517,7 @@ async def find_a_professional(request: Request, trade: Optional[str] = None, tow
             FROM professionals p
             JOIN towns t ON t.id = p.town_id
             WHERE ($1::text IS NULL OR p.trade_category = $1)
-            AND ($2::text IS NULL OR t.slug = $2)
+            AND ($2::text IS NULL OR t.name ILIKE '%' || $2 || '%')
             AND ($3::text IS NULL OR p.company_name ILIKE '%' || $3 || '%')
             ORDER BY t.name, p.trade_category, p.company_name
         """, trade, town, keyword)
