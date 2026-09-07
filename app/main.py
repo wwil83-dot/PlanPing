@@ -1522,11 +1522,15 @@ async def find_a_professional(request: Request, trade: Optional[str] = None, tow
             ORDER BY t.name, p.trade_category, p.company_name
         """, trade, town, keyword)
 
-        # Real town options — only towns that genuinely have at least
-        # one professional, same pattern already used for tag pages'
-        # council filter dropdown.
-        town_options = await db.fetch("""
-            SELECT DISTINCT t.name, t.slug
+        # Real town names, only ones that genuinely have at least one
+        # professional — used by the custom autocomplete dropdown
+        # (see find_a_professional.html). A plain <datalist> was tried
+        # first, but with hundreds of towns it rendered as an
+        # uncontrollable native browser popup dominating the page —
+        # this list is small enough (a few KB) to embed directly and
+        # filter client-side in a dropdown we fully control ourselves.
+        town_names = await db.fetch("""
+            SELECT DISTINCT t.name
             FROM professionals p
             JOIN towns t ON t.id = p.town_id
             ORDER BY t.name
@@ -1560,7 +1564,7 @@ async def find_a_professional(request: Request, trade: Optional[str] = None, tow
         "town": town,
         "keyword": keyword or "",
         "trade_options": PROFESSIONAL_TRADE_LABELS,
-        "town_options": [dict(r) for r in town_options],
+        "town_names": [r["name"] for r in town_names],
         "last_synced": last_synced,
     })
 
