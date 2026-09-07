@@ -71,9 +71,9 @@
   {% else %}
 
   <div style="margin-bottom:1rem">
-    <button class="btn btn-sm" id="map-toggle-btn" onclick="toggleProfessionalsMap()">📋 Hide map</button>
+    <button class="btn btn-primary" style="font-size:1rem;padding:12px 22px" id="map-toggle-btn" onclick="toggleProfessionalsMap()">🗺️ Show map (all locations)</button>
   </div>
-  <div id="professionals-map" style="height:420px;border-radius:10px;border:1px solid var(--border);margin-bottom:1.25rem"></div>
+  <div id="professionals-map" style="display:none;height:420px;border-radius:10px;border:1px solid var(--border);margin-bottom:1.25rem"></div>
 
   <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">{{ total }} professional{{ 's' if total != 1 }} found</p>
 
@@ -111,7 +111,7 @@
 
     if (showing) {
       mapDiv.style.display = 'none';
-      btn.textContent = '🗺️ Show map';
+      btn.textContent = '🗺️ Show map (all locations)';
       return;
     }
 
@@ -174,11 +174,12 @@
     map.fitBounds(bounds, { padding: [30, 30] });
   }
 
-  // ADDED (2026-09-06) — real, direct request: map should be open by
-  // default, not require an extra click to reveal it. Reuses the same
-  // init function the toggle button itself calls, so there's only one
-  // code path to maintain, not a duplicated initialization block.
-  initProfessionalsMap();
+  // CHANGED (2026-09-06) — reverted back to click-to-load, per real
+  // feedback: rendering markers across the whole country is genuinely
+  // slow on first load. The button is now bigger/primary-styled
+  // instead, so it's clearly noticeable as something worth clicking
+  // when the person's actually ready to see it, rather than forcing
+  // that cost on every single visit.
 </script>
 {% endif %}
 {% endblock %}
