@@ -4,6 +4,18 @@
 {% if total > 0 %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 {% endif %}
+<style>
+  /* ADDED (2026-09-06) — real, direct request: clicking a map marker
+     should visually highlight the matching card, not just scroll to
+     it silently. Light green flash, matching the site's own existing
+     --green-light token, fading back to normal after a couple of
+     seconds. */
+  .app-card.map-highlighted {
+    background: var(--green-light) !important;
+    border-color: var(--green) !important;
+    transition: background .3s, border-color .3s;
+  }
+</style>
 {% endblock %}
 {% block content %}
 <header class="hero hero-compact">
@@ -15,13 +27,17 @@
 
 <main class="main">
   <div class="banner banner-amber">
-    ⚠ This is a <strong>sample</strong>, not an exhaustive directory — up to 20 businesses per trade in each area,
+    ⚠ <strong>Cross Section of Local Trades</strong> — not an exhaustive directory — up to 20 businesses per trade in each area,
     sourced from public Companies House records and refreshed monthly{% if last_synced %} (last updated {{ last_synced.strftime('%-d %B %Y') }}){% endif %}.
     Always do your own checks (insurance, qualifications, reviews) before hiring anyone.
   </div>
 
   <form action="/find-a-professional" method="get" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.25rem;padding:.85rem 1rem;background:#fff;border:1px solid var(--border);border-radius:8px">
     <label style="font-size:.8rem;color:var(--muted);font-weight:600">Filter:</label>
+
+    <input type="text" name="keyword" class="form-input" style="max-width:200px"
+      placeholder="Search by business name..."
+      value="{{ keyword }}">
 
     <select name="trade" class="form-input" style="max-width:220px" onchange="this.form.submit()">
       <option value="">Any trade</option>
@@ -37,7 +53,9 @@
       {% endfor %}
     </select>
 
-    {% if trade or town %}
+    <button type="submit" class="btn btn-sm">Apply</button>
+
+    {% if trade or town or keyword %}
     <a href="/find-a-professional" class="btn-link" style="font-size:.8rem">Clear filters</a>
     {% endif %}
   </form>
@@ -46,14 +64,14 @@
   <div class="empty-state">
     <div class="empty-icon">🔍</div>
     <h3>No professionals found</h3>
-    <p>Try a different trade or town, or clear the filters to see everyone.</p>
+    <p>Try a different search, trade, or town, or clear the filters to see everyone.</p>
   </div>
   {% else %}
 
   <div style="margin-bottom:1rem">
-    <button class="btn btn-sm" id="map-toggle-btn" onclick="toggleProfessionalsMap()">🗺️ Show map</button>
+    <button class="btn btn-sm" id="map-toggle-btn" onclick="toggleProfessionalsMap()">📋 Hide map</button>
   </div>
-  <div id="professionals-map" style="display:none;height:420px;border-radius:10px;border:1px solid var(--border);margin-bottom:1.25rem"></div>
+  <div id="professionals-map" style="height:420px;border-radius:10px;border:1px solid var(--border);margin-bottom:1.25rem"></div>
 
   <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">{{ total }} professional{{ 's' if total != 1 }} found</p>
 
@@ -82,6 +100,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
   var _professionalsMapInitialized = false;
+  var _lastHighlightedCard = null;
 
   function toggleProfessionalsMap() {
     var mapDiv = document.getElementById('professionals-map');
@@ -96,7 +115,10 @@
 
     mapDiv.style.display = 'block';
     btn.textContent = '📋 Hide map';
+    initProfessionalsMap();
+  }
 
+  function initProfessionalsMap() {
     if (_professionalsMapInitialized) return;
     _professionalsMapInitialized = true;
 
@@ -125,7 +147,23 @@
 
       marker.on('click', function () {
         var card = document.getElementById('pro-card-' + m.id);
-        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (!card) return;
+
+        // ADDED (2026-09-06) — real, direct request: highlight the
+        // matching card, not just scroll to it silently. Clears any
+        // previously-highlighted card first, so only one is ever
+        // highlighted at a time.
+        if (_lastHighlightedCard) {
+          _lastHighlightedCard.classList.remove('map-highlighted');
+        }
+        card.classList.add('map-highlighted');
+        _lastHighlightedCard = card;
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        setTimeout(function () {
+          card.classList.remove('map-highlighted');
+          if (_lastHighlightedCard === card) _lastHighlightedCard = null;
+        }, 2500);
       });
 
       bounds.push([m.lat, m.lng]);
@@ -133,6 +171,12 @@
 
     map.fitBounds(bounds, { padding: [30, 30] });
   }
+
+  // ADDED (2026-09-06) — real, direct request: map should be open by
+  // default, not require an extra click to reveal it. Reuses the same
+  // init function the toggle button itself calls, so there's only one
+  // code path to maintain, not a duplicated initialization block.
+  initProfessionalsMap();
 </script>
 {% endif %}
 {% endblock %}
