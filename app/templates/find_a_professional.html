@@ -90,7 +90,13 @@
     {% endif %}
   </form>
 
-  {% if total == 0 %}
+  {% if not has_filter %}
+  <div class="empty-state">
+    <div class="empty-icon">🔍</div>
+    <h3>Choose a trade or type a town to get started</h3>
+    <p>With {{ "{:,}".format(total_count) if total_count else "over 150,000" }} professionals listed nationwide, pick a trade or area above to see real results.</p>
+  </div>
+  {% elif total == 0 %}
   <div class="empty-state">
     <div class="empty-icon">🔍</div>
     <h3>No professionals found</h3>
@@ -99,11 +105,13 @@
   {% else %}
 
   <div style="margin-bottom:1rem">
-    <button class="btn btn-primary" style="font-size:1rem;padding:12px 22px" id="map-toggle-btn" onclick="toggleProfessionalsMap()">🗺️ Show map (all locations)</button>
+    <button class="btn btn-primary" style="font-size:1rem;padding:12px 22px" id="map-toggle-btn" onclick="toggleProfessionalsMap()">🗺️ Show map (this page)</button>
   </div>
   <div id="professionals-map" style="display:none;height:420px;border-radius:10px;border:1px solid var(--border);margin-bottom:1.25rem"></div>
 
-  <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">{{ total }} professional{{ 's' if total != 1 }} found</p>
+  <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">
+    Showing {{ ((page - 1) * 50) + 1 }}–{{ ((page - 1) * 50) + total }} of {{ "{:,}".format(total_count) }} professional{{ 's' if total_count != 1 }}
+  </p>
 
   <div class="app-list">
     {% for p in professionals %}
@@ -121,6 +129,19 @@
     </article>
     {% endfor %}
   </div>
+
+  {% if total_pages > 1 %}
+  <div style="display:flex;justify-content:center;align-items:center;gap:1rem;margin-top:1.5rem">
+    {% if page > 1 %}
+    <a href="?trade={{ trade or '' }}&town={{ town or '' }}&keyword={{ keyword or '' }}&page={{ page - 1 }}" class="btn btn-sm">← Previous</a>
+    {% endif %}
+    <span style="font-size:.85rem;color:var(--muted)">Page {{ page }} of {{ "{:,}".format(total_pages) }}</span>
+    {% if page < total_pages %}
+    <a href="?trade={{ trade or '' }}&town={{ town or '' }}&keyword={{ keyword or '' }}&page={{ page + 1 }}" class="btn btn-sm">Next →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% endif %}
 </main>
 {% endblock %}
