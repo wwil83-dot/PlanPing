@@ -89,7 +89,13 @@ body {
 
 .nav-dropdown-menu {
   position: absolute;
-  top: calc(100% + 14px);
+  /* REAL FIX — was "calc(100% + 14px)". That 14px gap was a genuine
+     dead zone: moving the cursor down from the trigger toward the
+     menu briefly hovers neither element, resetting the hover state
+     and closing the menu before the cursor arrives. A small negative
+     overlap instead guarantees the hoverable area is continuous from
+     trigger straight into menu with zero gap to cross. */
+  top: calc(100% - 2px);
   left: 0;
   background: #fff;
   border: 1px solid var(--border);
