@@ -1479,6 +1479,84 @@ async def guide_detail(request: Request, slug: str):
     })
 
 
+# ---------------------------------------------------------------------
+# Find a Professional — ADDED 2026-09-06. Sourced from Companies
+# House's free "Basic Company Data" bulk product (see
+# import_professionals.py), refreshed monthly. DELIBERATELY a sample,
+# not an exhaustive list — capped per town+trade combination. Every
+# public-facing page must say so explicitly, per real, direct request.
+# ---------------------------------------------------------------------
+PROFESSIONAL_TRADE_LABELS = {
+    "architect":        "Architects",
+    "general_builder":  "General Builders",
+    "electrician":      "Electricians",
+    "plumber_heating":  "Plumbers & Heating Engineers",
+    "roofer":           "Roofers",
+    "plasterer":        "Plasterers",
+    "joiner_carpenter": "Joiners & Carpenters",
+    "glazier":          "Glaziers",
+}
+
+
+@app.get("/find-a-professional", response_class=HTMLResponse)
+async def find_a_professional(request: Request, trade: Optional[str] = None, town: Optional[str] = None):
+    trade = trade or None
+    town = town or None
+
+    async with get_db() as db:
+        professionals = await db.fetch("""
+            SELECT p.id, p.company_name, p.trade_category, p.postcode,
+                   p.address, p.lat, p.lng, p.incorporated_date,
+                   t.name AS town_name, t.slug AS town_slug, t.county
+            FROM professionals p
+            JOIN towns t ON t.id = p.town_id
+            WHERE ($1::text IS NULL OR p.trade_category = $1)
+            AND ($2::text IS NULL OR t.slug = $2)
+            ORDER BY t.name, p.trade_category, p.company_name
+        """, trade, town)
+
+        # Real town options — only towns that genuinely have at least
+        # one professional, same pattern already used for tag pages'
+        # council filter dropdown.
+        town_options = await db.fetch("""
+            SELECT DISTINCT t.name, t.slug
+            FROM professionals p
+            JOIN towns t ON t.id = p.town_id
+            ORDER BY t.name
+        """)
+
+        last_synced = await db.fetchval("SELECT MAX(last_synced_at) FROM professionals")
+
+    professionals = [dict(r) for r in professionals]
+    for p in professionals:
+        p["trade_label"] = PROFESSIONAL_TRADE_LABELS.get(p["trade_category"], p["trade_category"])
+
+    map_markers = [
+        {
+            "id": p["id"],
+            "lat": p["lat"],
+            "lng": p["lng"],
+            "company_name": p["company_name"],
+            "trade_label": p["trade_label"],
+            "town_name": p["town_name"],
+        }
+        for p in professionals
+        if p.get("lat") is not None and p.get("lng") is not None
+    ]
+
+    return render("find_a_professional.html", {
+        "request": request,
+        "professionals": professionals,
+        "total": len(professionals),
+        "map_markers": map_markers,
+        "trade": trade,
+        "town": town,
+        "trade_options": PROFESSIONAL_TRADE_LABELS,
+        "town_options": [dict(r) for r in town_options],
+        "last_synced": last_synced,
+    })
+
+
 @app.post("/api/alert")
 async def create_alert(
     request: Request,
