@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Find a Professional — PlanFind{% endblock %}
+{% block head_extra %}
+{% if total > 0 %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+{% endif %}
+{% endblock %}
+{% block content %}
+<header class="hero hero-compact">
+  <div class="hero-inner">
+    <h1 style="font-size:1.9rem">Find a <em>Professional</em></h1>
+    <p class="hero-sub" style="margin-bottom:0">Architects and tradespeople to help with your project.</p>
+  </div>
+</header>
+
+<main class="main">
+  <div class="banner banner-amber">
+    ⚠ This is a <strong>sample</strong>, not an exhaustive directory — up to 20 businesses per trade in each area,
+    sourced from public Companies House records and refreshed monthly{% if last_synced %} (last updated {{ last_synced.strftime('%-d %B %Y') }}){% endif %}.
+    Always do your own checks (insurance, qualifications, reviews) before hiring anyone.
+  </div>
+
+  <form action="/find-a-professional" method="get" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.25rem;padding:.85rem 1rem;background:#fff;border:1px solid var(--border);border-radius:8px">
+    <label style="font-size:.8rem;color:var(--muted);font-weight:600">Filter:</label>
+
+    <select name="trade" class="form-input" style="max-width:220px" onchange="this.form.submit()">
+      <option value="">Any trade</option>
+      {% for key, label in trade_options.items() %}
+      <option value="{{ key }}" {{ 'selected' if trade == key }}>{{ label }}</option>
+      {% endfor %}
+    </select>
+
+    <select name="town" class="form-input" style="max-width:200px" onchange="this.form.submit()">
+      <option value="">Any town</option>
+      {% for t in town_options %}
+      <option value="{{ t.slug }}" {{ 'selected' if town == t.slug }}>{{ t.name }}</option>
+      {% endfor %}
+    </select>
+
+    {% if trade or town %}
+    <a href="/find-a-professional" class="btn-link" style="font-size:.8rem">Clear filters</a>
+    {% endif %}
+  </form>
+
+  {% if total == 0 %}
+  <div class="empty-state">
+    <div class="empty-icon">🔍</div>
+    <h3>No professionals found</h3>
+    <p>Try a different trade or town, or clear the filters to see everyone.</p>
+  </div>
+  {% else %}
+
+  <div style="margin-bottom:1rem">
+    <button class="btn btn-sm" id="map-toggle-btn" onclick="toggleProfessionalsMap()">🗺️ Show map</button>
+  </div>
+  <div id="professionals-map" style="display:none;height:420px;border-radius:10px;border:1px solid var(--border);margin-bottom:1.25rem"></div>
+
+  <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">{{ total }} professional{{ 's' if total != 1 }} found</p>
+
+  <div class="app-list">
+    {% for p in professionals %}
+    <article class="app-card" id="pro-card-{{ p.id }}">
+      <div class="app-card-top">
+        <div class="app-meta">
+          <span class="app-council">{{ p.town_name }}, {{ p.county }}</span>
+        </div>
+        <div class="app-badges">
+          <span class="badge badge-other">{{ p.trade_label }}</span>
+        </div>
+      </div>
+      <h3 class="app-address">{{ p.company_name }}</h3>
+      <p class="app-description">{{ p.address }}{{ ', ' + p.postcode if p.postcode }}</p>
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+</main>
+{% endblock %}
+
+{% block scripts %}
+{% if total > 0 %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  var _professionalsMapInitialized = false;
+
+  function toggleProfessionalsMap() {
+    var mapDiv = document.getElementById('professionals-map');
+    var btn = document.getElementById('map-toggle-btn');
+    var showing = mapDiv.style.display !== 'none';
+
+    if (showing) {
+      mapDiv.style.display = 'none';
+      btn.textContent = '🗺️ Show map';
+      return;
+    }
+
+    mapDiv.style.display = 'block';
+    btn.textContent = '📋 Hide map';
+
+    if (_professionalsMapInitialized) return;
+    _professionalsMapInitialized = true;
+
+    var markers = {{ map_markers | tojson }};
+    if (markers.length === 0) return;
+
+    var map = L.map('professionals-map');
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // Distinct purple marker for professionals — deliberately different
+    // from the red/orange planning-application markers used elsewhere
+    // on the site, so the two are never visually confused.
+    var bounds = [];
+    markers.forEach(function (m) {
+      var marker = L.circleMarker([m.lat, m.lng], {
+        radius: 7, color: '#7c3aed', fillColor: '#a78bfa', fillOpacity: 0.85, weight: 1.5
+      }).addTo(map);
+
+      var popupHtml = '<strong>' + m.company_name + '</strong><br>' +
+        m.trade_label + '<br>' + m.town_name;
+      marker.bindPopup(popupHtml);
+
+      marker.on('click', function () {
+        var card = document.getElementById('pro-card-' + m.id);
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+
+      bounds.push([m.lat, m.lng]);
+    });
+
+    map.fitBounds(bounds, { padding: [30, 30] });
+  }
+</script>
+{% endif %}
+{% endblock %}
