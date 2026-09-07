@@ -129,7 +129,8 @@
 <script>
   // ADDED (2026-09-06) — real, direct request: keep town autocomplete
   // as a real feature, but not as a native <datalist> (see the CSS
-  // comment above for why). Deliberately OUTSIDE the {% if total > 0 %}
+  // comment above for why). Deliberately placed outside the "total
+  // greater than 0" results-count check below —
   // block below — the filter form (and this input) is always visible
   // regardless of result count, so this needs to run every time, not
   // just when there happen to be results.
