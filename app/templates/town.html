@@ -172,7 +172,7 @@
   {% endif %}
 
   <div class="coverage-note" style="margin-top:2rem;margin-bottom:.75rem">
-    Need help with your own project? <a href="/find-a-professional?town={{ town.slug }}">See professionals near {{ town.name }} →</a>
+    Need help with your own project? <a href="/find-a-professional?town={{ town.name|urlencode }}">See professionals near {{ town.name }} →</a>
   </div>
 
   <div class="coverage-note" style="margin-top:2rem">
