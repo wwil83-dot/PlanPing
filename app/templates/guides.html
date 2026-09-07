@@ -39,15 +39,18 @@
 
       {% if cat_key in category_national_stat %}
       {% set nat = category_national_stat[cat_key] %}
-      <a href="{{ category_search_url[cat_key] }}" class="guide-stat-panel cat-{{ cat_key }}">
-        <div class="guide-stat-panel-row">
-          <div class="guide-stat-panel-number">{{ nat.number }}</div>
-          <div class="guide-stat-panel-text">{{ nat.label }} <span class="guide-stat-panel-period">({{ nat.period }})</span></div>
-        </div>
-        <div class="guide-stat-panel-divider"></div>
-        <div class="guide-stat-panel-row">
-          <div class="guide-stat-panel-number">{{ "{:,}".format(category_counts[cat_key]) }}</div>
-          <div class="guide-stat-panel-text">tracked live on PlanFind right now →</div>
+      <a href="{{ category_search_url[cat_key] }}" class="guide-stat-panel cat-{{ cat_key }}"
+         style="grid-column: {{ guides_by_category[cat_key]|length + 1 }} / -1">
+        <div class="guide-stat-panel-cols">
+          <div class="guide-stat-panel-col">
+            <div class="guide-stat-panel-number">{{ nat.number }}</div>
+            <div class="guide-stat-panel-text">{{ nat.label }} <span class="guide-stat-panel-period">({{ nat.period }})</span></div>
+          </div>
+          <div class="guide-stat-panel-vdivider"></div>
+          <div class="guide-stat-panel-col">
+            <div class="guide-stat-panel-number">{{ "{:,}".format(category_counts[cat_key]) }}</div>
+            <div class="guide-stat-panel-text">tracked live on PlanFind right now →</div>
+          </div>
         </div>
         <div class="guide-stat-panel-source">Source: {{ nat.source }}</div>
       </a>
