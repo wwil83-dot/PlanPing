@@ -27,7 +27,7 @@
 
 <main class="main">
   <div class="banner banner-amber">
-    ⚠ <strong>Cross Section of Local Trades</strong> — not an exhaustive directory — up to 20 businesses per trade in each area,
+    ⚠ <strong>Cross Section of Local Trades</strong> — Not an exhaustive directory — Up to 20 businesses per trade in each area,
     sourced from public Companies House records and refreshed monthly{% if last_synced %} (last updated {{ last_synced.strftime('%-d %B %Y') }}){% endif %}.
     Always do your own checks (insurance, qualifications, reviews) before hiring anyone.
   </div>
@@ -51,7 +51,7 @@
       value="{{ town or '' }}">
     <datalist id="town-list">
       {% for t in town_options %}
-      <option value="{{ t.name }}">
+      <option value="{{ t.name }}"></option>
       {% endfor %}
     </datalist>
 
