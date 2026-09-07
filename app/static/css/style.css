@@ -452,7 +452,34 @@ h1 em { font-style: italic; color: #7dd98a; }
   .nav-dropdown:hover .nav-dropdown-menu:not(.open) { display: none; }
 }
 
-/* ── Guides ── */
+/* ── Back to top ── */
+/* ADDED (2026-09-06) — real, direct request: some pages scroll a long
+   way (results lists, guides, the professionals directory), making
+   the nav/filters slow to get back to. Hidden by default, only shown
+   once there's genuinely somewhere to scroll back to. */
+#back-to-top {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,.2);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: opacity .2s, transform .2s, visibility .2s, background .15s;
+  z-index: 150;
+}
+#back-to-top:hover { background: var(--blue-dark); }
+#back-to-top.visible { opacity: 1; visibility: visible; transform: translateY(0); }
+
+
 /* ADDED (2026-09-06) — real, direct request: the guides pages felt flat
    (plain inline-styled cards, no hover feedback at all — inline styles
    can't support :hover regardless) and lacked the colour the rest of
@@ -460,6 +487,7 @@ h1 em { font-style: italic; color: #7dd98a; }
    established elsewhere (blue for the general/getting-started content,
    green for farm work, amber for commercial, blue-dark for large
    sites) rather than inventing anything new. */
+/* ── Guides ── */
 .guide-category-icon {
   width: 44px;
   height: 44px;
