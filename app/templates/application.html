@@ -64,7 +64,7 @@
       Within 0.3 miles — as far back as our records go for this area.
     </p>
     {% for n in neighbours %}
-    <a href="/application/{{ n.id }}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;margin-bottom:.6rem;text-decoration:none;color:var(--text)">
+    <a href="/application/{{ n.id }}" class="neighbour-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;flex-wrap:wrap">
         <div style="flex:1;min-width:200px">
           <div style="font-size:.85rem;font-weight:500">{{ n.address }}</div>
