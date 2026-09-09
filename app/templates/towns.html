@@ -31,7 +31,7 @@
 
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem;margin-bottom:2rem">
     {% for t in towns %}
-    <a href="/towns/{{ t.slug }}" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:.8rem 1rem;text-decoration:none;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.04)">
+    <a href="/towns/{{ t.slug }}" class="town-card">
       <div style="font-size:.9rem;font-weight:600">{{ t.name }}</div>
       <div style="font-size:.75rem;color:var(--muted);margin-top:2px">{{ t.county }}</div>
     </a>
