@@ -338,12 +338,23 @@ h1 em { font-style: italic; color: #7dd98a; }
   padding: 1.1rem 1.25rem;
   border-left: 4px solid var(--border);
   box-shadow: 0 2px 6px rgba(0,0,0,.04);
-  transition: box-shadow .15s;
+  transition: box-shadow .15s, transform .15s;
 }
-.app-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+.app-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,.1); }
 .app-card.status-approved { border-left-color: var(--green); }
 .app-card.status-refused  { border-left-color: var(--red); }
 .app-card.status-pending  { border-left-color: var(--blue); }
+
+/* ADDED (2026-09-07) — real, direct request: extend the "clicking a
+   map marker highlights the matching card" behaviour, first built
+   just for the professionals directory, to every page with a map
+   (results, town pages). Moved here from that page's own styles so
+   it's shared globally instead of duplicated per-page. */
+.app-card.map-highlighted {
+  background: var(--green-light) !important;
+  border-color: var(--green) !important;
+  transition: background .3s, border-color .3s;
+}
 
 .app-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: .75rem; margin-bottom: .5rem; flex-wrap: wrap; }
 .app-meta { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; }
@@ -377,6 +388,10 @@ h1 em { font-style: italic; color: #7dd98a; }
 .btn:hover { background: var(--page); border-color: #b0bec9; }
 .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
 .btn-primary:hover { background: var(--blue-dark); }
+/* ADDED (2026-09-07) — real, direct request: make the Details button
+   stand out a little from the plain neutral buttons around it. */
+.btn-details { background: var(--green-mid); color: #fff; border-color: var(--green-mid); }
+.btn-details:hover { background: var(--green); }
 .btn-sm { padding: 5px 11px; font-size: .78rem; }
 .btn-full { width: 100%; justify-content: center; padding: 11px; }
 
@@ -487,6 +502,27 @@ h1 em { font-style: italic; color: #7dd98a; }
    established elsewhere (blue for the general/getting-started content,
    green for farm work, amber for commercial, blue-dark for large
    sites) rather than inventing anything new. */
+/* ADDED (2026-09-07) — real, direct request: town cards on the /towns
+   index used inline styles, which can't support :hover at all —
+   moved to a real class so they can share the same lively hover-lift
+   feel already established for guide cards. */
+.town-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: .8rem 1rem;
+  text-decoration: none;
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0,0,0,.04);
+  display: block;
+  transition: transform .15s, box-shadow .15s;
+}
+.town-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0,0,0,.1);
+}
+
+
 /* ── Guides ── */
 .guide-category-icon {
   width: 44px;
