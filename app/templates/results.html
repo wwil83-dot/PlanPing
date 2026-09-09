@@ -198,7 +198,7 @@
             View on council portal →
           </a>
           {% endif %}
-          <a href="/application/{{ app.id }}" class="btn btn-sm">Details</a>
+          <a href="/application/{{ app.id }}" class="btn btn-sm btn-details">Details</a>
         </div>
       </div>
     </article>
@@ -280,6 +280,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
   var _resultsMapInitialized = false;
+  var _lastHighlightedCard = null;
 
   function toggleResultsMap() {
     var mapDiv = document.getElementById('results-map');
@@ -347,7 +348,22 @@
       // Clicking a pin also highlights the matching card in the list below
       marker.on('click', function () {
         var card = document.getElementById('app-card-' + app.id);
-        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (!card) return;
+
+        // ADDED (2026-09-07) — real, direct request: extend the same
+        // highlight-on-click behaviour first built for the
+        // professionals directory to this page too.
+        if (_lastHighlightedCard) {
+          _lastHighlightedCard.classList.remove('map-highlighted');
+        }
+        card.classList.add('map-highlighted');
+        _lastHighlightedCard = card;
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        setTimeout(function () {
+          card.classList.remove('map-highlighted');
+          if (_lastHighlightedCard === card) _lastHighlightedCard = null;
+        }, 2500);
       });
 
       bounds.push([app.lat, app.lng]);
