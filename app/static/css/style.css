@@ -545,6 +545,31 @@ h1 em { font-style: italic; color: #7dd98a; }
 }
 
 
+/* ADDED (2026-09-07) — real, direct request: filter bars (postcode
+   results, tag pages, town pages, professionals directory) used a
+   plain white background — changed to the same blue-to-green gradient
+   already used in hero bands, for visual consistency. White form
+   inputs/buttons sit on top the same way the homepage's own search
+   bar already does. Text colour set to a light default here since the
+   dark background needs it, but .form-input elements keep their own
+   explicit dark text colour (already set), so what's actually typed
+   into the fields stays readable regardless. */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, var(--blue-dark) 0%, var(--blue-mid) 60%, #1a7a5e 100%);
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.15);
+  color: rgba(255,255,255,.9);
+}
+.filter-bar label { color: rgba(255,255,255,.85) !important; }
+.filter-bar .btn-link { color: #fff !important; text-decoration-color: rgba(255,255,255,.5); }
+
+
 /* ── Guides ── */
 .guide-category-icon {
   width: 44px;
