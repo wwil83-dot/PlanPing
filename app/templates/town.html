@@ -63,7 +63,7 @@
      postcode/radius/days triple, since those all come from THIS route
      already. #}
   {% if total > 0 or status or app_type or keyword or date_from or date_to %}
-  <form action="/towns/{{ town.slug }}" method="get" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.25rem;padding:.85rem 1rem;background:#fff;border:1px solid var(--border);border-radius:8px">
+  <form action="/towns/{{ town.slug }}" method="get" class="filter-bar">
     <input type="hidden" name="radius" value="{{ radius }}">
     <input type="hidden" name="days" value="{{ days }}">
 
