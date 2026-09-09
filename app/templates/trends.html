@@ -27,7 +27,7 @@
   <!-- Niche Category Leaders -->
   <div style="margin-bottom:2.5rem">
     <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Niche Category Leaders</h2>
-    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Top 5 councils in each of PlanFind's tracked categories.</p>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Top 5 councils by rate — the % of their own applications matching each category, last 90 days. Ranked by rate, not raw volume, so this isn't just whichever council has the biggest database.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem">
       {% for tag_key, label in niche_labels.items() %}
       <div class="guide-stat-panel cat-{{ 'large_sites' if tag_key == 'large_site' else tag_key }}" style="display:block">
@@ -35,7 +35,10 @@
         {% for c in niche_leaders[tag_key] %}
         <a href="/council/{{ c.slug }}" style="display:flex;justify-content:space-between;padding:.35rem 0;text-decoration:none;color:inherit;font-size:.85rem;border-bottom:1px solid rgba(0,0,0,.06)">
           <span>{{ loop.index }}. {{ c.name }}</span>
-          <strong>{{ c.tag_count }}</strong>
+          <span style="text-align:right">
+            <strong>{{ c.tag_pct }}%</strong>
+            <span style="color:var(--muted);font-size:.75rem"> ({{ c.tag_count }}/{{ c.total_count }})</span>
+          </span>
         </a>
         {% else %}
         <p style="font-size:.8rem;color:var(--muted)">No data yet for this category.</p>
