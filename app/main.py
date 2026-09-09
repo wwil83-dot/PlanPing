@@ -794,7 +794,13 @@ async def activity(request: Request):
 @app.get("/trends", response_class=HTMLResponse)
 async def trends(request: Request):
     async with get_db() as db:
-        rows = await db.fetch("""
+        # Kept as-is, per real, direct request — repositioned smaller
+        # in the template rather than removed. Only reliably populated
+        # for a handful of councils right now (most scrapers don't yet
+        # re-check applications for a decision after first finding
+        # them), a real, separate, parked issue — not a bug in this
+        # query itself.
+        approval_rows = await db.fetch("""
             SELECT
                 c.name,
                 c.slug,
@@ -813,12 +819,105 @@ async def trends(request: Request):
             ORDER BY approval_rate_pct DESC
         """)
 
-    councils_ranked = [dict(r) for r in rows]
+        # ADDED (2026-09-07) — real, direct request: reliable today
+        # since it only depends on submitted_date, which every scraper
+        # captures at first discovery — unlike approval rate, this
+        # doesn't depend on ever re-checking an application later.
+        most_active_rows = await db.fetch("""
+            SELECT c.name, c.slug, COUNT(*) AS recent_count
+            FROM planning_applications pa
+            JOIN councils c ON c.id = pa.council_id
+            WHERE pa.submitted_date >= CURRENT_DATE - INTERVAL '30 days'
+            GROUP BY c.id, c.name, c.slug
+            ORDER BY recent_count DESC
+            LIMIT 10
+        """)
+
+        # ADDED (2026-09-07) — reuses the exact same tags @> ARRAY[...]
+        # pattern already trusted throughout Guides and the tag search
+        # pages, one leaderboard per real niche category.
+        niche_leaders = {}
+        for tag_key in ("farm_diversification", "commercial_conversion", "large_site"):
+            rows = await db.fetch("""
+                SELECT c.name, c.slug, COUNT(*) AS tag_count
+                FROM planning_applications pa
+                JOIN councils c ON c.id = pa.council_id
+                WHERE pa.tags @> ARRAY[$1]::text[]
+                GROUP BY c.id, c.name, c.slug
+                ORDER BY tag_count DESC
+                LIMIT 5
+            """, tag_key)
+            niche_leaders[tag_key] = [dict(r) for r in rows]
+
+        # ADDED (2026-09-07) — application_type badges are computed in
+        # Python (_type_badge()), not stored as a column, so this
+        # can't be aggregated directly in SQL without duplicating that
+        # logic — instead, fetch the raw type/reference for a bounded
+        # recent window and reuse the exact same real function every
+        # other page already relies on, so this can never silently
+        # disagree with how types are badged elsewhere on the site.
+        type_rows = await db.fetch("""
+            SELECT application_type, reference
+            FROM planning_applications
+            WHERE submitted_date >= CURRENT_DATE - INTERVAL '90 days'
+        """)
+        type_counts: dict[str, int] = {}
+        for r in type_rows:
+            badge = _type_badge(r["application_type"] or "", r["reference"] or "")
+            type_counts[badge] = type_counts.get(badge, 0) + 1
+        total_typed = sum(type_counts.values())
+        type_mix = sorted(
+            [
+                {"badge": k, "count": v, "pct": round(100 * v / total_typed, 1) if total_typed else 0}
+                for k, v in type_counts.items()
+            ],
+            key=lambda x: x["count"], reverse=True,
+        )
+
+        # ADDED (2026-09-07) — period-over-period comparison (last 30
+        # days vs the 30 days before that). Requires a minimum prior-
+        # period count (5) before ranking by % change, so a council
+        # going from 1 to 3 applications doesn't show a misleading
+        # "+200%" from a genuinely tiny, noisy sample.
+        growth_rows = await db.fetch("""
+            SELECT
+                c.name, c.slug,
+                COUNT(*) FILTER (WHERE pa.submitted_date >= CURRENT_DATE - INTERVAL '30 days') AS recent_count,
+                COUNT(*) FILTER (WHERE pa.submitted_date >= CURRENT_DATE - INTERVAL '60 days'
+                                  AND pa.submitted_date < CURRENT_DATE - INTERVAL '30 days') AS prior_count
+            FROM planning_applications pa
+            JOIN councils c ON c.id = pa.council_id
+            WHERE pa.submitted_date >= CURRENT_DATE - INTERVAL '60 days'
+            GROUP BY c.id, c.name, c.slug
+            HAVING COUNT(*) FILTER (WHERE pa.submitted_date >= CURRENT_DATE - INTERVAL '60 days'
+                                      AND pa.submitted_date < CURRENT_DATE - INTERVAL '30 days') >= 5
+        """)
+        growth_list = []
+        for r in growth_rows:
+            pct_change = round(100 * (r["recent_count"] - r["prior_count"]) / r["prior_count"], 1)
+            growth_list.append({
+                "name": r["name"], "slug": r["slug"],
+                "recent_count": r["recent_count"], "prior_count": r["prior_count"],
+                "pct_change": pct_change,
+            })
+        growth_list.sort(key=lambda x: x["pct_change"], reverse=True)
+        growth_top = growth_list[:10]
+
+    councils_ranked = [dict(r) for r in approval_rows]
 
     return render("trends.html", {
         "request": request,
         "councils_ranked": councils_ranked,
         "total_councils": len(councils_ranked),
+        "most_active": [dict(r) for r in most_active_rows],
+        "niche_leaders": niche_leaders,
+        "niche_labels": {
+            "farm_diversification": "Farm Diversification",
+            "commercial_conversion": "Commercial Conversion",
+            "large_site": "Large Sites",
+        },
+        "type_mix": type_mix,
+        "growth_top": growth_top,
     })
 
 
