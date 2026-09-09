@@ -1,46 +1,116 @@
 {% extends "base.html" %}
-{% block title %}Council Approval Trends — PlanFind{% endblock %}
+{% block title %}Planning Trends — PlanFind{% endblock %}
 {% block content %}
+<header class="hero hero-compact">
+  <div class="hero-inner">
+    <h1 style="font-size:1.9rem">Planning <em>Trends</em></h1>
+    <p class="hero-sub" style="margin-bottom:0">What's actually happening in planning across England, Scotland, Wales and NI right now.</p>
+  </div>
+</header>
+
 <main class="main">
-  <div style="margin-bottom:1.75rem">
-    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Council Approval Trends</h1>
-    <p style="color:var(--muted)">Approval rate by council, based on every decided application we've recorded. Councils with fewer than 10 decided applications aren't shown, to avoid a misleading rate from a tiny sample.</p>
+
+  <!-- Most Active Councils -->
+  <div style="margin-bottom:2.5rem">
+    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Most Active Councils</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Councils with the most new applications submitted in the last 30 days.</p>
+    <div class="app-list">
+      {% for c in most_active %}
+      <a href="/council/{{ c.slug }}" class="guide-card cat-getting_started" style="flex-direction:row;align-items:center;justify-content:space-between">
+        <span class="guide-card-title" style="margin-bottom:0">{{ loop.index }}. {{ c.name }}</span>
+        <span style="font-family:'Fraunces',serif;font-weight:700;font-size:1.3rem;color:var(--blue)">{{ c.recent_count }}</span>
+      </a>
+      {% endfor %}
+    </div>
   </div>
 
-  {% if councils_ranked %}
-  <div style="background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden">
-    <table style="width:100%;border-collapse:collapse">
-      <thead>
-        <tr style="background:var(--blue-light);text-align:left">
-          <th style="padding:.85rem 1rem;font-size:.8rem;color:var(--muted);font-weight:600">Council</th>
-          <th style="padding:.85rem 1rem;font-size:.8rem;color:var(--muted);font-weight:600;text-align:right">Approval rate</th>
-          <th style="padding:.85rem 1rem;font-size:.8rem;color:var(--muted);font-weight:600;text-align:right">Approved</th>
-          <th style="padding:.85rem 1rem;font-size:.8rem;color:var(--muted);font-weight:600;text-align:right">Refused</th>
-          <th style="padding:.85rem 1rem;font-size:.8rem;color:var(--muted);font-weight:600;text-align:right">Decided</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in councils_ranked %}
-        <tr style="border-top:1px solid var(--border)">
-          <td style="padding:.85rem 1rem">
-            <a href="/council/{{ c.slug }}" style="color:var(--text);text-decoration:none;font-weight:500">{{ c.name }}</a>
-          </td>
-          <td style="padding:.85rem 1rem;text-align:right">
-            <span style="font-weight:700;color:{{ 'var(--green)' if c.approval_rate_pct >= 70 else '#c0392b' if c.approval_rate_pct < 40 else 'var(--text)' }}">{{ c.approval_rate_pct }}%</span>
-          </td>
-          <td style="padding:.85rem 1rem;text-align:right;color:var(--muted)">{{ c.approved_count }}</td>
-          <td style="padding:.85rem 1rem;text-align:right;color:var(--muted)">{{ c.refused_count }}</td>
-          <td style="padding:.85rem 1rem;text-align:right;color:var(--muted)">{{ c.decided_count }}</td>
-        </tr>
+  <!-- Niche Category Leaders -->
+  <div style="margin-bottom:2.5rem">
+    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Niche Category Leaders</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Top 5 councils in each of PlanFind's tracked categories.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem">
+      {% for tag_key, label in niche_labels.items() %}
+      <div class="guide-stat-panel cat-{{ 'large_sites' if tag_key == 'large_site' else tag_key }}" style="display:block">
+        <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.6rem">{{ label }}</h3>
+        {% for c in niche_leaders[tag_key] %}
+        <a href="/council/{{ c.slug }}" style="display:flex;justify-content:space-between;padding:.35rem 0;text-decoration:none;color:inherit;font-size:.85rem;border-bottom:1px solid rgba(0,0,0,.06)">
+          <span>{{ loop.index }}. {{ c.name }}</span>
+          <strong>{{ c.tag_count }}</strong>
+        </a>
+        {% else %}
+        <p style="font-size:.8rem;color:var(--muted)">No data yet for this category.</p>
         {% endfor %}
-      </tbody>
-    </table>
+      </div>
+      {% endfor %}
+    </div>
   </div>
-  <p style="font-size:.78rem;color:var(--muted);margin-top:1rem">Showing {{ total_councils }} council{{ 's' if total_councils != 1 }} with at least 10 decided applications on record.</p>
-  {% else %}
-  <div style="background:var(--blue-light);border:1px solid #c3d9f0;border-radius:12px;padding:1.5rem">
-    <p style="font-size:.9rem;color:var(--muted)">Not enough decided applications recorded yet to show meaningful trends — check back as more data comes in.</p>
+
+  <!-- Application Type Mix -->
+  <div style="margin-bottom:2.5rem">
+    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">What's Being Submitted</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Application type breakdown nationally, last 90 days.</p>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:1.25rem">
+      {% for t in type_mix %}
+      <div style="margin-bottom:.75rem">
+        <div style="display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:.25rem">
+          <span class="badge badge-{{ t.badge }}">{{ t.badge | title }}</span>
+          <span style="color:var(--muted)">{{ t.count }} ({{ t.pct }}%)</span>
+        </div>
+        <div style="background:var(--page);border-radius:6px;height:8px;overflow:hidden">
+          <div style="background:var(--blue);height:100%;width:{{ t.pct }}%"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
   </div>
-  {% endif %}
+
+  <!-- Growth / Momentum -->
+  <div style="margin-bottom:2.5rem">
+    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Growth &amp; Momentum</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Councils with the biggest change in application volume — last 30 days vs the 30 days before that.</p>
+    <div class="app-list">
+      {% for c in growth_top %}
+      <a href="/council/{{ c.slug }}" class="guide-card cat-farm_diversification" style="flex-direction:row;align-items:center;justify-content:space-between">
+        <span class="guide-card-title" style="margin-bottom:0">{{ c.name }}</span>
+        <span style="text-align:right">
+          <span style="font-family:'Fraunces',serif;font-weight:700;font-size:1.3rem;color:{{ 'var(--green)' if c.pct_change >= 0 else 'var(--red)' }}">
+            {{ '+' if c.pct_change >= 0 }}{{ c.pct_change }}%
+          </span><br>
+          <span style="font-size:.72rem;color:var(--muted)">{{ c.prior_count }} → {{ c.recent_count }}</span>
+        </span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Approval Rate — kept, repositioned smaller -->
+  <div>
+    <h2 style="font-size:1.05rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Approval Rates</h2>
+    <p style="font-size:.8rem;color:var(--muted);margin-bottom:1rem">
+      Only reliably populated for a handful of councils right now — most scrapers don't yet re-check applications
+      for a decision after first finding them. Showing councils with at least 10 decided applications on record.
+    </p>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:8px;font-size:.85rem">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);text-align:left">
+            <th style="padding:.6rem .8rem">Council</th>
+            <th style="padding:.6rem .8rem">Approval Rate</th>
+            <th style="padding:.6rem .8rem">Decided</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in councils_ranked %}
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:.6rem .8rem"><a href="/council/{{ c.slug }}">{{ c.name }}</a></td>
+            <td style="padding:.6rem .8rem;font-weight:600">{{ c.approval_rate_pct }}%</td>
+            <td style="padding:.6rem .8rem;color:var(--muted)">{{ c.decided_count }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </main>
 {% endblock %}
