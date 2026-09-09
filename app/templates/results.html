@@ -88,7 +88,7 @@
      but the simple days-back control still works fine on its own for
      anyone who just clears these two fields. #}
   {% if total > 0 or status or app_type or keyword or date_from or date_to %}
-  <form action="/search" method="get" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.25rem;padding:.85rem 1rem;background:#fff;border:1px solid var(--border);border-radius:8px">
+  <form action="/search" method="get" class="filter-bar">
     <input type="hidden" name="postcode" value="{{ postcode }}">
     <input type="hidden" name="radius" value="{{ radius }}">
     <input type="hidden" name="days" value="{{ days }}">
