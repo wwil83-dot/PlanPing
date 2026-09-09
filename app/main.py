@@ -836,15 +836,41 @@ async def trends(request: Request):
         # ADDED (2026-09-07) — reuses the exact same tags @> ARRAY[...]
         # pattern already trusted throughout Guides and the tag search
         # pages, one leaderboard per real niche category.
+        # CHANGED (2026-09-07) — real, direct feedback: ranking by raw
+        # count was biased toward whichever council simply has the most
+        # total applications overall (Canterbury topped every single
+        # category, and its total application count — 205,000+ — dwarfs
+        # every other council, likely inflated by the same real data
+        # anomaly already flagged separately: a 37-year average pending
+        # age). Two real fixes together: rank by RATE (tagged
+        # applications as a % of that council's own recent total, not
+        # raw count) rather than absolute volume, and window to the
+        # last 90 days (matching the type-mix section below) rather
+        # than all-time — which also naturally reduces the impact of
+        # whatever old/stale data is behind Canterbury's inflated
+        # total, without needing to chase down that bug's exact root
+        # cause first. A minimum of 3 tagged applications is required
+        # before a council qualifies, so a council with one tagged
+        # application out of one total doesn't show a meaningless
+        # "100%" from a tiny, noisy sample.
         niche_leaders = {}
         for tag_key in ("farm_diversification", "commercial_conversion", "large_site"):
             rows = await db.fetch("""
-                SELECT c.name, c.slug, COUNT(*) AS tag_count
+                SELECT
+                    c.name, c.slug,
+                    COUNT(*) FILTER (WHERE pa.tags @> ARRAY[$1]::text[]) AS tag_count,
+                    COUNT(*) AS total_count,
+                    ROUND(
+                        100.0 * COUNT(*) FILTER (WHERE pa.tags @> ARRAY[$1]::text[])
+                        / NULLIF(COUNT(*), 0),
+                        1
+                    ) AS tag_pct
                 FROM planning_applications pa
                 JOIN councils c ON c.id = pa.council_id
-                WHERE pa.tags @> ARRAY[$1]::text[]
+                WHERE pa.submitted_date >= CURRENT_DATE - INTERVAL '90 days'
                 GROUP BY c.id, c.name, c.slug
-                ORDER BY tag_count DESC
+                HAVING COUNT(*) FILTER (WHERE pa.tags @> ARRAY[$1]::text[]) >= 3
+                ORDER BY tag_pct DESC
                 LIMIT 5
             """, tag_key)
             niche_leaders[tag_key] = [dict(r) for r in rows]
