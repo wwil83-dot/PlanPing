@@ -120,6 +120,9 @@
       </div>
       <h3 class="app-address">{{ p.company_name }}</h3>
       <p class="app-description">{{ p.address }}{{ ', ' + p.postcode if p.postcode }}</p>
+      {% if p.incorporated_date %}
+      <p class="app-date" style="margin-top:.4rem">Trading since {{ p.incorporated_date.year }}</p>
+      {% endif %}
     </article>
     {% endfor %}
   </div>
