@@ -523,6 +523,28 @@ h1 em { font-style: italic; color: #7dd98a; }
 }
 
 
+/* ADDED (2026-09-07) — real, direct request: the "Nearby applications"
+   cards on the application detail page used inline styles, which
+   can't support :hover at all — moved to a real class (styling
+   otherwise identical to the original inline version) so they get the
+   same lively hover-lift feel now established elsewhere on the site. */
+.neighbour-card {
+  display: block;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: .9rem 1rem;
+  margin-bottom: .6rem;
+  text-decoration: none;
+  color: var(--text);
+  transition: transform .15s, box-shadow .15s;
+}
+.neighbour-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0,0,0,.1);
+}
+
+
 /* ── Guides ── */
 .guide-category-icon {
   width: 44px;
