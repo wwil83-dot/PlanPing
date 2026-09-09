@@ -5,16 +5,10 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 {% endif %}
 <style>
-  /* ADDED (2026-09-06) — real, direct request: clicking a map marker
-     should visually highlight the matching card, not just scroll to
-     it silently. Light green flash, matching the site's own existing
-     --green-light token, fading back to normal after a couple of
-     seconds. */
-  .app-card.map-highlighted {
-    background: var(--green-light) !important;
-    border-color: var(--green) !important;
-    transition: background .3s, border-color .3s;
-  }
+  /* CHANGED (2026-09-07) — the map-highlighted rule moved to the
+     global stylesheet (style.css), since results.html and town.html
+     now share this same click-to-highlight behaviour too, not just
+     this page. */
 
   /* ADDED (2026-09-06) — real, direct request: keep the autocomplete
      functionality, but not as a native <datalist> — with hundreds of
