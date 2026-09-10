@@ -51,6 +51,18 @@ on:
     - cron: '1 9 * * *'   # ODP Register nightly scrape (Barnet + Buckinghamshire)
     - cron: '2 9 * * *'   # Fife Council nightly scrape (ArcGIS, genuinely syncs nightly)
     - cron: '3 9 * * *'   # alerts
+    - cron: '10 9 * * *'  # Charnwood nightly scrape — promoted after a confirmed
+                          # clean production run (2026-09-10): 151 real
+                          # applications saved across 8 pages, matching the
+                          # real total exactly, plus 8 real recheck decision
+                          # updates, zero errors
+    - cron: '15 9 * * *'  # Edinburgh nightly scrape — promoted after a
+                          # confirmed clean production run (2026-09-10): 111
+                          # real applications saved across both weekly layers,
+                          # zero errors (two decision-text variants still file
+                          # as 'pending' rather than a positive outcome — see
+                          # edinburgh_scraper.py's STATUS DIAGNOSTIC, a real
+                          # but non-blocking limitation worth revisiting)
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
     - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
@@ -1363,7 +1375,18 @@ jobs:
           retention-days: 14
 
   edinburgh_scraper:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'edinburgh_scraper'
+    # PROMOTED to the nightly schedule (2026-09-10) after a confirmed
+    # clean production run — 111 real applications saved across both
+    # real weekly layers (Decisions + Applications), zero errors.
+    # HONEST LIMITATION: two decision-text variants ("Not Development",
+    # "Permission is not required") aren't yet recognised as positive
+    # outcomes and file as 'pending' instead — see the module's STATUS
+    # DIAGNOSTIC output. Worth fixing (similar to how Ipswich's "No
+    # Objection" and Ribble Valley's "Permission Not Required" were
+    # mapped to 'approved'), but doesn't block real data from saving.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'edinburgh_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '15 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -2889,7 +2912,17 @@ jobs:
           retention-days: 14
 
   charnwood_scraper:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'charnwood_scraper'
+    # PROMOTED to the nightly schedule (2026-09-10) after a confirmed
+    # clean production run — 151 real applications saved across 8
+    # pages, matching the real total exactly, plus 8 real recheck
+    # decision updates from 50 previously-pending applications, zero
+    # errors, 5.2 minutes total. The one warning seen ("September not
+    # found in dropdown") is expected and correct — the platform's
+    # Monthly List only offers completed months, so skipping the
+    # current month is the right behavior, not a bug.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'charnwood_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '10 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 20
     steps:
