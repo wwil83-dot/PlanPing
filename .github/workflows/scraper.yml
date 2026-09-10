@@ -63,6 +63,19 @@ on:
                           # as 'pending' rather than a positive outcome — see
                           # edinburgh_scraper.py's STATUS DIAGNOSTIC, a real
                           # but non-blocking limitation worth revisiting)
+    - cron: '20 9 * * *'  # Telford and Wrekin nightly scrape — promoted
+                          # after a confirmed clean production run
+                          # (2026-09-10): 143 real applications saved
+                          # (58 Registered + 85 Determined across both
+                          # status tabs, real pagination confirmed exact),
+                          # matching the real "Planning Applications (143)"
+                          # total exactly, zero errors, 1.4 minutes total.
+                          # Real fix needed a 4-round diagnostic trail: the
+                          # aspxerrorpath redirect was ultimately a date
+                          # format issue (dash, not slash), and the
+                          # Determined tab's 85 applications were
+                          # completely invisible under the old code —
+                          # see telford_scraper.py's module docstring.
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
     - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
@@ -3262,7 +3275,19 @@ jobs:
         run: cd scrapers && python kirklees_scraper.py
 
   telford_scraper:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'telford_scraper'
+    # PROMOTED to the nightly schedule (2026-09-10) after a confirmed
+    # clean production run — 143 real applications saved (58
+    # Registered + 85 Determined across both real status tabs, real
+    # "Next"-click pagination confirmed exact), matching the real
+    # "Planning Applications (143)" total exactly, zero errors, 1.4
+    # minutes total. See this file's module docstring for the full
+    # 4-round diagnostic trail that found the real root cause (a date
+    # format issue) and the real data-completeness gap (the Determined
+    # tab's 85 applications were completely invisible under the
+    # original code).
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'telford_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '20 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
