@@ -43,34 +43,33 @@ def re_exact(text: str):
 
 async def pick_date_via_calendar(page, field_sel: str, target: date, label: str):
     """Opens the real jQuery UI calendar popup for field_sel by clicking
-    it, navigates to target's month/year via real clicks on the
-    standard .ui-datepicker-prev/-next arrows, then clicks the actual
-    day cell. Raises if the popup or expected controls aren't found —
-    deliberately not falling back to anything else, since the whole
-    point is confirming genuine calendar interaction works."""
+    it, then navigates to target's month/year. REAL FIX (round 2):
+    round 2's first attempt assumed a plain-text header
+    (".ui-datepicker-title" showing e.g. "September 2026") with
+    prev/next arrow navigation — but the real widget uses
+    changeMonth/changeYear dropdown SELECTS instead, confirmed directly
+    from the actual captured text (all 12 month names and years
+    1974-2030 concatenated together, the literal contents of two
+    <select> elements' <option>s, not a simple heading). Selecting the
+    target month/year directly via these dropdowns is both correct for
+    this widget's real configuration AND simpler than repeated
+    prev/next clicks regardless of how far away the target date is."""
     await page.click(field_sel)
     await page.wait_for_selector(DATEPICKER_POPUP, state="visible", timeout=10_000)
 
-    for _ in range(24):  # safety cap — should never need more than a
-                          # handful of clicks for a 30-day lookback
-        header_text = await page.locator(
-            f"{DATEPICKER_POPUP} .ui-datepicker-title"
-        ).inner_text()
-        print(f"    [{label}] Calendar currently showing: {header_text!r}")
+    month_select = page.locator(f"{DATEPICKER_POPUP} select.ui-datepicker-month")
+    year_select = page.locator(f"{DATEPICKER_POPUP} select.ui-datepicker-year")
 
-        current_month_year = header_text.strip()
-        target_month_year = target.strftime("%B %Y")
-        if current_month_year == target_month_year:
-            break
+    # jQuery UI's real month select values are zero-indexed (Jan=0).
+    await month_select.select_option(value=str(target.month - 1))
+    await year_select.select_option(value=str(target.year))
+    # Real evidence: selecting either dropdown fires the widget's own
+    # onChangeMonthYear handler, which re-renders the day grid — give
+    # it a moment to actually happen before looking for the day cell.
+    await asyncio.sleep(0.5)
 
-        if target < date.today():
-            await page.click(f"{DATEPICKER_POPUP} .ui-datepicker-prev")
-        else:
-            await page.click(f"{DATEPICKER_POPUP} .ui-datepicker-next")
-        await asyncio.sleep(0.3)
-    else:
-        raise RuntimeError(f"Could not navigate calendar to {target.strftime('%B %Y')} "
-                            f"after 24 attempts")
+    print(f"    [{label}] Selected month={target.month-1} (0-indexed), "
+          f"year={target.year} via dropdowns")
 
     day_str = str(target.day)
     day_link = page.locator(
