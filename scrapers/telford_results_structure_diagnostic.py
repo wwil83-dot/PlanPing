@@ -99,12 +99,46 @@ async def main():
         print("=" * 60)
         print("REAL MARKUP AROUND KEY LABELS")
         print("=" * 60)
-        print_context_around(html, "tabs", "Registered (58)")
-        print_context_around(html, "tabs", "Determined (85)")
-        print_context_around(html, "pagination", "Showing 1 to")
-        print_context_around(html, "pagination", ">Next<")
-        print_context_around(html, "pagination", "Items per page")
-        print_context_around(html, "table header", "Application")
+        print_context_around(html, "top tabs", "Planning Applications (")
+        # REAL FIX (round 5) — searching for the count-attached string
+        # ('Registered (58)') never matches raw HTML, confirmed by the
+        # "Planning Applications" tab's own real markup: the count sits
+        # inside its own <span>, with a tag boundary between "(" and
+        # the number. Only the flattened inner_text() concatenates them
+        # into one continuous string. Searching for the label alone
+        # (no count, no parenthesis) is the real fix.
+        print_context_around(html, "status tabs", "Registered")
+        print_context_around(html, "status tabs", "Determined")
+        print_context_around(html, "pagination", "PageSizeDropDownTop")
+
+        # Real test: does selecting page size 100 eliminate the need
+        # for "Next" clicking at all, on either the Registered (58) or
+        # Determined (85) tab — both fit under 100.
+        print("\n" + "=" * 60)
+        print("TESTING: select page size 100, check if pagination disappears")
+        print("=" * 60)
+        try:
+            size_select = page.locator(
+                "#ctl00_ContentPlaceHolder1_gvResults_ctl01_PageSizeDropDownTop"
+            )
+            async with page.expect_navigation(wait_until="domcontentloaded", timeout=30_000):
+                await size_select.select_option(value="100")
+            try:
+                await page.wait_for_load_state("networkidle", timeout=15_000)
+            except PlaywrightTimeout:
+                pass
+            html_after_resize = await page.content()
+            body_text_after = await page.locator("body").inner_text()
+            has_next_link = "PagerTopNext" in html_after_resize
+            print(f"Real body text after selecting page size 100 (first 800 chars): "
+                  f"{body_text_after[:800]!r}")
+            print(f"\nStill has a 'Next' pagination link present: {has_next_link}")
+            with open("/tmp/telford_results_page_size100.html", "w", encoding="utf-8") as f:
+                f.write(html_after_resize)
+            print(f"Full HTML after resize saved to "
+                  f"/tmp/telford_results_page_size100.html ({len(html_after_resize)} chars)")
+        except Exception as e:
+            print(f"⚠ Page size selection failed: {e}")
 
         await context.close()
         await browser.close()
