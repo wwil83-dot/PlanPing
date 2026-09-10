@@ -277,10 +277,22 @@ async def _maximise_page_size(page, tab_label: str = "") -> None:
         before_value = await size_select.input_value()
         _log(f"  [{tab_label}] Page size dropdown value BEFORE resize: {before_value!r}")
 
+        # REAL FIX (2026-09-10, round 2) — confirmed via direct
+        # evidence: Determined's dropdown already showed '100' before
+        # this function ever touched it (a session-sticky setting
+        # carried over from Registered's own earlier resize), so
+        # select_option(value="100") was a no-op with no real value
+        # change to trigger anything — the real "Showing" text
+        # confirmed the grid stayed at its own freshly-loaded default
+        # of 10 regardless of what the dropdown claimed. Forcing a
+        # genuine transition through "10" first, then "100", guarantees
+        # a real change fires either way — whether starting from a
+        # true default of 10 or a sticky-but-inactive 100.
+        await size_select.select_option(value="10")
         await size_select.select_option(value="100")
         after_select_value = await size_select.input_value()
-        _log(f"  [{tab_label}] Page size dropdown value AFTER select_option "
-             f"(before submit click): {after_select_value!r}")
+        _log(f"  [{tab_label}] Page size dropdown value AFTER forced "
+             f"10->100 transition (before submit click): {after_select_value!r}")
 
         submit_btn = page.locator(PAGE_SIZE_SUBMIT_SEL)
         submit_count = await submit_btn.count()
