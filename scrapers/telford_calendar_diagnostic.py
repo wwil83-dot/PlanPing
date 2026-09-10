@@ -85,6 +85,62 @@ async def main():
     print(f"Testing date range via real calendar clicks: "
           f"{start.strftime('%d/%m/%Y')} to {today.strftime('%d/%m/%Y')}\n")
 
+    # QUICK CONFIRMING TEST (round 3) — before committing to full
+    # pagination handling around calendar-click interaction, test the
+    # cheapest possible fix in isolation: does a plain page.fill() with
+    # DASH-formatted dates alone (no calendar clicking at all) succeed?
+    # Round 2 found the calendar widget's own value comes out as
+    # '11-08-2026' (dashes), not the '11/08/2026' (slashes) the
+    # original scraper sends — this tests whether the format alone was
+    # ever the real blocker, independent of any widget-state theory.
+    print("=" * 60)
+    print("QUICK TEST: plain page.fill() with DASH format, no calendar")
+    print("=" * 60)
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True,
+                                            args=["--no-sandbox", "--disable-dev-shm-usage"])
+        context = await browser.new_context(
+            user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/124.0.0.0 Safari/537.36"),
+            viewport={"width": 1280, "height": 900},
+            locale="en-GB",
+            ignore_https_errors=True,
+        )
+        page = await context.new_page()
+        try:
+            await page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=45_000)
+            dash_start = start.strftime("%d-%m-%Y")
+            dash_end = today.strftime("%d-%m-%Y")
+            await page.fill(DATE_FROM_SEL, dash_start, timeout=5_000)
+            await page.fill(DATE_TO_SEL, dash_end, timeout=5_000)
+            print(f"Filled (dash format): from={dash_start!r}, to={dash_end!r}")
+
+            submit = page.locator(SUBMIT_SEL)
+            async with page.expect_navigation(wait_until="domcontentloaded", timeout=45_000):
+                await submit.click()
+            try:
+                await page.wait_for_load_state("networkidle", timeout=15_000)
+            except PlaywrightTimeout:
+                pass
+
+            post_url = page.url
+            is_error = "aspxerrorpath" in post_url
+            print(f"Post-submit URL: {post_url}")
+            print(f"Hit error redirect: {is_error}")
+            if not is_error:
+                print("CONFIRMED: dash format alone (plain page.fill(), "
+                      "no calendar interaction) is sufficient.")
+        except Exception as e:
+            print(f"⚠ Quick test failed: {e}")
+        finally:
+            await context.close()
+            await browser.close()
+
+    print("\n" + "=" * 60)
+    print("FULL TEST: real calendar clicks (round 2 approach)")
+    print("=" * 60)
+
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True,
                                             args=["--no-sandbox", "--disable-dev-shm-usage"])
