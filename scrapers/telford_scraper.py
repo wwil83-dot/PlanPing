@@ -246,28 +246,69 @@ async def _supa_patch_council(council_id: int, data: dict):
         )
 
 
-async def _maximise_page_size(page) -> None:
+async def _maximise_page_size(page, tab_label: str = "") -> None:
     """Real, confirmed fix from round 4: the page-size dropdown doesn't
     auto-postback on its own — a separate submit button
     (SelectPageCountTop) needs an explicit click. Selecting 100 here
     comfortably covers every real count seen so far (58, 85, 0),
     avoiding "Next"-click pagination entirely. Best-effort — if this
     control isn't present (e.g. a tab with 0 results has nothing to
-    resize), that's not an error."""
+    resize), that's not an error.
+
+    DIAGNOSTIC ADDED (2026-09-10) — a real run showed Determined
+    returning only 10 (the default page size) with NO exception
+    logged, despite this same function working correctly for
+    Registered moments earlier in the same run. Logging the real
+    before/after dropdown value and the real "Showing X of Y" text
+    directly, rather than guessing at a third theory blind.
+    """
     try:
         size_select = page.locator(PAGE_SIZE_SELECT_SEL)
-        if await size_select.count() == 0:
+        count = await size_select.count()
+        if count == 0:
+            _log(f"  [{tab_label}] Page size dropdown not present on this tab "
+                 f"(likely 0 results) — nothing to resize")
             return
+        if count > 1:
+            _log(f"  [{tab_label}] ⚠ Page size dropdown matched {count} elements "
+                 f"(expected 1) — using .first")
+            size_select = size_select.first
+
+        before_value = await size_select.input_value()
+        _log(f"  [{tab_label}] Page size dropdown value BEFORE resize: {before_value!r}")
+
         await size_select.select_option(value="100")
+        after_select_value = await size_select.input_value()
+        _log(f"  [{tab_label}] Page size dropdown value AFTER select_option "
+             f"(before submit click): {after_select_value!r}")
+
         submit_btn = page.locator(PAGE_SIZE_SUBMIT_SEL)
+        submit_count = await submit_btn.count()
+        _log(f"  [{tab_label}] Submit button real count: {submit_count}")
+        if submit_count == 0:
+            _log(f"  [{tab_label}] ⚠ Submit button not found — cannot resize")
+            return
+
         async with page.expect_navigation(wait_until="domcontentloaded", timeout=30_000):
             await submit_btn.click()
         try:
             await page.wait_for_load_state("networkidle", timeout=15_000)
         except PlaywrightTimeout:
             pass
+
+        # Real confirmation — what does the "Showing X to Y of Z items"
+        # text actually say after the resize attempt completed?
+        try:
+            body_text = await page.locator("body").inner_text()
+            showing_match = re.search(r"Showing \d+ to \d+ of \d+ items", body_text)
+            if showing_match:
+                _log(f"  [{tab_label}] Real 'Showing' text after resize: "
+                     f"{showing_match.group(0)!r}")
+        except Exception:
+            pass
     except Exception as e:
-        _log(f"⚠ Could not maximise page size (continuing with default): {e}")
+        _log(f"⚠ Could not maximise page size for {tab_label} (continuing with "
+             f"default): {e}")
 
 
 async def scrape() -> list[dict]:
@@ -336,7 +377,7 @@ async def scrape() -> list[dict]:
                     _log(f"⚠ Could not switch to {tab_label} tab: {e}")
                     continue
 
-            await _maximise_page_size(page)
+            await _maximise_page_size(page, tab_label)
 
             html = await page.content()
             tab_apps = _parse_results_table(html, tab_label)
