@@ -148,26 +148,23 @@ RECHECK_LIMIT = int(os.environ.get("RECHECK_LIMIT", "100"))  # bounded detail-pa
                                                                 # each is a separate
                                                                 # real HTTP request,
                                                                 # keep this modest
-COUNCIL_DELAY_SECONDS = int(os.environ.get("COUNCIL_DELAY_SECONDS", "8"))  # REAL FIX
-    # (2026-09-01) — a 12-council production run saved Liverpool
-    # cleanly then got HTTP 405 "Human Verification" on EVERY
-    # subsequent council, including 3 previously-confirmed-working ones
-    # (Warrington, Newcastle, Blackburn with Darwen). An isolation
-    # diagnostic (getapplications_isolation_diagnostic.py) then
-    # confirmed Warrington saves cleanly BOTH alone and alongside
-    # Liverpool — ruling out anything wrong with Warrington or the
-    # platform itself. Root cause: even at CONCURRENCY=1, asyncio.gather
-    # + a Semaphore has each council's task acquire the lock and start
-    # with ZERO delay the instant the previous one releases it — rapidly
-    # visiting many DIFFERENT council domains on this shared hosting
-    # platform in quick succession is a classic distributed-scraping
-    # fingerprint that centralized, cross-tenant bot detection would
-    # specifically watch for. Same category of fix already proven
-    # necessary for idox_scraper.py's --targeted mode
-    # (REQUEST_DELAY_SECONDS) and for this scraper's own within-council
-    # per-week pacing (see scrape_weekly_lists' existing 4s sleep) — now
-    # applied across councils too, not just within one council's own
-    # requests.
+COUNCIL_DELAY_SECONDS = int(os.environ.get("COUNCIL_DELAY_SECONDS", "45"))  # REAL FIX
+    # (2026-09-10) — real evidence: even at 8 seconds, a live run showed
+    # Liverpool (council #1, which makes several real requests — one
+    # page load plus 3 separate weekly-list fetches) succeed cleanly,
+    # then the NEXT THREE councils (Warrington, Newcastle, Blackburn
+    # with Darwen) all fail instantly on their very FIRST request with
+    # the same HTTP 405 "Human Verification" page — before every
+    # remaining council in the same run succeeded cleanly. Critically,
+    # a separate isolation diagnostic already confirmed Warrington
+    # works fine entirely on its own, ruling out a permanent block
+    # specific to that domain. This points at a temporary, short-lived
+    # rate limit on the shared platform, triggered by a real burst of
+    # request volume from one client, that hadn't yet cleared by the
+    # time these 3 councils' turn came up 8 seconds later. Raised to
+    # 45 seconds — there's real slack for this: 13 councils at this
+    # pace still finishes well inside the 20-minute budget (a full run
+    # with the old 8s delay finished in just 7.5 minutes).
 
 START_TIME = time.monotonic()
 
@@ -363,18 +360,6 @@ _DETAIL_LABELS = [
     "Decision Issued Date", "Decision", "Appeal Reference",
     "Appeal Status", "Appeal External Decision", "Appeal External Decision Date",
 ]
-# Real field labels, transcribed directly from a real detail-page
-# screenshot (id=178037) — every visible label on that page, not just
-# the ones this scraper actually uses. CONFIRMED BUG (2026-08-17): an
-# earlier version of this list only included the ~14 labels the
-# scraper cares about, which meant real, present-but-unused labels
-# like "Grid Reference" and "Expiry Date" weren't recognised as valid
-# stop-boundaries — their real values were getting silently swallowed
-# into the PRECEDING field instead (e.g. Location ate "Grid Reference:
-# 338638, 391231" as part of its own value). Caught by a direct test
-# against reconstructed real screenshot data before this ever touched
-# production. Every real label needs to be listed here even if unused,
-# purely so the regex knows where each real field genuinely ends.
 _LABEL_PATTERN = "|".join(re.escape(l).replace(r"\ /\ ", r"\s*/\s*") for l in _DETAIL_LABELS)
 _DETAIL_LABEL_RE = re.compile(
     rf"({_LABEL_PATTERN})\s*:\s*(.*?)(?=(?:{_LABEL_PATTERN})\s*:|\Z)",
@@ -391,8 +376,6 @@ def _parse_detail_page(html: str) -> dict:
     across the 4 councils."""
     soup = BeautifulSoup(html, "html.parser")
     text = soup.get_text("\n", strip=True)
-    # Collapse the label:value pairs which may have line breaks between
-    # the label and its value in the rendered text
     text = re.sub(r"(:)\s*\n\s*", r"\1 ", text)
 
     fields = {}
@@ -507,12 +490,6 @@ class GetApplicationsPortal:
         context = await browser.new_context(**CONTEXT_OPTIONS)
         page = await context.new_page()
 
-        # Load the real search page ONCE — a normal Playwright
-        # navigation executes real JavaScript exactly like a real
-        # browser, which is what actually solves the AWS WAF challenge
-        # (see module docstring). Every subsequent request for this
-        # council reuses this same already-challenge-passed page via
-        # page.evaluate(fetch), never a fresh httpx client.
         search_page_url = f"{self.base_url}/planning/index.html?fa=getApplications"
         try:
             await page.goto(search_page_url, wait_until="domcontentloaded", timeout=45_000)
@@ -530,27 +507,9 @@ class GetApplicationsPortal:
                 break
 
             if i > 0:
-                # REAL EVIDENCE (2026-08-17): Newcastle's own first
-                # production run succeeded on its FIRST week's request,
-                # then got HTTP 405 "Human Verification" on every
-                # request after — all within this SAME sequential loop,
-                # zero delay between them at the time. That pattern
-                # (fine, then degrading, entirely within one council's
-                # own requests) points at rate/behavioural detection
-                # tied to request frequency, not just cross-council
-                # concurrency (which was also a live factor in that run
-                # and has its own separate fix in scrape.yml). A real
-                # pause between weeks, same discipline as idox_scraper.
-                # py's own request-pacing fix, addresses this
-                # independently of the concurrency setting.
                 await asyncio.sleep(4)
 
             week_str = monday.strftime("%d-%m-%Y")
-            # Real fetch() executed INSIDE the browser page — mechanical
-            # replication of the confirmed-working DevTools Console
-            # test, just automated. Inherits the page's real cookies/
-            # WAF-challenge state automatically, the same way any
-            # same-origin fetch() from a real page would.
             try:
                 result = await page.evaluate(
                     """async ({url, week}) => {
@@ -577,10 +536,7 @@ class GetApplicationsPortal:
 
             week_apps = _parse_weekly_list(html, self.base_url, self.council_name, week_str)
             for a in week_apps:
-                a["week_monday"] = monday.isoformat()  # real evidence of WHEN this
-                                                          # was received, from the
-                                                          # week list itself — not
-                                                          # today's date
+                a["week_monday"] = monday.isoformat()
             new_apps = [a for a in week_apps if a["id"] not in seen_ids]
             for a in new_apps:
                 seen_ids.add(a["id"])
@@ -593,18 +549,6 @@ class GetApplicationsPortal:
 
     async def recheck_pending(self, browser: Browser,
                                pending: list[dict]) -> list[dict]:
-        """Revisits a bounded batch of previously-pending applications'
-        real detail pages to check for a real Decision. See module
-        docstring — this is the ONLY route to decided-outcome data,
-        since the Determined weekly list is CAPTCHA-protected. Uses the
-        same real-browser-page approach as scrape_weekly_lists, for the
-        same WAF-challenge reason — a detail page is a different URL,
-        so it may or may not need its own fresh challenge solve; using
-        a real page.goto() per application (rather than assuming the
-        challenge carries over from an unrelated page) is the safe,
-        confirmed-working approach even though it's heavier per
-        request. RECHECK_LIMIT exists specifically to bound this cost.
-        """
         if not pending:
             return []
         updates = []
@@ -651,11 +595,6 @@ async def process_council(portal: GetApplicationsPortal, browser: Browser,
                            sem: asyncio.Semaphore, weeks_back: int,
                            pending_recheck: Optional[list[dict]] = None) -> int:
     async with sem:
-        # REAL FIX (2026-09-01) — see COUNCIL_DELAY_SECONDS' definition
-        # above for the full evidence trail. Applied unconditionally
-        # (including before the very first council) for simplicity —
-        # a few seconds of harmless startup delay is a trivial cost
-        # against the real risk of retriggering the cross-domain block.
         await asyncio.sleep(COUNCIL_DELAY_SECONDS)
 
         cid = portal.db_council_id
@@ -672,9 +611,6 @@ async def process_council(portal: GetApplicationsPortal, browser: Browser,
             print(f"    [{portal.council_name}] ✗ Error: {e}")
             return 0
 
-        # Apply any real decision updates found via the recheck pass —
-        # done regardless of whether this week's list itself had new
-        # applications, since a recheck can update OLDER records too.
         recheck_updates = []
         if pending_recheck:
             try:
@@ -697,27 +633,9 @@ async def process_council(portal: GetApplicationsPortal, browser: Browser,
                 "address":          address,
                 "postcode":         _extract_postcode(address),
                 "description":      a.get("description"),
-                "application_type": None,  # relies on main.py's reference-suffix
-                                             # fallback, same as ni_scraper.py
-                "status":           "pending",  # list view never shows outcome —
-                                                  # see module docstring
-                "submitted_date":   a.get("week_monday"),  # real evidence: the
-                                                              # Monday of the week
-                                                              # this application
-                                                              # was found in. Not
-                                                              # the exact day it
-                                                              # was received — the
-                                                              # weekly list doesn't
-                                                              # give per-row dates
-                                                              # (unconfirmed
-                                                              # whether the real
-                                                              # table even HAS one;
-                                                              # see honest-
-                                                              # limitations above)
-                                                              # — but genuinely
-                                                              # more accurate than
-                                                              # defaulting to
-                                                              # today's date.
+                "application_type": None,
+                "status":           "pending",
+                "submitted_date":   a.get("week_monday"),
                 "decision_date":    None,
                 "council_url":      a.get("council_url"),
             })
@@ -771,10 +689,6 @@ async def process_council(portal: GetApplicationsPortal, browser: Browser,
             "source":           "getapplications_scraper",
         } for a in apps]
 
-        # Recheck updates are separate, smaller upserts — only the
-        # changed fields, keyed by the same (council_id, reference)
-        # conflict target so they merge into the existing row rather
-        # than overwriting address/description with blanks.
         for u in recheck_updates:
             records.append({
                 "council_id": cid,
@@ -848,10 +762,6 @@ async def main():
     ]
     council_ids = [p.db_council_id for p in to_scrape]
 
-    # Fetch a bounded batch of currently-pending applications for these
-    # councils to recheck — same shape as idox_scraper.py's
-    # pending_recheck, adapted for this platform's per-application
-    # detail-page-visit model rather than a batched date-range query.
     pending_by_council: dict[int, list[dict]] = {cid: [] for cid in council_ids}
     try:
         ids_csv = ",".join(str(i) for i in council_ids)
