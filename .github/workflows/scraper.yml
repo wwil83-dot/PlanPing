@@ -901,11 +901,18 @@ jobs:
           retention-days: 14
 
   scrape_getapplications:
+    # CHANGED 2026-09-10 — budget raised 20 -> 30 minutes alongside
+    # getapplications_scraper.py's COUNCIL_DELAY_SECONDS going 45 -> 60.
+    # Real math: 13 councils x 60s delay alone = 13 minutes of pure
+    # waiting, on top of real per-council work (page loads, fetches,
+    # geocoding, upserts) — the old 20-minute budget would have left
+    # almost no margin and risked trading "blocked councils" for
+    # "time-budget-skipped councils" instead.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_getapplications') ||
       (github.event_name == 'schedule' && github.event.schedule == '20 10 */5 * *')
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -922,7 +929,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          MAX_MINUTES: "20"
+          MAX_MINUTES: "30"
           CONCURRENCY: "1"
           WEEKS_BACK: "2"
         run: cd scrapers && python getapplications_scraper.py
