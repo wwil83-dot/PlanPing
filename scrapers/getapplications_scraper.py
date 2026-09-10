@@ -148,23 +148,20 @@ RECHECK_LIMIT = int(os.environ.get("RECHECK_LIMIT", "100"))  # bounded detail-pa
                                                                 # each is a separate
                                                                 # real HTTP request,
                                                                 # keep this modest
-COUNCIL_DELAY_SECONDS = int(os.environ.get("COUNCIL_DELAY_SECONDS", "45"))  # REAL FIX
-    # (2026-09-10) — real evidence: even at 8 seconds, a live run showed
-    # Liverpool (council #1, which makes several real requests — one
-    # page load plus 3 separate weekly-list fetches) succeed cleanly,
-    # then the NEXT THREE councils (Warrington, Newcastle, Blackburn
-    # with Darwen) all fail instantly on their very FIRST request with
-    # the same HTTP 405 "Human Verification" page — before every
-    # remaining council in the same run succeeded cleanly. Critically,
-    # a separate isolation diagnostic already confirmed Warrington
-    # works fine entirely on its own, ruling out a permanent block
-    # specific to that domain. This points at a temporary, short-lived
-    # rate limit on the shared platform, triggered by a real burst of
-    # request volume from one client, that hadn't yet cleared by the
-    # time these 3 councils' turn came up 8 seconds later. Raised to
-    # 45 seconds — there's real slack for this: 13 councils at this
-    # pace still finishes well inside the 20-minute budget (a full run
-    # with the old 8s delay finished in just 7.5 minutes).
+COUNCIL_DELAY_SECONDS = int(os.environ.get("COUNCIL_DELAY_SECONDS", "60"))  # REAL FIX
+    # (2026-09-10, round 2) — real evidence from the 45s version's first
+    # production run: Newcastle and Blackburn with Darwen both fully
+    # recovered (0/3 weeks -> 3/3), and Warrington partially recovered —
+    # its first 2 weeks still failed, but its 3rd week succeeded purely
+    # from more cumulative time having passed since Liverpool's own
+    # request burst. That self-healing WITHIN one run is itself real
+    # evidence the cooldown window sits somewhat above 45s. Raised to
+    # 60s to give Warrington's earlier weeks the same room its 3rd week
+    # already got. NOTE: this real change genuinely eats into the time
+    # budget (13 councils x 60s = 13 minutes of pure waiting, on top of
+    # real per-council work) — MAX_MINUTES was raised alongside this in
+    # scrape.yml specifically so this doesn't just trade "blocked
+    # councils" for "time-budget-skipped councils" instead.
 
 START_TIME = time.monotonic()
 
