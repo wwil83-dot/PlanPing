@@ -24,11 +24,21 @@ the aspxerrorpath redirect that blocked every prior run:
      REGISTERED (58, the DEFAULT tab — this is all the original
      scraper's generic parser ever saw), and DETERMINED (85 — never
      seen at all under the old code, a genuinely silent gap, not a
-     crash). Also confirmed the page-size dropdown (10/25/50/100)
-     needs an explicit separate submit button click (id
-     SelectPageCountTop) to take effect — selecting 100 there
-     comfortably fits every real count seen so far (58, 85, 0) on a
-     single page, avoiding "Next"-click pagination entirely.
+     crash). Also found a real, confirmed page-size dropdown
+     (10/25/50/100) requiring a separate submit button click
+     (SelectPageCountTop) — but three follow-up attempts to make this
+     reliably resize the Determined tab's results all failed for
+     different, genuinely confirmed reasons (a tab-order bug reading
+     the same data twice, a stale sticky dropdown value, then — even
+     after forcing a real 10->100 DOM-level value transition — the
+     server-side grid still only returned 10 items despite the
+     dropdown correctly showing 100). The server-side page-size state
+     appears to reset on tab switch independent of what the dropdown
+     control shows, making it an unreliable mechanism. ABANDONED in
+     favour of real "Next"-click pagination instead — the same proven
+     pattern used successfully throughout this project's other
+     scrapers (idox_scraper.py etc.), with no dependency on this
+     quirky session-state behavior at all.
 
 HONEST LIMITATION: the list view's confirmed columns (Application
 number, Date valid, Site address, Description of proposal) don't
@@ -38,11 +48,7 @@ Every application from both tabs is saved as 'pending' for now, same
 principle as this project's other scrapers when the real decision text
 isn't yet confirmed — visiting each Determined application's own
 detail page would be needed to get the real outcome, not yet built
-here. Also: if any tab's real count ever exceeds 100 (none has so
-far), items beyond the first 100 would be missed — worth watching via
-the DETERMINED_UPPER_BOUND-style honest count logging below, same
-principle as several other scrapers in this project flagging their own
-known ceilings.
+here.
 """
 import asyncio
 import os
@@ -82,8 +88,6 @@ BASE_URL = "https://secure.telford.gov.uk"
 DATE_FROM_SEL = "#ctl00_ContentPlaceHolder1_DCdatefrom"
 DATE_TO_SEL = "#ctl00_ContentPlaceHolder1_DCdateto"
 SUBMIT_SEL = "#ctl00_ContentPlaceHolder1_btnSearchPlanningDetails"
-PAGE_SIZE_SELECT_SEL = "#ctl00_ContentPlaceHolder1_gvResults_ctl01_PageSizeDropDownTop"
-PAGE_SIZE_SUBMIT_SEL = "#ctl00_ContentPlaceHolder1_gvResults_ctl01_SelectPageCountTop"
 
 # Real, confirmed second-level status tabs — see module docstring round
 # 4. REGISTERED IS FIRST DELIBERATELY — it's the real, confirmed
@@ -246,81 +250,33 @@ async def _supa_patch_council(council_id: int, data: dict):
         )
 
 
-async def _maximise_page_size(page, tab_label: str = "") -> None:
-    """Real, confirmed fix from round 4: the page-size dropdown doesn't
-    auto-postback on its own — a separate submit button
-    (SelectPageCountTop) needs an explicit click. Selecting 100 here
-    comfortably covers every real count seen so far (58, 85, 0),
-    avoiding "Next"-click pagination entirely. Best-effort — if this
-    control isn't present (e.g. a tab with 0 results has nothing to
-    resize), that's not an error.
-
-    DIAGNOSTIC ADDED (2026-09-10) — a real run showed Determined
-    returning only 10 (the default page size) with NO exception
-    logged, despite this same function working correctly for
-    Registered moments earlier in the same run. Logging the real
-    before/after dropdown value and the real "Showing X of Y" text
-    directly, rather than guessing at a third theory blind.
-    """
+async def _click_next_page(page) -> bool:
+    """Real, robust Next-page click — same proven pattern used
+    throughout this project (idox_scraper.py etc.), adopted here after
+    the page-size-100 approach proved unreliable: direct evidence
+    showed the dropdown correctly displaying '100' at the DOM level,
+    both before and after an explicit forced value transition, while
+    the server-side grid still only returned 10 items — the
+    server-side page-size state appears to reset on tab switch
+    independent of what the dropdown control shows, making it an
+    unreliable mechanism to keep chasing. Text-based matching rather
+    than a single hardcoded id, in case the exact control id varies
+    slightly by tab the same way the page-size behavior did. Returns
+    True if a real, clickable Next link was found and clicked."""
+    next_link = page.locator("a", has_text=re.compile(r"^Next$"))
+    count = await next_link.count()
+    if count == 0:
+        return False
     try:
-        size_select = page.locator(PAGE_SIZE_SELECT_SEL)
-        count = await size_select.count()
-        if count == 0:
-            _log(f"  [{tab_label}] Page size dropdown not present on this tab "
-                 f"(likely 0 results) — nothing to resize")
-            return
-        if count > 1:
-            _log(f"  [{tab_label}] ⚠ Page size dropdown matched {count} elements "
-                 f"(expected 1) — using .first")
-            size_select = size_select.first
-
-        before_value = await size_select.input_value()
-        _log(f"  [{tab_label}] Page size dropdown value BEFORE resize: {before_value!r}")
-
-        # REAL FIX (2026-09-10, round 2) — confirmed via direct
-        # evidence: Determined's dropdown already showed '100' before
-        # this function ever touched it (a session-sticky setting
-        # carried over from Registered's own earlier resize), so
-        # select_option(value="100") was a no-op with no real value
-        # change to trigger anything — the real "Showing" text
-        # confirmed the grid stayed at its own freshly-loaded default
-        # of 10 regardless of what the dropdown claimed. Forcing a
-        # genuine transition through "10" first, then "100", guarantees
-        # a real change fires either way — whether starting from a
-        # true default of 10 or a sticky-but-inactive 100.
-        await size_select.select_option(value="10")
-        await size_select.select_option(value="100")
-        after_select_value = await size_select.input_value()
-        _log(f"  [{tab_label}] Page size dropdown value AFTER forced "
-             f"10->100 transition (before submit click): {after_select_value!r}")
-
-        submit_btn = page.locator(PAGE_SIZE_SUBMIT_SEL)
-        submit_count = await submit_btn.count()
-        _log(f"  [{tab_label}] Submit button real count: {submit_count}")
-        if submit_count == 0:
-            _log(f"  [{tab_label}] ⚠ Submit button not found — cannot resize")
-            return
-
         async with page.expect_navigation(wait_until="domcontentloaded", timeout=30_000):
-            await submit_btn.click()
+            await next_link.first.click()
         try:
             await page.wait_for_load_state("networkidle", timeout=15_000)
         except PlaywrightTimeout:
             pass
-
-        # Real confirmation — what does the "Showing X to Y of Z items"
-        # text actually say after the resize attempt completed?
-        try:
-            body_text = await page.locator("body").inner_text()
-            showing_match = re.search(r"Showing \d+ to \d+ of \d+ items", body_text)
-            if showing_match:
-                _log(f"  [{tab_label}] Real 'Showing' text after resize: "
-                     f"{showing_match.group(0)!r}")
-        except Exception:
-            pass
-    except Exception as e:
-        _log(f"⚠ Could not maximise page size for {tab_label} (continuing with "
-             f"default): {e}")
+        return True
+    except Exception:
+        return False
 
 
 async def scrape() -> list[dict]:
@@ -389,16 +345,30 @@ async def scrape() -> list[dict]:
                     _log(f"⚠ Could not switch to {tab_label} tab: {e}")
                     continue
 
-            await _maximise_page_size(page, tab_label)
-
             html = await page.content()
             tab_apps = _parse_results_table(html, tab_label)
-            _log(f"{tab_label}: {len(tab_apps)} real applications parsed")
-            if len(tab_apps) >= 100:
-                _log(f"⚠ {tab_label} returned {len(tab_apps)} — at or above the "
-                     f"100-per-page ceiling this scraper currently assumes. Real "
-                     f"pagination beyond page size 100 may be needed if this "
-                     f"council's volume grows — not yet built.")
+
+            # Real, proven pagination — click Next until no more pages
+            # or a safety cap is hit, same discipline as every other
+            # paginated scraper in this project.
+            page_num = 1
+            while True:
+                if page_num >= 20:  # safety cap — no real tab has
+                                     # needed anywhere near this many
+                                     # pages so far (max confirmed: 85
+                                     # items = 9 pages at 10/page)
+                    _log(f"  [{tab_label}] Hit the 20-page safety cap — stopping")
+                    break
+                clicked = await _click_next_page(page)
+                if not clicked:
+                    break
+                page_num += 1
+                html = await page.content()
+                more_apps = _parse_results_table(html, tab_label)
+                tab_apps.extend(more_apps)
+
+            _log(f"{tab_label}: {len(tab_apps)} real applications parsed "
+                 f"across {page_num} page(s)")
             all_apps.extend(tab_apps)
 
         await context.close()
