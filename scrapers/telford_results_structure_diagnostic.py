@@ -109,20 +109,31 @@ async def main():
         # (no count, no parenthesis) is the real fix.
         print_context_around(html, "status tabs", "Registered")
         print_context_around(html, "status tabs", "Determined")
-        print_context_around(html, "pagination", "PageSizeDropDownTop")
+        print_context_around(html, "pagination", "PageSizeDropDownTop", window=1200)
 
-        # Real test: does selecting page size 100 eliminate the need
-        # for "Next" clicking at all, on either the Registered (58) or
-        # Determined (85) tab — both fit under 100.
+        # REAL FIX (round 6) — the dropdown alone doesn't auto-postback;
+        # the truncated markup showed a separate <input type="submit">
+        # right after it. Selecting the value, then explicitly clicking
+        # that submit button, rather than expecting the select itself
+        # to trigger navigation.
         print("\n" + "=" * 60)
-        print("TESTING: select page size 100, check if pagination disappears")
+        print("TESTING: select page size 100, click its real submit button")
         print("=" * 60)
         try:
             size_select = page.locator(
                 "#ctl00_ContentPlaceHolder1_gvResults_ctl01_PageSizeDropDownTop"
             )
+            await size_select.select_option(value="100")
+            # Real submit button is whatever real id the widened search
+            # above reveals — searching generically here for any
+            # submit-type input inside the same fieldset as the
+            # dropdown, since the exact id wasn't confirmed yet at the
+            # time this was written.
+            submit_btn = page.locator(
+                "fieldset.sitesearch input[type='submit']"
+            ).first
             async with page.expect_navigation(wait_until="domcontentloaded", timeout=30_000):
-                await size_select.select_option(value="100")
+                await submit_btn.click()
             try:
                 await page.wait_for_load_state("networkidle", timeout=15_000)
             except PlaywrightTimeout:
