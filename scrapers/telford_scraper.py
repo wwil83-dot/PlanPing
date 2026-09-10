@@ -86,12 +86,24 @@ PAGE_SIZE_SELECT_SEL = "#ctl00_ContentPlaceHolder1_gvResults_ctl01_PageSizeDropD
 PAGE_SIZE_SUBMIT_SEL = "#ctl00_ContentPlaceHolder1_gvResults_ctl01_SelectPageCountTop"
 
 # Real, confirmed second-level status tabs — see module docstring round
-# 4. Each maps this project's own status vocabulary to the real tab
-# name for logging; actual `status` field is 'pending' for all of them
-# for now (see HONEST LIMITATION above).
+# 4. REGISTERED IS FIRST DELIBERATELY — it's the real, confirmed
+# default tab that's already loaded from the initial search, so the
+# scrape loop skips clicking for whichever tab is first in this list.
+# REAL BUG FIX (2026-09-10): an earlier version of this list started
+# with Received, which doesn't match reality — Registered is what
+# actually loads by default. That mismatch caused Registered's own
+# results to be read once (mislabeled "Received"), then read AGAIN via
+# a redundant click on its own already-selected tab link, which
+# triggered a fresh postback that reset the page size back to its
+# default of 10 — confirmed directly from a real run: "Received: 58"
+# (really Registered, unclicked) followed by "Registered: 10" (really
+# Registered again, reset). The duplicate reference values between
+# those two reads of the same real data were also the direct cause of
+# a real Postgres "ON CONFLICT DO UPDATE...affect row a second time"
+# error on that same run.
 STATUS_TABS = [
-    ("#ctl00_ContentPlaceHolder1_lbPlanning2ndLevel1", "Received"),
     ("#ctl00_ContentPlaceHolder1_lbPlanning2ndLevel2", "Registered"),  # real default tab
+    ("#ctl00_ContentPlaceHolder1_lbPlanning2ndLevel1", "Received"),
     ("#ctl00_ContentPlaceHolder1_lbPlanning2ndLevel3", "Determined"),
 ]
 
@@ -339,7 +351,29 @@ async def scrape() -> list[dict]:
         await context.close()
         await browser.close()
 
-    return all_apps
+    # REAL FIX (2026-09-10) — defensive cross-tab deduplication, kept
+    # even after fixing the tab-order bug above that was the direct
+    # cause of the one real duplicate-reference crash seen so far.
+    # Worth keeping regardless: it's plausible for the same real
+    # application to genuinely appear in more than one of these tabs
+    # (e.g. a status transition happening mid-scrape), and a single
+    # duplicate reference in one upsert batch is enough to fail the
+    # whole batch with the same Postgres "ON CONFLICT DO UPDATE...
+    # affect row a second time" error — same principle already applied
+    # in redcar_cleveland_scraper.py after it hit this exact error for
+    # a different reason.
+    seen_refs: set[str] = set()
+    deduped_apps = []
+    for a in all_apps:
+        if a["reference"] not in seen_refs:
+            seen_refs.add(a["reference"])
+            deduped_apps.append(a)
+    if len(deduped_apps) != len(all_apps):
+        _log(f"Cross-tab dedup: {len(all_apps)} -> {len(deduped_apps)} "
+             f"(removed {len(all_apps) - len(deduped_apps)} duplicate reference(s) "
+             f"seen in more than one tab)")
+
+    return deduped_apps
 
 
 async def main():
