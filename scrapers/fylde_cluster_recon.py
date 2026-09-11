@@ -76,23 +76,25 @@ async def click_through_disclaimer(page, label: str) -> bool:
     were only ever describing the disclaimer page itself (1-2 generic
     fields, 0/4 fingerprints) rather than the real search form behind
     it. Moved to run FIRST, unconditionally, before any real checks.
-    Also: round 2's click selector (button:has-text('Agree')) timed
-    out for 4 of 5 disclaimer-gated sites — rather than guess at a
-    different button text blind, this captures the REAL disclaimer
-    markup directly when no match is found, the same evidence-first
-    approach already used for Telford's error pages."""
+
+    REAL BUG FIX (round 4) — Vale of Glamorgan's real disclaimer button
+    is `<input value="Accept & Continue">`, which no round-3 selector
+    matched since they only checked for an EXACT "Accept"/"Agree"
+    text, not a partial match. Added CSS *= (contains) selectors as a
+    real, broader fallback."""
     if "Disclaimer" not in page.url:
         return True  # no disclaimer gate on this site at all
 
-    # Try several real, plausible button/link texts before giving up —
-    # but capture the REAL markup regardless, so a genuine miss is
-    # diagnosable rather than silently guessed at again next round.
     for selector in [
         "button:has-text('Agree')", "input[value='Agree']",
         "button:has-text('Accept')", "input[value='Accept']",
         "button:has-text('Continue')", "input[value='Continue']",
         "button:has-text('I Agree')", "a:has-text('Agree')",
         "a:has-text('Accept')", "a:has-text('Continue')",
+        # Broader CONTAINS matches — real fix for buttons like
+        # "Accept & Continue" that don't exactly equal any single word.
+        "input[value*='Accept' i]", "input[value*='Agree' i]",
+        "input[value*='Continue' i]", "button:has-text('Accept &')",
     ]:
         try:
             loc = page.locator(selector)
@@ -104,8 +106,6 @@ async def click_through_disclaimer(page, label: str) -> bool:
         except Exception:
             continue
 
-    # None of the guessed selectors worked — capture the real markup
-    # directly rather than guessing a third time.
     print(f"    [{label}] ⚠ Could not click through disclaimer with any known "
           f"selector — capturing real button/link markup:")
     buttons = await page.locator("button, input[type='submit'], input[type='button'], a.button, a.btn").all()
@@ -207,29 +207,41 @@ async def try_fylde_style_search(page, label: str) -> bool:
         await date_from.first.fill(start_str, timeout=5_000)
         await date_to.first.fill(end_str, timeout=5_000)
 
-        # REAL FIX (round 3) — Worcester and Welwyn Hatfield's real
-        # forms have MANY buttons (checkboxes, other search sections),
-        # so the generic ".last" match from round 2 likely grabbed the
-        # wrong element. Trying several plausible real submit
-        # candidates explicitly, checking each is actually visible
-        # before clicking, rather than blindly trusting position.
+        # REAL BUG FIX (round 4) — round 3's page-wide "Search" text
+        # match clicked Bridgend's unrelated GLOBAL SITEWIDE search
+        # button instead of the real planning form's own submit
+        # control, landing on bridgend.gov.uk/search/?query= rather
+        # than any real planning results. Bridgend's own field dump
+        # confirms the real button has a specific id (searchButton) —
+        # scoping the search to INSIDE THE SAME <form> as the date
+        # field, rather than the whole page, avoids this category of
+        # mismatch generally rather than special-casing one site's id.
+        form_loc = page.locator("form").filter(has=page.locator("#DateReceivedFrom"))
+        form_count = await form_loc.count()
+        search_scope = form_loc if form_count > 0 else page
+        if form_count == 0:
+            print(f"    [{label}] ⚠ No enclosing <form> found for #DateReceivedFrom "
+                  f"— falling back to page-wide submit search")
+
         submit_selectors = [
             "button:has-text('Search'):visible",
             "input[type='submit']:visible",
             "button[type='submit']:visible",
             "input[value='Search']:visible",
+            "#searchButton:visible",
         ]
         clicked = False
         for sel in submit_selectors:
             try:
-                loc = page.locator(sel)
+                loc = search_scope.locator(sel)
                 count = await loc.count()
                 if count > 0:
                     async with page.expect_navigation(wait_until="domcontentloaded", timeout=20_000):
                         await loc.last.click(timeout=5_000)
                     clicked = True
                     print(f"    [{label}] Submitted via selector: {sel!r} "
-                          f"({count} real match(es) found)")
+                          f"(scoped to real form containing DateReceivedFrom, "
+                          f"{count} real match(es) found)")
                     break
             except Exception:
                 continue
