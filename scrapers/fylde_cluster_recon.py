@@ -207,6 +207,27 @@ async def try_fylde_style_search(page, label: str) -> bool:
         await date_from.first.fill(start_str, timeout=5_000)
         await date_to.first.fill(end_str, timeout=5_000)
 
+        # REAL TEST (round 5) — every form seen so far has a
+        # SearchPlanning checkbox sitting right next to the date
+        # fields (alongside a same-named HIDDEN field — a common
+        # ASP.NET MVC pattern for a default "false" value the checkbox
+        # overrides when ticked). Theory: submission may require at
+        # least one category checkbox ticked to be considered valid,
+        # unlike Fylde's own form. Targeting specifically the
+        # checkbox-typed input, since [name='SearchPlanning'] alone
+        # would ambiguously match the hidden field too.
+        planning_checkbox = page.locator("input[name='SearchPlanning'][type='checkbox']")
+        if await planning_checkbox.count() > 0:
+            is_checked = await planning_checkbox.first.is_checked()
+            if not is_checked:
+                await planning_checkbox.first.check(timeout=5_000)
+                print(f"    [{label}] Ticked SearchPlanning checkbox (was unchecked) "
+                      f"before attempting submission")
+            else:
+                print(f"    [{label}] SearchPlanning checkbox already checked")
+        else:
+            print(f"    [{label}] No SearchPlanning checkbox found — skipping tick")
+
         # REAL BUG FIX (round 4) — round 3's page-wide "Search" text
         # match clicked Bridgend's unrelated GLOBAL SITEWIDE search
         # button instead of the real planning form's own submit
@@ -248,7 +269,18 @@ async def try_fylde_style_search(page, label: str) -> bool:
 
         if not clicked:
             print(f"    [{label}] No real submit button could be clicked "
-                  f"successfully — fields exist but submission failed")
+                  f"successfully — fields exist but submission failed. "
+                  f"Capturing real button markup within the form for diagnosis:")
+            all_buttons = await search_scope.locator(
+                "button, input[type='submit'], input[type='button'], a"
+            ).all()
+            for b in all_buttons[:15]:
+                try:
+                    text = (await b.inner_text()).strip()
+                    outer = await b.evaluate("el => el.outerHTML")
+                    print(f"      {outer[:250]!r}  (visible text: {text!r})")
+                except Exception:
+                    continue
             return False
 
         try:
