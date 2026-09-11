@@ -1173,9 +1173,20 @@ GAP_THRESHOLD_DAYS = 10
 # healthy. "Delayed" is a real middle state that neither existing page
 # currently shows at all — /coverage-gaps only surfaces things already
 # past the full GAP_THRESHOLD_DAYS, nothing shows "starting to look a
-# bit stale but not a confirmed gap yet". 2 days allows for one missed
-# night (matches the real nightly cadence) without unduly alarming.
-DELAYED_THRESHOLD_DAYS = 2
+# bit stale but not a confirmed gap yet".
+# CHANGED (2026-09-11) — raised 2 -> 3 days. The old value assumed
+# every council gets checked nightly, matching the comment's original
+# reasoning ("allows for one missed night"). That's no longer true for
+# Idox councils specifically: the real 8-batch odd/even split (see
+# scrape.yml) means any given Idox council is only actually checked
+# every 2 nights by design, not every night. At the old 2-day
+# threshold, a perfectly healthy Idox council sitting right at the end
+# of its normal 2-night gap would flip to "Delayed" falsely, every
+# single cycle, purely from the new schedule's own normal rhythm — not
+# a real problem. 3 days gives real room for that legitimate 2-night
+# gap plus one missed run, without needing a different threshold per
+# platform.
+DELAYED_THRESHOLD_DAYS = 3
 
 
 def _effective_days_since_save(last_saved_at, fallback_date: Optional[date]) -> Optional[int]:
