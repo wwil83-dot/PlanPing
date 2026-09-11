@@ -85,7 +85,22 @@ _STATUS_DIAGNOSED: dict[str, set[str]] = {}
 def _normalise_status(s: str, council_name: str) -> str:
     """Reused logic from fylde_scraper.py's proven status vocabulary —
     same confirmed platform, very likely the same real status text,
-    but diagnosed per-council in case it differs."""
+    but diagnosed per-council in case it differs.
+
+    HONEST LIMITATION (confirmed via first real production run,
+    2026-09-11): "Application DETERMINED" (seen on Vale of Glamorgan)
+    genuinely means a decision HAS been made — unlike "Invalid"/
+    "Application VALID"/"INVALID - Fee Only", which are about
+    pre-validation status, not decision outcome, and for which
+    'pending' is a fair default. "Determined" alone doesn't reveal
+    WHICH outcome (approved/refused), the same category of gap already
+    accepted for edinburgh_scraper.py's "Not Development"/"Permission
+    is not required" statuses. Explicitly recognized here (rather than
+    left to fall through as "unrecognised") so the diagnostic doesn't
+    keep re-flagging a status we've now identified — the real
+    limitation (outcome unknown) remains documented here instead of
+    re-discovered every run.
+    """
     if not s:
         return "pending"
     key = s.lower()
@@ -96,6 +111,15 @@ def _normalise_status(s: str, council_name: str) -> str:
     if "withdraw" in key:
         return "withdrawn"
     if any(x in key for x in ("consideration", "received", "pending", "awaiting")):
+        return "pending"
+    # Known validation-stage statuses (not decision outcomes) — 'pending'
+    # is a fair, deliberate default for these.
+    if any(x in key for x in ("valid", "invalid")):
+        return "pending"
+    # Known but genuinely ambiguous — "determined" confirms a decision
+    # exists without revealing which outcome. Filed as 'pending' as the
+    # least-wrong default until a detail-page visit can resolve it.
+    if "determined" in key:
         return "pending"
 
     diagnosed = _STATUS_DIAGNOSED.setdefault(council_name, set())
