@@ -70,6 +70,55 @@ def _safe_name(name: str) -> str:
     return name.lower().replace(" ", "_").replace(",", "")
 
 
+async def click_through_disclaimer(page, label: str) -> bool:
+    """REAL BUG FIX (round 3) — round 2's fingerprint/field checks ran
+    BEFORE this click for every disclaimer-gated site, meaning they
+    were only ever describing the disclaimer page itself (1-2 generic
+    fields, 0/4 fingerprints) rather than the real search form behind
+    it. Moved to run FIRST, unconditionally, before any real checks.
+    Also: round 2's click selector (button:has-text('Agree')) timed
+    out for 4 of 5 disclaimer-gated sites — rather than guess at a
+    different button text blind, this captures the REAL disclaimer
+    markup directly when no match is found, the same evidence-first
+    approach already used for Telford's error pages."""
+    if "Disclaimer" not in page.url:
+        return True  # no disclaimer gate on this site at all
+
+    # Try several real, plausible button/link texts before giving up —
+    # but capture the REAL markup regardless, so a genuine miss is
+    # diagnosable rather than silently guessed at again next round.
+    for selector in [
+        "button:has-text('Agree')", "input[value='Agree']",
+        "button:has-text('Accept')", "input[value='Accept']",
+        "button:has-text('Continue')", "input[value='Continue']",
+        "button:has-text('I Agree')", "a:has-text('Agree')",
+        "a:has-text('Accept')", "a:has-text('Continue')",
+    ]:
+        try:
+            loc = page.locator(selector)
+            if await loc.count() > 0:
+                async with page.expect_navigation(wait_until="domcontentloaded", timeout=15_000):
+                    await loc.first.click(timeout=5_000)
+                print(f"    [{label}] Real disclaimer click succeeded via selector: {selector!r}")
+                return True
+        except Exception:
+            continue
+
+    # None of the guessed selectors worked — capture the real markup
+    # directly rather than guessing a third time.
+    print(f"    [{label}] ⚠ Could not click through disclaimer with any known "
+          f"selector — capturing real button/link markup:")
+    buttons = await page.locator("button, input[type='submit'], input[type='button'], a.button, a.btn").all()
+    for b in buttons[:15]:
+        try:
+            text = (await b.inner_text()).strip()
+            outer = await b.evaluate("el => el.outerHTML")
+            print(f"      {outer[:200]!r}  (visible text: {text!r})")
+        except Exception:
+            continue
+    return False
+
+
 async def check_fylde_fingerprints(page, label: str) -> dict:
     """Tests for Fylde's own specific, confirmed platform markers
     directly, rather than generic field names — a real match here is
@@ -134,23 +183,20 @@ async def inspect_form_fields(page, label: str):
 
 
 async def try_fylde_style_search(page, label: str) -> bool:
-    """Best-effort attempt at Fylde's own exact real search flow — a
-    disclaimer click if one appears, then filling the exact real
-    #DateReceivedFrom/#DateReceivedTo fields and submitting. Returns
-    True if this actually succeeded (meaning the candidate's real
-    field ids genuinely match Fylde's), False otherwise. A failure
-    here is expected and fine for candidates on a different platform —
-    it's real evidence either way, not an error."""
+    """Best-effort attempt at Fylde's own exact real search flow —
+    filling the exact real #DateReceivedFrom/#DateReceivedTo fields
+    and submitting (disclaimer, if any, is already handled by the
+    caller before this runs). Returns True if this actually succeeded
+    (meaning the candidate's real field ids genuinely match Fylde's),
+    False otherwise. A failure here is expected and fine for
+    candidates on a different platform — it's real evidence either
+    way, not an error."""
     today = date.today()
     start = today - timedelta(days=30)
     start_str = start.strftime("%d/%m/%Y")
     end_str = today.strftime("%d/%m/%Y")
 
     try:
-        if "Disclaimer" in page.url:
-            async with page.expect_navigation(wait_until="domcontentloaded", timeout=15_000):
-                await page.click("button:has-text('Agree'), input[value='Agree']", timeout=5_000)
-
         date_from = page.locator("#DateReceivedFrom")
         date_to = page.locator("#DateReceivedTo")
         if await date_from.count() == 0 or await date_to.count() == 0:
@@ -158,14 +204,41 @@ async def try_fylde_style_search(page, label: str) -> bool:
                   f"not present — not attempting Fylde-style submission")
             return False
 
-        await date_from.fill(start_str, timeout=5_000)
-        await date_to.fill(end_str, timeout=5_000)
+        await date_from.first.fill(start_str, timeout=5_000)
+        await date_to.first.fill(end_str, timeout=5_000)
 
-        submit = page.locator(
-            "button:has-text('Search'), input[type='submit'], button[type='submit']"
-        ).last
-        async with page.expect_navigation(wait_until="domcontentloaded", timeout=30_000):
-            await submit.click()
+        # REAL FIX (round 3) — Worcester and Welwyn Hatfield's real
+        # forms have MANY buttons (checkboxes, other search sections),
+        # so the generic ".last" match from round 2 likely grabbed the
+        # wrong element. Trying several plausible real submit
+        # candidates explicitly, checking each is actually visible
+        # before clicking, rather than blindly trusting position.
+        submit_selectors = [
+            "button:has-text('Search'):visible",
+            "input[type='submit']:visible",
+            "button[type='submit']:visible",
+            "input[value='Search']:visible",
+        ]
+        clicked = False
+        for sel in submit_selectors:
+            try:
+                loc = page.locator(sel)
+                count = await loc.count()
+                if count > 0:
+                    async with page.expect_navigation(wait_until="domcontentloaded", timeout=20_000):
+                        await loc.last.click(timeout=5_000)
+                    clicked = True
+                    print(f"    [{label}] Submitted via selector: {sel!r} "
+                          f"({count} real match(es) found)")
+                    break
+            except Exception:
+                continue
+
+        if not clicked:
+            print(f"    [{label}] No real submit button could be clicked "
+                  f"successfully — fields exist but submission failed")
+            return False
+
         try:
             await page.wait_for_load_state("networkidle", timeout=15_000)
         except PlaywrightTimeout:
@@ -205,9 +278,14 @@ async def recon_one(browser, council_name: str, url: str):
     title = await page.title()
     print(f"    Real HTTP status: {status}")
     print(f"    Real page title: {title!r}")
-    print(f"    Real final URL (after any redirect): {page.url}")
-    if "Disclaimer" in page.url:
-        print(f"    Real disclaimer gate detected — same pattern as Fylde's own flow")
+    print(f"    Real final URL (before any disclaimer click): {page.url}")
+
+    # REAL FIX (round 3) — click through any disclaimer FIRST, before
+    # any fingerprint/field checks, so those checks describe the real
+    # search form rather than the disclaimer page itself.
+    reached_real_form = await click_through_disclaimer(page, council_name)
+    if reached_real_form:
+        print(f"    Real URL after disclaimer handling: {page.url}")
 
     await check_fylde_fingerprints(page, council_name)
     await inspect_form_fields(page, council_name)
@@ -215,7 +293,9 @@ async def recon_one(browser, council_name: str, url: str):
     safe = _safe_name(council_name)
     await page.screenshot(path=f"/tmp/fylde_cluster_{safe}_search.png")
 
-    search_succeeded = await try_fylde_style_search(page, council_name)
+    search_succeeded = False
+    if reached_real_form:
+        search_succeeded = await try_fylde_style_search(page, council_name)
     if search_succeeded:
         # Real confirmation — re-check the fingerprints on the RESULTS
         # page specifically, since tblResults/Next-Page only exist
@@ -256,4 +336,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
