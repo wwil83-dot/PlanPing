@@ -76,6 +76,18 @@ on:
                           # Determined tab's 85 applications were
                           # completely invisible under the old code —
                           # see telford_scraper.py's module docstring.
+    - cron: '25 9 * * *'  # planning-register platform nightly scrape
+                          # (Worcester, Vale of Glamorgan) — promoted
+                          # after two confirmed clean production runs
+                          # (2026-09-11): 136 real applications saved
+                          # both times (52 Worcester + 84 Vale of
+                          # Glamorgan), zero errors, real pagination
+                          # confirmed exact on both councils, 0.5
+                          # minutes total. Both councils confirmed via
+                          # fylde_cluster_recon.py to run the exact same
+                          # underlying platform as Fylde Council — see
+                          # planning_register_scraper.py's module
+                          # docstring for the full evidence trail.
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
     - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
@@ -3495,18 +3507,19 @@ jobs:
           retention-days: 14
 
   planning_register_scraper:
-    # DELIBERATELY manual-trigger only for now — brand new platform,
-    # never run live, matching every other new platform's first job
-    # this session before a confirmed clean production run. Covers
-    # Worcester and Vale of Glamorgan, both confirmed via
-    # fylde_cluster_recon.py to run the exact same underlying platform
-    # as Fylde Council — same search-form fields, same tblResults
-    # results table, same "Next Page." pagination. HONEST LIMITATION:
-    # the exact href pattern distinguishing Planning from other
-    # application categories was never directly confirmed for these
-    # two councils (unlike Fylde's own /Planning/Display/ split) — see
-    # planning_register_scraper.py's module docstring.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'planning_register_scraper'
+    # PROMOTED to the nightly schedule (2026-09-11) after two confirmed
+    # clean production runs — 136 real applications saved both times
+    # (52 Worcester + 84 Vale of Glamorgan), zero errors, real
+    # pagination confirmed exact on both councils, 0.5 minutes total.
+    # Both councils confirmed via fylde_cluster_recon.py to run the
+    # exact same underlying platform as Fylde Council — same
+    # search-form fields, same tblResults results table, same
+    # "Next Page." pagination. See this file's module docstring for
+    # the full evidence trail, including the confirmed limitation that
+    # "Determined" status doesn't reveal approved vs refused.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'planning_register_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '25 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
