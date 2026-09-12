@@ -39,7 +39,17 @@
         </div>
       </div>
       <div class="hero-image">
-        <img src="/static/img/hero.png" alt="PlanFind — Planning Application Search Made Easy" width="520">
+        {# CHANGED (2026-09-11) — real, direct report: this image was
+           very slow to load. Confirmed cause: the original hero.png
+           was 2.01 MB, a lossless PNG (with a fully-unused alpha
+           channel — confirmed 100% opaque throughout, so nothing was
+           lost by dropping it) at 1264x842px despite only ever being
+           displayed at 520px wide. Replaced with a resized (1040px —
+           2x display width, generous headroom for retina screens) WebP
+           at quality 85, cutting the file from 2.01 MB to 130 KB (a
+           93.7% reduction) with no visible quality loss at normal
+           viewing sizes. #}
+        <img src="/static/img/hero.webp" alt="PlanFind — Planning Application Search Made Easy" width="520" fetchpriority="high">
       </div>
     </div>
   </div>
