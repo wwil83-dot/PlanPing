@@ -27,21 +27,49 @@ def render(template: str, ctx: dict) -> HTMLResponse:
     return HTMLResponse(_jinja.get_template(template).render(**ctx))
 
 
+# ADDED (2026-09-11) — shared cache for council_count/app_count,
+# confirmed via a real Supabase query performance audit: the exact same
+# two queries were being run independently, fresh, in THREE separate
+# places (index, search's postcode-not-found fallback, and about) —
+# 12,715 calls for council_count alone. Neither value changes faster
+# than scrapers actually save new data throughout the day, so a short
+# cache serves all three routes safely. Same 15-minute TTL as the
+# councils-with-counts cache, for the same reasoning.
+_HOMEPAGE_STATS_CACHE: dict = {"council_count": None, "app_count": None, "cached_at": None}
+_HOMEPAGE_STATS_CACHE_TTL = timedelta(minutes=15)
+
+
+async def _get_cached_homepage_stats(db) -> tuple[int, int]:
+    """Returns (council_count, app_count), cached and shared across
+    every route that shows these headline numbers."""
+    now = datetime.now(timezone.utc)
+    cached_at = _HOMEPAGE_STATS_CACHE["cached_at"]
+    if (cached_at is not None
+            and now - cached_at < _HOMEPAGE_STATS_CACHE_TTL):
+        return _HOMEPAGE_STATS_CACHE["council_count"], _HOMEPAGE_STATS_CACHE["app_count"]
+
+    council_count = await db.fetchval("""
+        SELECT COUNT(*) FROM councils c
+        WHERE c.active = true
+        AND c.coverage_source NOT IN ('pending', 'none', 'manual_link')
+        AND EXISTS (
+            SELECT 1 FROM planning_applications pa
+            WHERE pa.council_id = c.id
+        )
+    """)
+    app_count = await db.fetchval(
+        "SELECT COUNT(*) FROM planning_applications"
+    )
+    _HOMEPAGE_STATS_CACHE["council_count"] = council_count
+    _HOMEPAGE_STATS_CACHE["app_count"] = app_count
+    _HOMEPAGE_STATS_CACHE["cached_at"] = now
+    return council_count, app_count
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     async with get_db() as db:
-        council_count = await db.fetchval("""
-            SELECT COUNT(*) FROM councils c
-            WHERE c.active = true
-            AND c.coverage_source NOT IN ('pending', 'none', 'manual_link')
-            AND EXISTS (
-                SELECT 1 FROM planning_applications pa
-                WHERE pa.council_id = c.id
-            )
-        """)
-        app_count = await db.fetchval(
-            "SELECT COUNT(*) FROM planning_applications"
-        )
+        council_count, app_count = await _get_cached_homepage_stats(db)
     return render("index.html", {
         "request": request,
         "council_count": council_count,
@@ -367,18 +395,7 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
 
     if not location:
         async with get_db() as db:
-            council_count = await db.fetchval("""
-                SELECT COUNT(*) FROM councils c
-                WHERE c.active = true
-                AND c.coverage_source NOT IN ('pending', 'none', 'manual_link')
-                AND EXISTS (
-                    SELECT 1 FROM planning_applications pa
-                    WHERE pa.council_id = c.id
-                )
-            """)
-            app_count = await db.fetchval(
-                "SELECT COUNT(*) FROM planning_applications"
-            )
+            council_count, app_count = await _get_cached_homepage_stats(db)
         return render("index.html", {
             "request": request,
             "error": f"Could not find postcode '{postcode}'. Please check and try again.",
@@ -723,19 +740,12 @@ async def about(request: Request):
     # query the homepage already uses, rather than inventing a new one
     # or hardcoding numbers here, which would just go stale the same
     # way again.
+    # CHANGED (2026-09-11) — now via the shared cache (see
+    # _get_cached_homepage_stats) rather than its own third independent
+    # copy of the same query, confirmed as one of three identical
+    # duplicates in a real query performance audit.
     async with get_db() as db:
-        council_count = await db.fetchval("""
-            SELECT COUNT(*) FROM councils c
-            WHERE c.active = true
-            AND c.coverage_source NOT IN ('pending', 'none', 'manual_link')
-            AND EXISTS (
-                SELECT 1 FROM planning_applications pa
-                WHERE pa.council_id = c.id
-            )
-        """)
-        app_count = await db.fetchval(
-            "SELECT COUNT(*) FROM planning_applications"
-        )
+        council_count, app_count = await _get_cached_homepage_stats(db)
     return render("about.html", {
         "request": request,
         "council_count": council_count,
@@ -1694,22 +1704,28 @@ PROFESSIONAL_TRADE_LABELS = {
 # other caching infrastructure exists anywhere else in this file, and
 # this fix shouldn't need to introduce a whole new dependency just to
 # solve one query.
-_TOWN_NAMES_CACHE: dict = {"names": None, "cached_at": None}
-_TOWN_NAMES_CACHE_TTL = timedelta(hours=6)
+# EXPANDED (2026-09-11) — also caches last_synced_at now, fetched in
+# the SAME refresh cycle. It's queried by the same route
+# (find_a_professional) on the exact same monthly-refresh cadence as
+# town names, and was itself being re-run 39,805 times independently —
+# no reason to keep it as a separate query/cache when one shared fetch
+# covers both.
+_PROFESSIONALS_STATIC_CACHE: dict = {"names": None, "last_synced": None, "cached_at": None}
+_PROFESSIONALS_STATIC_CACHE_TTL = timedelta(hours=6)
 
 
-async def _get_cached_town_names(db) -> list[str]:
-    """Returns the cached town-names list if it's still fresh, otherwise
-    re-queries once and refreshes the cache. 6 hours is a conservative
-    choice given the real monthly refresh cadence — safe to lengthen
-    further if even fewer queries are wanted, since genuine staleness
-    risk here is minimal either way."""
+async def _get_cached_professionals_static_data(db) -> tuple[list[str], object]:
+    """Returns (town_names, last_synced), cached together. 6 hours is a
+    conservative choice given the real monthly refresh cadence of the
+    underlying professionals dataset — safe to lengthen further if even
+    fewer queries are wanted, since genuine staleness risk here is
+    minimal either way."""
     now = datetime.now(timezone.utc)
-    cached_at = _TOWN_NAMES_CACHE["cached_at"]
-    if (_TOWN_NAMES_CACHE["names"] is not None
+    cached_at = _PROFESSIONALS_STATIC_CACHE["cached_at"]
+    if (_PROFESSIONALS_STATIC_CACHE["names"] is not None
             and cached_at is not None
-            and now - cached_at < _TOWN_NAMES_CACHE_TTL):
-        return _TOWN_NAMES_CACHE["names"]
+            and now - cached_at < _PROFESSIONALS_STATIC_CACHE_TTL):
+        return _PROFESSIONALS_STATIC_CACHE["names"], _PROFESSIONALS_STATIC_CACHE["last_synced"]
 
     rows = await db.fetch("""
         SELECT DISTINCT t.name
@@ -1718,9 +1734,12 @@ async def _get_cached_town_names(db) -> list[str]:
         ORDER BY t.name
     """)
     names = [r["name"] for r in rows]
-    _TOWN_NAMES_CACHE["names"] = names
-    _TOWN_NAMES_CACHE["cached_at"] = now
-    return names
+    last_synced = await db.fetchval("SELECT MAX(last_synced_at) FROM professionals")
+
+    _PROFESSIONALS_STATIC_CACHE["names"] = names
+    _PROFESSIONALS_STATIC_CACHE["last_synced"] = last_synced
+    _PROFESSIONALS_STATIC_CACHE["cached_at"] = now
+    return names, last_synced
 
 
 @app.get("/find-a-professional", response_class=HTMLResponse)
@@ -1777,14 +1796,14 @@ async def find_a_professional(request: Request, trade: Optional[str] = None, tow
             """, trade, town, keyword, PAGE_SIZE, offset)
 
     async with get_db() as db:
-        # REAL FIX (2026-09-11) — see _get_cached_town_names' own
-        # docstring for the full context: this was the single largest
-        # egress consumer found in a real query performance audit,
-        # re-run in full on every visit despite the underlying data
-        # only changing monthly.
-        town_names = await _get_cached_town_names(db)
-
-        last_synced = await db.fetchval("SELECT MAX(last_synced_at) FROM professionals")
+        # REAL FIX (2026-09-11) — see _get_cached_professionals_static_data's
+        # own docstring for the full context: town_names alone was the
+        # single largest egress consumer found in a real query
+        # performance audit (457M+ rows read), and last_synced_at was
+        # separately re-run 39,805 times — both re-run in full on every
+        # visit despite the underlying data only changing monthly. Now
+        # fetched and cached together in one pass.
+        town_names, last_synced = await _get_cached_professionals_static_data(db)
 
     professionals = [dict(r) for r in professionals]
     for p in professionals:
