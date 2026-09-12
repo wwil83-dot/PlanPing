@@ -1020,21 +1020,65 @@ async def commercial_conversion(request: Request, status: Optional[str] = None, 
     return await _render_tag_page(request, "commercial_conversion", status, council, keyword, sort, date_from, date_to)
 
 
+# ADDED (2026-09-11) — shared cache for /councils and
+# /api/coverage-map-data, confirmed via a real Supabase query
+# performance audit: this council+app_count aggregation (a LEFT JOIN +
+# GROUP BY across the full planning_applications table) averaged 7.4
+# SECONDS per call on both routes, with a worst case of 17-26 seconds
+# and a real cache-hit rate around 53% — far below nearly every other
+# query in the whole audit — directly matching a real report that the
+# coverage page "takes ages to load". Both routes were independently
+# running their own near-duplicate version of essentially the same
+# expensive query. Cached with a much shorter TTL than the town-names
+# fix (15 minutes, not 6 hours) since this data changes throughout the
+# day as scrapers save new applications, not just once a month — still
+# comfortably eliminates the vast majority of repeated slow executions
+# without meaningfully risking stale-looking data (a 15-minute-old
+# application count is not a real problem for either page).
+_COUNCILS_WITH_COUNTS_CACHE: dict = {"rows": None, "cached_at": None}
+_COUNCILS_WITH_COUNTS_CACHE_TTL = timedelta(minutes=15)
+
+
+async def _get_cached_councils_with_counts(db) -> list[dict]:
+    """Fetches the FULL column set /councils needs (a strict superset of
+    what /api/coverage-map-data needs — slug/region/system/portal_url
+    are simply unused by the map endpoint's own loop, which reads by
+    key) once, cached and shared by both routes, rather than each
+    independently running its own near-duplicate expensive query.
+    Returns plain dicts (already copied out of asyncpg's immutable
+    Records) — callers still make their OWN per-request copy via
+    [dict(c) for c in ...] before mutating, so in-place additions like
+    'status' or 'search_haystack' never leak into the shared cached
+    objects or bleed across to the other route."""
+    now = datetime.now(timezone.utc)
+    cached_at = _COUNCILS_WITH_COUNTS_CACHE["cached_at"]
+    if (_COUNCILS_WITH_COUNTS_CACHE["rows"] is not None
+            and cached_at is not None
+            and now - cached_at < _COUNCILS_WITH_COUNTS_CACHE_TTL):
+        return _COUNCILS_WITH_COUNTS_CACHE["rows"]
+
+    rows = await db.fetch("""
+        SELECT c.name, c.slug, c.region, c.system, c.coverage_source, c.portal_url,
+               c.last_saved_at,
+               COUNT(pa.id) AS app_count,
+               MAX(pa.submitted_date) AS latest_date
+        FROM councils c
+        LEFT JOIN planning_applications pa ON pa.council_id = c.id
+        WHERE c.active = TRUE
+        GROUP BY c.id, c.name, c.slug, c.region, c.system, c.coverage_source,
+                 c.portal_url, c.last_saved_at
+        ORDER BY c.name
+    """)
+    result = [dict(r) for r in rows]
+    _COUNCILS_WITH_COUNTS_CACHE["rows"] = result
+    _COUNCILS_WITH_COUNTS_CACHE["cached_at"] = now
+    return result
+
+
 @app.get("/councils", response_class=HTMLResponse)
 async def councils_list(request: Request):
     async with get_db() as db:
-        councils = await db.fetch("""
-            SELECT c.name, c.slug, c.region, c.system, c.coverage_source, c.portal_url,
-                   c.last_saved_at,
-                   COUNT(pa.id) AS app_count,
-                   MAX(pa.submitted_date) AS latest_date
-            FROM councils c
-            LEFT JOIN planning_applications pa ON pa.council_id = c.id
-            WHERE c.active = TRUE
-            GROUP BY c.id, c.name, c.slug, c.region, c.system, c.coverage_source,
-                     c.portal_url, c.last_saved_at
-            ORDER BY c.name
-        """)
+        councils = await _get_cached_councils_with_counts(db)
 
     # Converted to plain dicts (asyncpg Records are immutable) so the
     # date-availability note can be added — same confirmed, real
@@ -1111,17 +1155,17 @@ async def coverage_map_data():
     computed for /councils and the council detail page, reusing the
     same helpers (_effective_days_since_save, _coverage_status) so all
     three surfaces can never silently disagree about a council's real
-    state."""
+    state.
+
+    CHANGED (2026-09-11) — now shares the same cached query as
+    /councils (see _get_cached_councils_with_counts) rather than
+    running its own near-duplicate version. Confirmed via a real query
+    performance audit: this endpoint's own version of this query
+    averaged 7.4 seconds per call with a 26-second worst case, called
+    516 times — one of the two biggest contributors to real, reported
+    slow page loads."""
     async with get_db() as db:
-        councils = await db.fetch("""
-            SELECT c.name, c.coverage_source, c.last_saved_at,
-                   COUNT(pa.id) AS app_count,
-                   MAX(pa.submitted_date) AS latest_date
-            FROM councils c
-            LEFT JOIN planning_applications pa ON pa.council_id = c.id
-            WHERE c.active = TRUE
-            GROUP BY c.id, c.name, c.coverage_source, c.last_saved_at
-        """)
+        councils = await _get_cached_councils_with_counts(db)
 
     result = []
     for c in councils:
