@@ -6,7 +6,7 @@ import os
 import csv
 import io
 import markdown as _markdown_lib
-from datetime import datetime, date
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional
 from jinja2 import Environment, FileSystemLoader
 
@@ -1633,6 +1633,51 @@ PROFESSIONAL_TRADE_LABELS = {
     "glazier":          "Glaziers",
 }
 
+# ADDED (2026-09-11) — real, confirmed fix from a Supabase query
+# performance audit: this exact query (DISTINCT town names, used to
+# populate the client-side autocomplete dropdown) was reading
+# 457,554,268 rows total across 39,772 calls — by a wide margin the
+# single largest consumer of database egress found anywhere in the
+# whole audit, dwarfing every other query combined. It was being
+# re-run from scratch on every single visit to /find-a-professional,
+# filtered or not, despite the underlying professionals dataset only
+# refreshing MONTHLY (see import_professionals.py). A simple in-memory
+# cache with a generous TTL is a safe, honest fit for data that stale
+# this rarely — even a multi-hour cache carries negligible risk of
+# showing outdated names, while cutting the real query count from
+# ~39,772/period down to at most a handful. Deliberately a plain
+# module-level dict rather than a new caching library or Redis — no
+# other caching infrastructure exists anywhere else in this file, and
+# this fix shouldn't need to introduce a whole new dependency just to
+# solve one query.
+_TOWN_NAMES_CACHE: dict = {"names": None, "cached_at": None}
+_TOWN_NAMES_CACHE_TTL = timedelta(hours=6)
+
+
+async def _get_cached_town_names(db) -> list[str]:
+    """Returns the cached town-names list if it's still fresh, otherwise
+    re-queries once and refreshes the cache. 6 hours is a conservative
+    choice given the real monthly refresh cadence — safe to lengthen
+    further if even fewer queries are wanted, since genuine staleness
+    risk here is minimal either way."""
+    now = datetime.now(timezone.utc)
+    cached_at = _TOWN_NAMES_CACHE["cached_at"]
+    if (_TOWN_NAMES_CACHE["names"] is not None
+            and cached_at is not None
+            and now - cached_at < _TOWN_NAMES_CACHE_TTL):
+        return _TOWN_NAMES_CACHE["names"]
+
+    rows = await db.fetch("""
+        SELECT DISTINCT t.name
+        FROM professionals p
+        JOIN towns t ON t.id = p.town_id
+        ORDER BY t.name
+    """)
+    names = [r["name"] for r in rows]
+    _TOWN_NAMES_CACHE["names"] = names
+    _TOWN_NAMES_CACHE["cached_at"] = now
+    return names
+
 
 @app.get("/find-a-professional", response_class=HTMLResponse)
 async def find_a_professional(request: Request, trade: Optional[str] = None, town: Optional[str] = None,
@@ -1688,19 +1733,12 @@ async def find_a_professional(request: Request, trade: Optional[str] = None, tow
             """, trade, town, keyword, PAGE_SIZE, offset)
 
     async with get_db() as db:
-        # Real town names, only ones that genuinely have at least one
-        # professional — used by the custom autocomplete dropdown
-        # (see find_a_professional.html). A plain <datalist> was tried
-        # first, but with hundreds of towns it rendered as an
-        # uncontrollable native browser popup dominating the page —
-        # this list is small enough (a few KB) to embed directly and
-        # filter client-side in a dropdown we fully control ourselves.
-        town_names = await db.fetch("""
-            SELECT DISTINCT t.name
-            FROM professionals p
-            JOIN towns t ON t.id = p.town_id
-            ORDER BY t.name
-        """)
+        # REAL FIX (2026-09-11) — see _get_cached_town_names' own
+        # docstring for the full context: this was the single largest
+        # egress consumer found in a real query performance audit,
+        # re-run in full on every visit despite the underlying data
+        # only changing monthly.
+        town_names = await _get_cached_town_names(db)
 
         last_synced = await db.fetchval("SELECT MAX(last_synced_at) FROM professionals")
 
@@ -1730,7 +1768,7 @@ async def find_a_professional(request: Request, trade: Optional[str] = None, tow
         "town": town,
         "keyword": keyword or "",
         "trade_options": PROFESSIONAL_TRADE_LABELS,
-        "town_names": [r["name"] for r in town_names],
+        "town_names": town_names,
         "last_synced": last_synced,
         "has_filter": has_filter,
         "page": page,
