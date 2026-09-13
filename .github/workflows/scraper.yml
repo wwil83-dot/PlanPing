@@ -3585,6 +3585,46 @@ jobs:
             /tmp/bridgend_results_*.png
           retention-days: 14
 
+  bridgend_resultsperpage_diagnostic:
+    # Real, direct follow-up to bridgend_results_diagnostic.py: that
+    # diagnostic confirmed a real, visible <select id="resultsPerPage">
+    # with options 10/25/50 on Bridgend's real results page, and found
+    # numbered-page pagination (1 2 3 4 5 6) rather than a single
+    # "Next" link — a genuinely different pattern from every other
+    # confirmed platform. Before building numbered-pagination click
+    # logic, this tests whether simply selecting "50" reliably shows
+    # more rows in one page. HONEST CONTEXT: Telford had a very
+    # similar-looking dropdown that did NOT work reliably (the
+    # server-side page size silently reset regardless of what the
+    # dropdown displayed) — tested directly here rather than assumed.
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'bridgend_resultsperpage_diagnostic'
+    runs-on: [self-hosted, uk-runner]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright
+      - run: playwright install --with-deps chromium
+      - name: Test Bridgend resultsPerPage=50 shortcut
+        run: cd scrapers && python bridgend_resultsperpage_diagnostic.py
+      - name: Upload real HTML and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridgend-resultsperpage-diagnostic-output
+          path: |
+            /tmp/bridgend_resultsperpage_test.html
+            /tmp/bridgend_resultsperpage_test.png
+          retention-days: 14
+
+
   backlog_batch_recon4:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'backlog_batch_recon4'
     runs-on: [self-hosted, uk-runner]
