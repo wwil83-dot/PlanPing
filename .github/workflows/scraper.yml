@@ -88,7 +88,7 @@ on:
                           # underlying platform as Fylde Council — see
                           # planning_register_scraper.py's module
                           # docstring for the full evidence trail.
-   - cron: '30 9 * * *'   # Bridgend nightly scrape — promoted after two
+    - cron: '30 9 * * *'   # Bridgend nightly scrape — promoted after two
                           # confirmed clean production runs (2026-09-13):
                           # 47 real applications saved both times, zero
                           # errors, real reference format P/YY/NNN/TYPE,
