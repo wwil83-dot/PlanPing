@@ -3624,7 +3624,7 @@ jobs:
             /tmp/bridgend_resultsperpage_test.png
           retention-days: 14
 
-bridgend_scraper:
+  bridgend_scraper:
     # DELIBERATELY manual-trigger only for now — brand new platform,
     # never run live, matching every other new platform's first job
     # this session before a confirmed clean production run. Genuinely
