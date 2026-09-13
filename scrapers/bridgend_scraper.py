@@ -97,18 +97,27 @@ _STATUS_DIAGNOSED: set[str] = set()
 
 def _normalise_status(s: str) -> str:
     """Same general keyword vocabulary already proven across this
-    project's other scrapers. HONEST LIMITATION (see module docstring):
-    every application seen during diagnostics showed "-" (undecided) —
-    the real decision-text vocabulary for actual decisions hasn't been
-    confirmed yet. Genuinely unrecognised text is diagnosed once per
-    run rather than silently filed."""
+    project's other scrapers. CONFIRMED via the first real production
+    run (2026-09-13): "DOC agree" is a genuine positive outcome on this
+    platform — DOC applications are Discharge/Approval of Conditions
+    (see the confirmed reference P/26/462/DOC in the diagnostic
+    evidence), and "agree" here means the council agreed/approved the
+    discharge, the same category of non-obvious approval wording
+    already mapped elsewhere in this project (Ipswich's "No Objection",
+    Ribble Valley's "Permission Not Required"). Genuinely unrecognised
+    text beyond this is still diagnosed once per run rather than
+    silently filed."""
     if not s or s.strip() == "-":
         return "pending"
     key = s.lower()
-    if any(x in key for x in ("approv", "grant", "permit")):
-        return "approved"
-    if any(x in key for x in ("refus", "reject")):
+    # Checked BEFORE the approval check below — "agree" as a substring
+    # would otherwise also match "disagree", a plausible real refusal
+    # wording on this same platform that must not be misfiled as an
+    # approval just because it contains the same four letters.
+    if any(x in key for x in ("refus", "reject", "disagree")):
         return "refused"
+    if any(x in key for x in ("approv", "grant", "permit", "agree")):
+        return "approved"
     if "withdraw" in key:
         return "withdrawn"
     if any(x in key for x in ("consideration", "received", "pending", "awaiting")):
