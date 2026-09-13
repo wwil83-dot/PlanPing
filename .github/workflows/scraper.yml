@@ -88,6 +88,16 @@ on:
                           # underlying platform as Fylde Council — see
                           # planning_register_scraper.py's module
                           # docstring for the full evidence trail.
+   - cron: '30 9 * * *'   # Bridgend nightly scrape — promoted after two
+                          # confirmed clean production runs (2026-09-13):
+                          # 47 real applications saved both times, zero
+                          # errors, real reference format P/YY/NNN/TYPE,
+                          # resultsPerPage=50 shortcut confirmed working.
+                          # HONEST LIMITATION: geocoding hit rate is
+                          # lower than most scrapers (16 of 47 got a
+                          # real postcode) — plausibly genuine given
+                          # site-description-style addresses seen in
+                          # the real data, not yet confirmed as a bug.
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
     - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
@@ -3638,7 +3648,9 @@ jobs:
     # during diagnostics was undecided ("-") — the real decision-text
     # vocabulary for actual approvals/refusals hasn't been confirmed
     # yet.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'bridgend_scraper'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'bridgend_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '30 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
