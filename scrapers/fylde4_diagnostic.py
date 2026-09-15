@@ -210,9 +210,34 @@ async def diagnose_vowh_soxon(browser, name: str, url: str):
                 "input[type='submit'][value='Apply']:visible"
             )
             if await submit.count() > 0:
-                async with page.expect_navigation(wait_until="domcontentloaded", timeout=20_000):
-                    await submit.first.click(timeout=5_000)
-                print(f"    [{name}] REAL SUCCESS — submitted, post-submit URL: {page.url}")
+                # REAL FIX (round 8) — confirmed via the actual error:
+                # wrapping this click in expect_navigation() timed out,
+                # the same wrong assumption that initially blocked West
+                # Northants too. This platform likely updates results
+                # via an in-page AJAX call rather than a full page
+                # reload. Clicking normally and checking real page
+                # state afterward instead of assuming a navigation.
+                url_before = page.url
+                await submit.first.click(timeout=5_000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=15_000)
+                except PlaywrightTimeout:
+                    pass
+                await asyncio.sleep(2)
+                url_after = page.url
+                print(f"    [{name}] Real URL before click: {url_before}")
+                print(f"    [{name}] Real URL after click + wait: {url_after}")
+                if url_before != url_after:
+                    print(f"    [{name}] REAL SUCCESS — URL changed, a real navigation occurred")
+                else:
+                    body_text = await page.locator("body").inner_text()
+                    has_results_hint = any(
+                        kw in body_text for kw in ("Showing", "results", "Results", "No results")
+                    )
+                    print(f"    [{name}] Same URL — checking for AJAX-style in-page "
+                          f"update. Results-like text found in body: {has_results_hint}")
+                    if has_results_hint:
+                        print(f"    [{name}] REAL SUCCESS — results content appeared in-page")
             else:
                 # REAL FIX (round 6) — rather than guess at yet another
                 # selector, dump the real button/input markup within
