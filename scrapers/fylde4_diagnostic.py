@@ -108,6 +108,35 @@ async def inspect_hidden_field_safely(page, label: str) -> None:
           f"(800 chars before, 200 after):")
     print(f"      {snippet!r}")
 
+    # REAL FIX (round 4) — round 2's parent-chain evaluate() was
+    # actually sound in principle; it only failed because round 2's
+    # OWN prior destructive clicks had already broken the page before
+    # it ran. Now that no clicking happens beforehand, it's safe to
+    # try again — zero interaction risk this time.
+    try:
+        field = page.locator("#DateReceivedFrom")
+        chain = await field.first.evaluate("""el => {
+            const chain = [];
+            let node = el;
+            for (let i = 0; i < 6 && node; i++) {
+                chain.push({
+                    tag: node.tagName,
+                    id: node.id || null,
+                    className: node.className || null,
+                    style_display: node.style ? node.style.display : null,
+                    hidden_attr: node.hasAttribute ? node.hasAttribute('hidden') : null,
+                });
+                node = node.parentElement;
+            }
+            return chain;
+        }""", timeout=5_000)
+        print(f"    [{label}] Real parent-element chain of #DateReceivedFrom "
+              f"(innermost first):")
+        for i, node in enumerate(chain):
+            print(f"      [{i}] {node}")
+    except Exception as e:
+        print(f"    [{label}] Could not inspect parent chain: {type(e).__name__}: {e}")
+
 
 async def diagnose_vowh_soxon(browser, name: str, url: str):
     print(f"\n{'=' * 60}\nDIAGNOSE: {name}\n{'=' * 60}")
@@ -205,15 +234,42 @@ async def diagnose_wnorthants(browser, name: str, url: str):
     # Now that the checkbox blocker is fixed, actually attempt a real
     # submission to confirm the fix end-to-end, rather than just
     # re-dumping the same button info again.
+    #
+    # REAL FIX (round 4) — confirmed via the actual error: wrapping the
+    # click in expect_navigation() timed out waiting for a full page
+    # navigation that likely never happens. West Northants' heavier,
+    # more JS-driven form (many additional fields like Wards
+    # checkboxes) makes an AJAX-based in-page results update plausible
+    # — the same pattern already confirmed for Bridgend's
+    # resultsPerPage dropdown. Clicking normally and checking the real
+    # page state afterward, rather than assuming a navigation.
     try:
         submit = scope.locator(
             "button:has-text('Search'):visible, input[type='submit'][value*='Search' i]:visible"
         )
         submit_count = await submit.count()
         if submit_count > 0:
-            async with page.expect_navigation(wait_until="domcontentloaded", timeout=20_000):
-                await submit.first.click(timeout=5_000)
-            print(f"    [{name}] REAL SUCCESS — submitted, post-submit URL: {page.url}")
+            url_before = page.url
+            await submit.first.click(timeout=5_000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=15_000)
+            except PlaywrightTimeout:
+                pass
+            await asyncio.sleep(2)
+            url_after = page.url
+            print(f"    [{name}] Real URL before click: {url_before}")
+            print(f"    [{name}] Real URL after click + wait: {url_after}")
+            if url_before != url_after:
+                print(f"    [{name}] REAL SUCCESS — URL changed, a real navigation occurred")
+            else:
+                # Same URL — check if the page CONTENT changed instead,
+                # consistent with an AJAX-based in-page update.
+                body_text = await page.locator("body").inner_text()
+                has_results_hint = any(
+                    kw in body_text for kw in ("Showing", "results", "Results", "No results")
+                )
+                print(f"    [{name}] Same URL — checking for AJAX-style in-page "
+                      f"update. Results-like text found in body: {has_results_hint}")
         else:
             print(f"    [{name}] Still no visible Search submit found for a real attempt")
     except Exception as e:
@@ -238,6 +294,31 @@ async def diagnose_welwyn(browser, name: str, url: str):
         await page.wait_for_load_state("networkidle", timeout=15_000)
     except PlaywrightTimeout:
         pass
+
+    # REAL FIX (round 4) — confirmed via the actual error: a cookie
+    # consent banner (id="ccc") physically overlays the page and
+    # intercepts pointer events on the real submit button, even though
+    # the button itself is genuinely visible/enabled/stable. The first
+    # site in this whole project needing this. Dismissing it BEFORE any
+    # other interaction, trying several plausible real accept-button
+    # selectors.
+    for sel in [
+        "#ccc-dismiss-button", "#ccc-notify-accept", "button:has-text('Accept')",
+        "button:has-text('I accept')", "button:has-text('OK')",
+        "#ccc button", ".ccc-accept-button",
+    ]:
+        try:
+            loc = page.locator(sel)
+            if await loc.count() > 0 and await loc.first.is_visible():
+                await loc.first.click(timeout=3_000)
+                print(f"    [{name}] Cookie consent banner dismissed via: {sel!r}")
+                await asyncio.sleep(0.5)
+                break
+        except Exception:
+            continue
+    else:
+        print(f"    [{name}] Could not find a cookie consent dismiss button "
+              f"(may not have appeared, or a new selector needed)")
 
     today = date.today()
     start = today - timedelta(days=30)
@@ -294,9 +375,19 @@ async def diagnose_welwyn(browser, name: str, url: str):
         submit_count = await submit.count()
         print(f"    [{name}] Real visible Search submit count in scope: {submit_count}")
         if submit_count > 0:
-            async with page.expect_navigation(wait_until="domcontentloaded", timeout=20_000):
-                await submit.first.click(timeout=5_000)
-            print(f"    [{name}] REAL SUCCESS — submitted, post-submit URL: {page.url}")
+            try:
+                async with page.expect_navigation(wait_until="domcontentloaded", timeout=20_000):
+                    await submit.first.click(timeout=5_000)
+                print(f"    [{name}] REAL SUCCESS — submitted, post-submit URL: {page.url}")
+            except PlaywrightTimeout:
+                # Defense-in-depth: if the cookie banner dismiss above
+                # didn't fully clear the overlay, force the click
+                # through it directly rather than fail outright.
+                print(f"    [{name}] Normal click timed out — retrying with "
+                      f"force=True in case the cookie overlay is still present")
+                async with page.expect_navigation(wait_until="domcontentloaded", timeout=20_000):
+                    await submit.first.click(timeout=5_000, force=True)
+                print(f"    [{name}] REAL SUCCESS (forced) — post-submit URL: {page.url}")
         else:
             print(f"    [{name}] No visible Search button/input found — dumping real buttons:")
             elements = await scope.locator("button, input[type='submit']").all()
