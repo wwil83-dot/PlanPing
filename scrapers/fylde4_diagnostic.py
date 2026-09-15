@@ -76,79 +76,37 @@ async def click_through_disclaimer(page, label: str) -> bool:
     return False
 
 
-async def try_reveal_hidden_date_field(page, label: str) -> bool:
-    """Real test of the collapsible-section theory. Checks whether
-    #DateReceivedFrom is genuinely visible; if not, looks for plausible
-    expandable headers/toggles near it and tries clicking them, then
-    re-checks visibility. Returns True if the field is (or becomes)
-    visible."""
-    field = page.locator("#DateReceivedFrom")
-    if await field.count() == 0:
-        print(f"    [{label}] #DateReceivedFrom not found in DOM at all")
-        return False
-
-    is_visible = await field.first.is_visible()
-    print(f"    [{label}] #DateReceivedFrom real visibility BEFORE any interaction: {is_visible}")
-    if is_visible:
-        return True
-
-    candidates = [
-        "text=Planning", "legend:has-text('Planning')",
-        "[aria-expanded='false']", "button:has-text('Advanced')",
-        "a:has-text('Planning')", ".accordion-header", ".collapsible",
-        "[data-toggle='collapse']",
-    ]
-    for sel in candidates:
-        try:
-            loc = page.locator(sel)
-            count = await loc.count()
-            if count == 0:
-                continue
-            for i in range(min(count, 3)):
-                try:
-                    await loc.nth(i).click(timeout=3_000)
-                    await asyncio.sleep(0.5)
-                    now_visible = await field.first.is_visible()
-                    if now_visible:
-                        print(f"    [{label}] #DateReceivedFrom became VISIBLE "
-                              f"after clicking {sel!r} (match {i})")
-                        return True
-                except Exception:
-                    continue
-        except Exception:
-            continue
-
-    print(f"    [{label}] #DateReceivedFrom still not visible after trying "
-          f"{len(candidates)} plausible expandable-section selectors")
-
-    # REAL FALLBACK (round 2 fix) — the 8 guessed toggle selectors
-    # didn't work. Rather than guess a 9th blind, capture the real
-    # parent-element chain to see what's ACTUALLY hiding it (a
-    # display:none ancestor, a specific class, etc.) — real evidence
-    # instead of another guess.
+async def inspect_hidden_field_safely(page, label: str) -> None:
+    """REAL FIX (round 3) — round 2's 8 guessed toggle-click attempts
+    likely caused a real, destructive side effect: the follow-up
+    parent-chain check timed out entirely waiting for the element,
+    consistent with the page having reloaded/reset after one of those
+    blind clicks (a plausible candidate: "button:has-text('Advanced')"
+    may have matched a real form-submitting button, not a safe
+    collapsible toggle). Rather than keep guessing at clicks that risk
+    the same problem again, this only OBSERVES the real raw HTML around
+    the field — zero interaction, zero risk of triggering a reload."""
     try:
-        chain = await field.first.evaluate("""el => {
-            const chain = [];
-            let node = el;
-            for (let i = 0; i < 5 && node; i++) {
-                chain.push({
-                    tag: node.tagName,
-                    id: node.id || null,
-                    className: node.className || null,
-                    style_display: node.style ? node.style.display : null,
-                });
-                node = node.parentElement;
-            }
-            return chain;
-        }""")
-        print(f"    [{label}] Real parent-element chain of #DateReceivedFrom "
-              f"(innermost first):")
-        for i, node in enumerate(chain):
-            print(f"      [{i}] {node}")
+        html = await page.content()
     except Exception as e:
-        print(f"    [{label}] Could not inspect parent chain: {type(e).__name__}: {e}")
+        print(f"    [{label}] Could not get page content: {type(e).__name__}: {e}")
+        return
 
-    return False
+    idx = html.find('id="DateReceivedFrom"')
+    if idx == -1:
+        idx = html.find("id='DateReceivedFrom'")
+    if idx == -1:
+        print(f"    [{label}] Could not find DateReceivedFrom in raw HTML at all")
+        return
+
+    # Real surrounding markup — enough context to see any wrapping
+    # element's class/style that might explain why it's hidden.
+    start = max(0, idx - 800)
+    end = min(len(html), idx + 200)
+    snippet = html[start:end]
+    print(f"    [{label}] Real raw HTML surrounding #DateReceivedFrom "
+          f"(800 chars before, 200 after):")
+    print(f"      {snippet!r}")
 
 
 async def diagnose_vowh_soxon(browser, name: str, url: str):
@@ -164,19 +122,14 @@ async def diagnose_vowh_soxon(browser, name: str, url: str):
 
     await click_through_disclaimer(page, name)
 
-    revealed = await try_reveal_hidden_date_field(page, name)
-
-    if revealed:
-        print(f"    [{name}] Attempting real fill now that field is visible...")
-        try:
-            today = date.today()
-            start = today - timedelta(days=30)
-            await page.fill("#DateReceivedFrom", start.strftime("%d/%m/%Y"), timeout=5_000)
-            await page.fill("#DateReceivedTo", today.strftime("%d/%m/%Y"), timeout=5_000)
-            print(f"    [{name}] REAL SUCCESS — fill worked after revealing the section")
-        except Exception as e:
-            print(f"    [{name}] Fill still failed even after reveal attempt: "
-                  f"{type(e).__name__}: {e}")
+    field = page.locator("#DateReceivedFrom")
+    if await field.count() > 0:
+        is_visible = await field.first.is_visible()
+        print(f"    [{name}] #DateReceivedFrom real visibility: {is_visible}")
+        if not is_visible:
+            await inspect_hidden_field_safely(page, name)
+    else:
+        print(f"    [{name}] #DateReceivedFrom not found in DOM at all")
 
     safe = _safe_name(name)
     await page.screenshot(path=f"/tmp/fylde4_{safe}.png", full_page=True)
@@ -212,19 +165,24 @@ async def diagnose_wnorthants(browser, name: str, url: str):
     planning_checkbox = page.locator("input[name='SearchPlanning'][type='checkbox']")
     if await planning_checkbox.count() > 0:
         if not await planning_checkbox.first.is_checked():
-            # REAL FIX (round 2) — confirmed via the actual error: this
-            # checkbox is deliberately hidden via CSS (a common pattern
-            # where a styled label/icon is the real visible control) —
-            # Playwright's normal actionability check correctly refuses
-            # to click something invisible. force=True is the correct,
-            # legitimate technique for a real hidden-but-functional
-            # native input like this, not a workaround for a bug.
+            # REAL FIX (round 3) — confirmed via the actual error even
+            # with force=True: "Element is outside of the viewport".
+            # force=True bypasses the visibility check but Playwright's
+            # mouse-based click simulation still requires real
+            # coordinates within the viewport, which this element
+            # genuinely doesn't have. Setting the state directly via
+            # JS and dispatching a real 'change' event is the correct
+            # technique for a genuinely off-screen-but-functional
+            # native control — bypasses mouse simulation entirely.
             try:
-                await planning_checkbox.first.check(timeout=5_000, force=True)
-                print(f"    [{name}] SearchPlanning checkbox ticked (forced — "
-                      f"real checkbox is CSS-hidden, confirmed via prior run's error)")
+                await planning_checkbox.first.evaluate(
+                    "el => { el.checked = true; el.dispatchEvent(new Event('change', {bubbles: true})); }"
+                )
+                is_now_checked = await planning_checkbox.first.is_checked()
+                print(f"    [{name}] SearchPlanning checkbox set via direct JS — "
+                      f"real checked state now: {is_now_checked}")
             except Exception as e:
-                print(f"    [{name}] REAL ERROR ticking checkbox even with force: "
+                print(f"    [{name}] REAL ERROR setting checkbox via JS: "
                       f"{type(e).__name__}: {e}")
 
     form_loc = page.locator("form").filter(has=page.locator("#DateReceivedFrom"))
@@ -243,6 +201,23 @@ async def diagnose_wnorthants(browser, name: str, url: str):
             print(f"      [{i}] visible={visible} {outer[:200]!r}")
         except Exception:
             continue
+
+    # Now that the checkbox blocker is fixed, actually attempt a real
+    # submission to confirm the fix end-to-end, rather than just
+    # re-dumping the same button info again.
+    try:
+        submit = scope.locator(
+            "button:has-text('Search'):visible, input[type='submit'][value*='Search' i]:visible"
+        )
+        submit_count = await submit.count()
+        if submit_count > 0:
+            async with page.expect_navigation(wait_until="domcontentloaded", timeout=20_000):
+                await submit.first.click(timeout=5_000)
+            print(f"    [{name}] REAL SUCCESS — submitted, post-submit URL: {page.url}")
+        else:
+            print(f"    [{name}] Still no visible Search submit found for a real attempt")
+    except Exception as e:
+        print(f"    [{name}] REAL ERROR during submit attempt: {type(e).__name__}: {e}")
 
     safe = _safe_name(name)
     await page.screenshot(path=f"/tmp/fylde4_{safe}.png", full_page=True)
@@ -267,16 +242,26 @@ async def diagnose_welwyn(browser, name: str, url: str):
     today = date.today()
     start = today - timedelta(days=30)
 
+    # REAL FIX (round 3) — confirmed via the actual error: the field is
+    # <input type="date">, a native HTML5 date picker, which requires
+    # ISO format (YYYY-MM-DD) as its underlying value regardless of
+    # how the page visually displays dates — DD/MM/YYYY produced a
+    # "Malformed value" error. Genuinely different from every other
+    # confirmed platform in this cluster, which all use plain text
+    # inputs accepting DD/MM/YYYY.
+    start_iso = start.isoformat()
+    today_iso = today.isoformat()
+
     try:
-        await page.fill("#DateReceivedFrom", start.strftime("%d/%m/%Y"), timeout=5_000)
-        print(f"    [{name}] DateReceivedFrom filled OK")
+        await page.fill("#DateReceivedFrom", start_iso, timeout=5_000)
+        print(f"    [{name}] DateReceivedFrom filled OK (ISO format: {start_iso})")
     except Exception as e:
         print(f"    [{name}] REAL ERROR filling DateReceivedFrom: "
               f"{type(e).__name__}: {e}")
 
     try:
-        await page.fill("#DateReceivedTo", today.strftime("%d/%m/%Y"), timeout=5_000)
-        print(f"    [{name}] DateReceivedTo filled OK")
+        await page.fill("#DateReceivedTo", today_iso, timeout=5_000)
+        print(f"    [{name}] DateReceivedTo filled OK (ISO format: {today_iso})")
     except Exception as e:
         print(f"    [{name}] REAL ERROR filling DateReceivedTo: "
               f"{type(e).__name__}: {e}")
@@ -284,27 +269,36 @@ async def diagnose_welwyn(browser, name: str, url: str):
     planning_checkbox = page.locator("input[name='SearchPlanning'][type='checkbox']")
     try:
         if await planning_checkbox.count() > 0 and not await planning_checkbox.first.is_checked():
-            # Same real fix as West Northants — force=True in case this
-            # checkbox is also CSS-hidden behind a styled label.
-            await planning_checkbox.first.check(timeout=5_000, force=True)
-            print(f"    [{name}] SearchPlanning checkbox ticked OK (forced)")
+            await planning_checkbox.first.evaluate(
+                "el => { el.checked = true; el.dispatchEvent(new Event('change', {bubbles: true})); }"
+            )
+            is_now_checked = await planning_checkbox.first.is_checked()
+            print(f"    [{name}] SearchPlanning checkbox set via direct JS — "
+                  f"real checked state now: {is_now_checked}")
     except Exception as e:
-        print(f"    [{name}] REAL ERROR ticking checkbox even with force: {type(e).__name__}: {e}")
+        print(f"    [{name}] REAL ERROR setting checkbox via JS: {type(e).__name__}: {e}")
 
     form_loc = page.locator("form").filter(has=page.locator("#DateReceivedFrom"))
     form_count = await form_loc.count()
     scope = form_loc if form_count > 0 else page
 
     try:
-        submit = scope.locator("button:has-text('Search'):visible")
+        # REAL FIX (round 3) — confirmed via the actual dump: the real
+        # submit control is <input type="submit" value="Search">, not
+        # a <button> tag at all. button:has-text() can never match an
+        # <input>, which has no inner text content to search — only a
+        # value attribute. Broadened to check both real shapes.
+        submit = scope.locator(
+            "button:has-text('Search'):visible, input[type='submit'][value*='Search' i]:visible"
+        )
         submit_count = await submit.count()
-        print(f"    [{name}] Real visible 'Search' button count in scope: {submit_count}")
+        print(f"    [{name}] Real visible Search submit count in scope: {submit_count}")
         if submit_count > 0:
             async with page.expect_navigation(wait_until="domcontentloaded", timeout=20_000):
                 await submit.first.click(timeout=5_000)
             print(f"    [{name}] REAL SUCCESS — submitted, post-submit URL: {page.url}")
         else:
-            print(f"    [{name}] No visible Search button found — dumping real buttons:")
+            print(f"    [{name}] No visible Search button/input found — dumping real buttons:")
             elements = await scope.locator("button, input[type='submit']").all()
             for i, el in enumerate(elements[:15]):
                 try:
