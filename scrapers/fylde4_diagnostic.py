@@ -210,6 +210,16 @@ async def diagnose_vowh_soxon(browser, name: str, url: str):
                 "input[type='submit'][value='Apply']:visible"
             )
             if await submit.count() > 0:
+                submit_count = await submit.count()
+                if submit_count > 1:
+                    print(f"    [{name}] ⚠ {submit_count} real submit matches — "
+                          f"'.first' may not be the intended one")
+                try:
+                    clicked_outer = await submit.first.evaluate("el => el.outerHTML")
+                    print(f"    [{name}] Real element about to be clicked: {clicked_outer[:200]!r}")
+                except Exception:
+                    pass
+
                 # REAL FIX (round 8) — confirmed via the actual error:
                 # wrapping this click in expect_navigation() timed out,
                 # the same wrong assumption that initially blocked West
@@ -230,14 +240,34 @@ async def diagnose_vowh_soxon(browser, name: str, url: str):
                 if url_before != url_after:
                     print(f"    [{name}] REAL SUCCESS — URL changed, a real navigation occurred")
                 else:
+                    # REAL FIX (round 9) — the narrow "Showing/results"
+                    # keyword check found nothing, but that's a
+                    # different question from "did anything actually
+                    # happen". Checking real page structure directly
+                    # (tables, title) rather than guessing at more
+                    # keywords blind, same evidence-first approach used
+                    # for Bridgend's own results-structure diagnostic.
+                    title = await page.title()
+                    tables = await page.locator("table").all()
+                    print(f"    [{name}] Same URL. Real page title: {title!r}")
+                    print(f"    [{name}] Real <table> elements found: {len(tables)}")
+                    for i, t in enumerate(tables[:5]):
+                        try:
+                            cls = await t.get_attribute("class")
+                            rows = await t.locator("tr").count()
+                            print(f"      table[{i}]: class={cls!r} real row count={rows}")
+                        except Exception:
+                            continue
+
                     body_text = await page.locator("body").inner_text()
                     has_results_hint = any(
-                        kw in body_text for kw in ("Showing", "results", "Results", "No results")
+                        kw in body_text for kw in
+                        ("Showing", "results", "Results", "No results",
+                         "record", "Record", "found", "Found")
                     )
-                    print(f"    [{name}] Same URL — checking for AJAX-style in-page "
-                          f"update. Results-like text found in body: {has_results_hint}")
-                    if has_results_hint:
-                        print(f"    [{name}] REAL SUCCESS — results content appeared in-page")
+                    print(f"    [{name}] Broader results-like text found in body: {has_results_hint}")
+                    if len(tables) > 0 or has_results_hint:
+                        print(f"    [{name}] REAL SUCCESS — real structural evidence of results found")
             else:
                 # REAL FIX (round 6) — rather than guess at yet another
                 # selector, dump the real button/input markup within
