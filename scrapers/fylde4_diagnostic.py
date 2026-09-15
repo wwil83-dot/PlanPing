@@ -152,13 +152,72 @@ async def diagnose_vowh_soxon(browser, name: str, url: str):
     await click_through_disclaimer(page, name)
 
     field = page.locator("#DateReceivedFrom")
-    if await field.count() > 0:
-        is_visible = await field.first.is_visible()
-        print(f"    [{name}] #DateReceivedFrom real visibility: {is_visible}")
-        if not is_visible:
-            await inspect_hidden_field_safely(page, name)
-    else:
+    if await field.count() == 0:
         print(f"    [{name}] #DateReceivedFrom not found in DOM at all")
+        await context.close()
+        return
+
+    is_visible = await field.first.is_visible()
+    print(f"    [{name}] #DateReceivedFrom real visibility: {is_visible}")
+
+    if not is_visible:
+        # REAL, CONFIRMED FIX — the parent-chain inspection confirmed
+        # the actual mechanism: a native HTML5 <details> element,
+        # collapsed by default until its .open property is set. This
+        # is exactly what the user's own original manual notes
+        # described ("another planning title which produces a drop
+        # down"). Setting .open = true directly is robust — no need to
+        # find/click a specific summary text.
+        try:
+            opened = await field.first.evaluate(
+                "el => { const d = el.closest('details'); "
+                "if (d) { d.open = true; return true; } return false; }"
+            )
+            print(f"    [{name}] Set closest <details> ancestor .open=true: {opened}")
+            is_visible = await field.first.is_visible()
+            print(f"    [{name}] #DateReceivedFrom real visibility after opening <details>: {is_visible}")
+        except Exception as e:
+            print(f"    [{name}] REAL ERROR opening <details>: {type(e).__name__}: {e}")
+
+    if is_visible:
+        # REAL, CONFIRMED — same native HTML5 date input as Welwyn
+        # Hatfield (type="date", placeholder="DD/MM/YYYY" is just
+        # display text, the real value attribute needs ISO format).
+        today = date.today()
+        start = today - timedelta(days=30)
+        try:
+            await page.fill("#DateReceivedFrom", start.isoformat(), timeout=5_000)
+            await page.fill("#DateReceivedTo", today.isoformat(), timeout=5_000)
+            print(f"    [{name}] Date fields filled OK (ISO format)")
+        except Exception as e:
+            print(f"    [{name}] REAL ERROR filling dates: {type(e).__name__}: {e}")
+
+        planning_checkbox = page.locator("input[name='SearchPlanning'][type='checkbox']")
+        try:
+            if await planning_checkbox.count() > 0 and not await planning_checkbox.first.is_checked():
+                await planning_checkbox.first.evaluate(
+                    "el => { el.checked = true; el.dispatchEvent(new Event('change', {bubbles: true})); }"
+                )
+                print(f"    [{name}] SearchPlanning checkbox set via direct JS")
+        except Exception as e:
+            print(f"    [{name}] REAL ERROR setting checkbox: {type(e).__name__}: {e}")
+
+        form_loc = page.locator("form").filter(has=page.locator("#DateReceivedFrom"))
+        scope = form_loc if await form_loc.count() > 0 else page
+        try:
+            submit = scope.locator(
+                "button:has-text('Search'):visible, input[type='submit'][value*='Search' i]:visible"
+            )
+            if await submit.count() > 0:
+                async with page.expect_navigation(wait_until="domcontentloaded", timeout=20_000):
+                    await submit.first.click(timeout=5_000)
+                print(f"    [{name}] REAL SUCCESS — submitted, post-submit URL: {page.url}")
+            else:
+                print(f"    [{name}] No visible Search submit found")
+        except Exception as e:
+            print(f"    [{name}] REAL ERROR during submit: {type(e).__name__}: {e}")
+    else:
+        await inspect_hidden_field_safely(page, name)
 
     safe = _safe_name(name)
     await page.screenshot(path=f"/tmp/fylde4_{safe}.png", full_page=True)
@@ -270,6 +329,40 @@ async def diagnose_wnorthants(browser, name: str, url: str):
                 )
                 print(f"    [{name}] Same URL — checking for AJAX-style in-page "
                       f"update. Results-like text found in body: {has_results_hint}")
+
+                # REAL FOLLOW-UP (round 5) — the click produced neither
+                # a navigation nor visible results text. Checking for
+                # two real, plausible silent-failure causes: a client-
+                # side validation error message, or an overlay (like
+                # Welwyn Hatfield's cookie banner) that may have
+                # silently absorbed the click without Playwright
+                # raising an exception this time.
+                validation_errors = await page.locator(
+                    "[class*='validation' i]:visible, [class*='error' i]:visible, "
+                    ".field-validation-error:visible"
+                ).all()
+                print(f"    [{name}] Real visible validation/error elements found: "
+                      f"{len(validation_errors)}")
+                for i, el in enumerate(validation_errors[:10]):
+                    try:
+                        text = (await el.inner_text()).strip()
+                        if text:
+                            print(f"      [{i}] {text!r}")
+                    except Exception:
+                        continue
+
+                overlays = await page.locator(
+                    "[id*='cookie' i]:visible, [class*='cookie' i]:visible, "
+                    "[id*='overlay' i]:visible, [class*='overlay' i]:visible"
+                ).all()
+                print(f"    [{name}] Real visible cookie/overlay-like elements found: "
+                      f"{len(overlays)}")
+                for i, el in enumerate(overlays[:5]):
+                    try:
+                        outer = await el.evaluate("el => el.outerHTML")
+                        print(f"      [{i}] {outer[:200]!r}")
+                    except Exception:
+                        continue
         else:
             print(f"    [{name}] Still no visible Search submit found for a real attempt")
     except Exception as e:
