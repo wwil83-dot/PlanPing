@@ -213,7 +213,21 @@ async def diagnose_vowh_soxon(browser, name: str, url: str):
                     await submit.first.click(timeout=5_000)
                 print(f"    [{name}] REAL SUCCESS — submitted, post-submit URL: {page.url}")
             else:
-                print(f"    [{name}] No visible Search submit found")
+                # REAL FIX (round 6) — rather than guess at yet another
+                # selector, dump the real button/input markup within
+                # scope directly, same approach that found West
+                # Northants' and Welwyn Hatfield's real submit controls.
+                print(f"    [{name}] No visible Search submit found — dumping real buttons/inputs:")
+                elements = await scope.locator(
+                    "button, input[type='submit'], input[type='button']"
+                ).all()
+                for i, el in enumerate(elements[:20]):
+                    try:
+                        outer = await el.evaluate("el => el.outerHTML")
+                        visible = await el.is_visible()
+                        print(f"      [{i}] visible={visible} {outer[:200]!r}")
+                    except Exception:
+                        continue
         except Exception as e:
             print(f"    [{name}] REAL ERROR during submit: {type(e).__name__}: {e}")
     else:
@@ -307,7 +321,28 @@ async def diagnose_wnorthants(browser, name: str, url: str):
             "button:has-text('Search'):visible, input[type='submit'][value*='Search' i]:visible"
         )
         submit_count = await submit.count()
+        if submit_count > 1:
+            print(f"    [{name}] ⚠ {submit_count} real matches for the submit selector — "
+                  f"'.first' may not be clicking the intended one")
         if submit_count > 0:
+            try:
+                clicked_outer = await submit.first.evaluate("el => el.outerHTML")
+                print(f"    [{name}] Real element about to be clicked: {clicked_outer[:200]!r}")
+            except Exception:
+                pass
+
+            # REAL FOLLOW-UP (round 6) — the click reports no error but
+            # produces zero observable effect (no navigation, no AJAX
+            # content change, no validation, no overlay). Capturing
+            # real network requests during the click directly, rather
+            # than guessing at yet another silent-failure theory —
+            # this will show definitively whether ANY network activity
+            # happens at all.
+            requests_seen = []
+            def _on_request(req):
+                requests_seen.append(f"{req.method} {req.url}")
+            page.on("request", _on_request)
+
             url_before = page.url
             await submit.first.click(timeout=5_000)
             try:
@@ -315,6 +350,14 @@ async def diagnose_wnorthants(browser, name: str, url: str):
             except PlaywrightTimeout:
                 pass
             await asyncio.sleep(2)
+
+            page.remove_listener("request", _on_request)
+
+            print(f"    [{name}] Real network requests fired during/after click: "
+                  f"{len(requests_seen)}")
+            for req in requests_seen[:15]:
+                print(f"      {req}")
+
             url_after = page.url
             print(f"    [{name}] Real URL before click: {url_before}")
             print(f"    [{name}] Real URL after click + wait: {url_after}")
