@@ -120,6 +120,34 @@ async def try_reveal_hidden_date_field(page, label: str) -> bool:
 
     print(f"    [{label}] #DateReceivedFrom still not visible after trying "
           f"{len(candidates)} plausible expandable-section selectors")
+
+    # REAL FALLBACK (round 2 fix) — the 8 guessed toggle selectors
+    # didn't work. Rather than guess a 9th blind, capture the real
+    # parent-element chain to see what's ACTUALLY hiding it (a
+    # display:none ancestor, a specific class, etc.) — real evidence
+    # instead of another guess.
+    try:
+        chain = await field.first.evaluate("""el => {
+            const chain = [];
+            let node = el;
+            for (let i = 0; i < 5 && node; i++) {
+                chain.push({
+                    tag: node.tagName,
+                    id: node.id || null,
+                    className: node.className || null,
+                    style_display: node.style ? node.style.display : null,
+                });
+                node = node.parentElement;
+            }
+            return chain;
+        }""")
+        print(f"    [{label}] Real parent-element chain of #DateReceivedFrom "
+              f"(innermost first):")
+        for i, node in enumerate(chain):
+            print(f"      [{i}] {node}")
+    except Exception as e:
+        print(f"    [{label}] Could not inspect parent chain: {type(e).__name__}: {e}")
+
     return False
 
 
@@ -184,8 +212,20 @@ async def diagnose_wnorthants(browser, name: str, url: str):
     planning_checkbox = page.locator("input[name='SearchPlanning'][type='checkbox']")
     if await planning_checkbox.count() > 0:
         if not await planning_checkbox.first.is_checked():
-            await planning_checkbox.first.check(timeout=5_000)
-            print(f"    [{name}] SearchPlanning checkbox ticked")
+            # REAL FIX (round 2) — confirmed via the actual error: this
+            # checkbox is deliberately hidden via CSS (a common pattern
+            # where a styled label/icon is the real visible control) —
+            # Playwright's normal actionability check correctly refuses
+            # to click something invisible. force=True is the correct,
+            # legitimate technique for a real hidden-but-functional
+            # native input like this, not a workaround for a bug.
+            try:
+                await planning_checkbox.first.check(timeout=5_000, force=True)
+                print(f"    [{name}] SearchPlanning checkbox ticked (forced — "
+                      f"real checkbox is CSS-hidden, confirmed via prior run's error)")
+            except Exception as e:
+                print(f"    [{name}] REAL ERROR ticking checkbox even with force: "
+                      f"{type(e).__name__}: {e}")
 
     form_loc = page.locator("form").filter(has=page.locator("#DateReceivedFrom"))
     form_count = await form_loc.count()
@@ -244,10 +284,12 @@ async def diagnose_welwyn(browser, name: str, url: str):
     planning_checkbox = page.locator("input[name='SearchPlanning'][type='checkbox']")
     try:
         if await planning_checkbox.count() > 0 and not await planning_checkbox.first.is_checked():
-            await planning_checkbox.first.check(timeout=5_000)
-            print(f"    [{name}] SearchPlanning checkbox ticked OK")
+            # Same real fix as West Northants — force=True in case this
+            # checkbox is also CSS-hidden behind a styled label.
+            await planning_checkbox.first.check(timeout=5_000, force=True)
+            print(f"    [{name}] SearchPlanning checkbox ticked OK (forced)")
     except Exception as e:
-        print(f"    [{name}] REAL ERROR ticking checkbox: {type(e).__name__}: {e}")
+        print(f"    [{name}] REAL ERROR ticking checkbox even with force: {type(e).__name__}: {e}")
 
     form_loc = page.locator("form").filter(has=page.locator("#DateReceivedFrom"))
     form_count = await form_loc.count()
@@ -287,10 +329,32 @@ async def main():
         browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
         print(f"Chromium launched: {browser.version}")
 
-        await diagnose_vowh_soxon(browser, *CANDIDATES[0])
-        await diagnose_vowh_soxon(browser, *CANDIDATES[1])
-        await diagnose_wnorthants(browser, *CANDIDATES[2])
-        await diagnose_welwyn(browser, *CANDIDATES[3])
+        # REAL BUG FIX (round 2) — the actual run confirmed this
+        # matters: West Northants' unhandled checkbox timeout crashed
+        # the ENTIRE script (exit code 1), meaning Welwyn Hatfield
+        # never even ran at all. Isolating each candidate individually,
+        # matching the same discipline used throughout this project's
+        # other multi-council recon scripts (e.g. fylde_cluster_recon.py),
+        # so one candidate's failure never blocks the others.
+        try:
+            await diagnose_vowh_soxon(browser, *CANDIDATES[0])
+        except Exception as e:
+            print(f"\n⚠ Unexpected error diagnosing {CANDIDATES[0][0]}: {type(e).__name__}: {e}")
+
+        try:
+            await diagnose_vowh_soxon(browser, *CANDIDATES[1])
+        except Exception as e:
+            print(f"\n⚠ Unexpected error diagnosing {CANDIDATES[1][0]}: {type(e).__name__}: {e}")
+
+        try:
+            await diagnose_wnorthants(browser, *CANDIDATES[2])
+        except Exception as e:
+            print(f"\n⚠ Unexpected error diagnosing {CANDIDATES[2][0]}: {type(e).__name__}: {e}")
+
+        try:
+            await diagnose_welwyn(browser, *CANDIDATES[3])
+        except Exception as e:
+            print(f"\n⚠ Unexpected error diagnosing {CANDIDATES[3][0]}: {type(e).__name__}: {e}")
 
         await browser.close()
 
