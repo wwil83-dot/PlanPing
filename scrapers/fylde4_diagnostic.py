@@ -206,7 +206,8 @@ async def diagnose_vowh_soxon(browser, name: str, url: str):
         scope = form_loc if await form_loc.count() > 0 else page
         try:
             submit = scope.locator(
-                "button:has-text('Search'):visible, input[type='submit'][value*='Search' i]:visible"
+                "button:has-text('Search'):visible, input[type='submit'][value*='Search' i]:visible, "
+                "input[type='submit'][value='Apply']:visible"
             )
             if await submit.count() > 0:
                 async with page.expect_navigation(wait_until="domcontentloaded", timeout=20_000):
@@ -345,11 +346,23 @@ async def diagnose_wnorthants(browser, name: str, url: str):
 
             url_before = page.url
             await submit.first.click(timeout=5_000)
+
+            # REAL TEST (round 7) — the network capture confirmed
+            # invisible Google reCAPTCHA fires on click, and its own
+            # request URL specifies execute-ms=30000 — Google's widget
+            # allows up to 30 real seconds for its background check to
+            # resolve. The earlier ~17-second wait may simply have been
+            # too short to let it complete and the real form proceed
+            # automatically, which is how invisible reCAPTCHA is
+            # designed to work for genuine users. Waiting much longer
+            # this time before concluding it's a hard block.
+            print(f"    [{name}] Waiting up to 35 real seconds for invisible "
+                  f"reCAPTCHA to resolve on its own...")
             try:
-                await page.wait_for_load_state("networkidle", timeout=15_000)
+                await page.wait_for_load_state("networkidle", timeout=35_000)
             except PlaywrightTimeout:
                 pass
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
 
             page.remove_listener("request", _on_request)
 
