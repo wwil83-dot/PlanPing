@@ -218,26 +218,37 @@ def _parse_welhat_results_page(html: str, base_url: str, council_name: str) -> l
     items = results_list.find_all("li", class_="search-results-item")
     for item in items:
         link = item.find("a", href=True)
-        text = item.get_text("\n", strip=True)
-        lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
-        if not lines:
-            continue
-
-        # Real confirmed shape: reference is the first real line/link
-        # text in each item, before the labeled Location/Proposal/
-        # Decision/Decision Date blocks.
-        reference = link.get_text(strip=True) if link else lines[0]
+        reference = link.get_text(strip=True) if link else ""
         if not reference or len(reference) < 3:
             continue
 
+        # REAL FIX (2026-09-16) — confirmed via direct HTML inspection:
+        # each field is <p><strong><label>Location</label>:</strong>
+        # VALUE</p> — label text and the actual value are SEPARATE text
+        # nodes, so a flat get_text("\n")-then-line-match approach (the
+        # original attempt) split "Location" and ":" onto their own
+        # lines, meaning the "Location:" prefix check never matched
+        # anything — explaining why the ENTIRE field came back empty,
+        # not just the postcode. This finds each real <p>, reads its
+        # <label> for the field name, and takes the <p>'s own full text
+        # minus that label/colon prefix as the real value.
         location, proposal, decision = "", "", ""
-        for line in lines:
-            if line.startswith("Location:"):
-                location = line[len("Location:"):].strip()
-            elif line.startswith("Proposal:"):
-                proposal = line[len("Proposal:"):].strip()
-            elif line.startswith("Decision:") and not line.startswith("Decision Date:"):
-                decision = line[len("Decision:"):].strip()
+        for p in item.find_all("p"):
+            label = p.find("label")
+            if not label:
+                continue
+            field_name = label.get_text(strip=True)
+            full_text = p.get_text(" ", strip=True)
+            value = full_text
+            if value.startswith(field_name):
+                value = value[len(field_name):].lstrip(": ").strip()
+
+            if field_name == "Location":
+                location = value
+            elif field_name == "Proposal":
+                proposal = value
+            elif field_name == "Decision":
+                decision = value
 
         postcode = _extract_postcode(location)
         detail_url = urljoin(base_url, link["href"]) if link else None
