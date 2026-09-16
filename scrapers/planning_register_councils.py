@@ -48,10 +48,10 @@ other new platform in this project.
 # CANDIDATES list, kept exactly as originally provided by the user's
 # own browsing (not reconstructed from a web search).
 PLANNING_REGISTER_COUNCILS = [
-    # (council_name, base_url, needs_disclaimer, needs_cookie_dismiss, use_iso_dates)
-    ("Worcester City Council", "https://plan.worcester.gov.uk", False, False, False),
-    ("Vale of Glamorgan Council", "https://vogonline.planning-register.co.uk", True, False, False),
-    ("Welwyn Hatfield Borough Council", "https://planning.welhat.gov.uk", False, True, True),
+    # (council_name, base_url, needs_disclaimer, needs_cookie_dismiss, use_iso_dates, uses_list_results)
+    ("Worcester City Council", "https://plan.worcester.gov.uk", False, False, False, False),
+    ("Vale of Glamorgan Council", "https://vogonline.planning-register.co.uk", True, False, False, False),
+    ("Welwyn Hatfield Borough Council", "https://planning.welhat.gov.uk", False, True, True, True),
 ]
 
 # Fill these in with the real Supabase-assigned council ids after
