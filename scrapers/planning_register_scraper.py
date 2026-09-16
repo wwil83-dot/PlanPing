@@ -191,6 +191,76 @@ def _parse_results_page(html: str, base_url: str, council_name: str) -> list[dic
     return deduped
 
 
+def _parse_welhat_results_page(html: str, base_url: str, council_name: str) -> list[dict]:
+    """CONFIRMED real structure via welhat_results_diagnostic.py
+    (2026-09-16): NOT a table at all, unlike Worcester/Vale of
+    Glamorgan — <ul class="list" id="results"> containing
+    <li class="search-results-item"> elements, each with labeled text
+    blocks (Location:, Proposal:, Decision:, Decision Date:) rather
+    than table columns. A genuinely different results template from
+    the rest of this platform family, despite sharing the same
+    underlying search-form — confirms this vendor allows per-council
+    results-page themes. Real confirmed reference format seen:
+    "6/2026/1334/TPO" — different from Worcester/Vale of Glamorgan's
+    own reference formats too."""
+    soup = BeautifulSoup(html, "html.parser")
+    apps = []
+
+    results_list = soup.find("ul", id="results") or soup.find("ul", class_="list")
+    if not results_list:
+        if council_name not in _ROW_STRUCTURE_DIAGNOSED:
+            _ROW_STRUCTURE_DIAGNOSED.add(council_name)
+            print(f"    [{council_name}] ⚠ ROW STRUCTURE DIAGNOSTIC: real "
+                  f"<ul id='results'> not found — real structure may have "
+                  f"changed since confirmation")
+        return apps
+
+    items = results_list.find_all("li", class_="search-results-item")
+    for item in items:
+        link = item.find("a", href=True)
+        text = item.get_text("\n", strip=True)
+        lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
+        if not lines:
+            continue
+
+        # Real confirmed shape: reference is the first real line/link
+        # text in each item, before the labeled Location/Proposal/
+        # Decision/Decision Date blocks.
+        reference = link.get_text(strip=True) if link else lines[0]
+        if not reference or len(reference) < 3:
+            continue
+
+        location, proposal, decision = "", "", ""
+        for line in lines:
+            if line.startswith("Location:"):
+                location = line[len("Location:"):].strip()
+            elif line.startswith("Proposal:"):
+                proposal = line[len("Proposal:"):].strip()
+            elif line.startswith("Decision:") and not line.startswith("Decision Date:"):
+                decision = line[len("Decision:"):].strip()
+
+        postcode = _extract_postcode(location)
+        detail_url = urljoin(base_url, link["href"]) if link else None
+
+        apps.append({
+            "reference": reference,
+            "address": location,
+            "postcode": postcode,
+            "description": proposal,
+            "application_type": "Planning",
+            "status": _normalise_status(decision, council_name),
+            "council_url": detail_url,
+        })
+
+    seen_refs: set[str] = set()
+    deduped = []
+    for a in apps:
+        if a["reference"] not in seen_refs:
+            seen_refs.add(a["reference"])
+            deduped.append(a)
+    return deduped
+
+
 def _h():
     return {
         "apikey":        SUPABASE_KEY,
@@ -252,7 +322,7 @@ async def geocode(postcodes: list[str]) -> dict:
 class PlanningRegisterPortal:
     def __init__(self, council_name: str, base_url: str, needs_disclaimer: bool,
                  db_council_id: int, needs_cookie_dismiss: bool = False,
-                 use_iso_dates: bool = False):
+                 use_iso_dates: bool = False, uses_list_results: bool = False):
         self.council_name = council_name
         self.base_url = base_url.rstrip("/")
         self.search_url = f"{self.base_url}/Search/Advanced"
@@ -264,6 +334,12 @@ class PlanningRegisterPortal:
         # production behaviour is completely unchanged.
         self.needs_cookie_dismiss = needs_cookie_dismiss
         self.use_iso_dates = use_iso_dates
+        # ADDED for Welwyn Hatfield (2026-09-16) — confirmed via
+        # welhat_results_diagnostic.py: this council's real results
+        # page is a <ul id="results"><li> list, not a tblResults table
+        # like Worcester/Vale of Glamorgan. Defaults to False so their
+        # confirmed-working table parsing is completely unaffected.
+        self.uses_list_results = uses_list_results
 
     def _log(self, msg: str) -> None:
         print(f"    [{self.council_name}] {msg}")
@@ -413,7 +489,8 @@ class PlanningRegisterPortal:
         self._log(f"Post-submit URL: {page.url}")
 
         html = await page.content()
-        page1_apps = _parse_results_page(html, self.base_url, self.council_name)
+        parser = _parse_welhat_results_page if self.uses_list_results else _parse_results_page
+        page1_apps = parser(html, self.base_url, self.council_name)
         for a in page1_apps:
             if a["reference"] not in seen_refs:
                 seen_refs.add(a["reference"])
@@ -425,7 +502,15 @@ class PlanningRegisterPortal:
             if should_stop():
                 self._log(f"⚠ Time budget reached at page {page_num}, stopping")
                 break
-            next_link = page.locator("a[aria-label='Next Page.']:visible")
+            # Real confirmed pagination differs by platform template:
+            # Worcester/Vale of Glamorgan use aria-label="Next Page."
+            # (matching Fylde's own); Welwyn Hatfield's real body text
+            # confirmed via welhat_results_diagnostic.py shows plain
+            # "Next" text instead.
+            if self.uses_list_results:
+                next_link = page.locator("a:has-text('Next'):visible")
+            else:
+                next_link = page.locator("a[aria-label='Next Page.']:visible")
             if await next_link.count() == 0:
                 self._log(f"No visible 'Next' link — stopping at page {page_num - 1}")
                 break
@@ -441,7 +526,7 @@ class PlanningRegisterPortal:
                 break
 
             html = await page.content()
-            page_apps = _parse_results_page(html, self.base_url, self.council_name)
+            page_apps = parser(html, self.base_url, self.council_name)
             if not page_apps:
                 self._log(f"Page {page_num}: 0 apps parsed — stopping")
                 break
@@ -546,8 +631,9 @@ async def main():
         PlanningRegisterPortal(
             name, base_url, needs_disclaimer, COUNCIL_DB_IDS[name],
             needs_cookie_dismiss=needs_cookie_dismiss, use_iso_dates=use_iso_dates,
+            uses_list_results=uses_list_results,
         )
-        for name, base_url, needs_disclaimer, needs_cookie_dismiss, use_iso_dates
+        for name, base_url, needs_disclaimer, needs_cookie_dismiss, use_iso_dates, uses_list_results
         in PLANNING_REGISTER_COUNCILS
     ]
 
