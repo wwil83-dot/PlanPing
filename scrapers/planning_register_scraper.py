@@ -251,12 +251,19 @@ async def geocode(postcodes: list[str]) -> dict:
 
 class PlanningRegisterPortal:
     def __init__(self, council_name: str, base_url: str, needs_disclaimer: bool,
-                 db_council_id: int):
+                 db_council_id: int, needs_cookie_dismiss: bool = False,
+                 use_iso_dates: bool = False):
         self.council_name = council_name
         self.base_url = base_url.rstrip("/")
         self.search_url = f"{self.base_url}/Search/Advanced"
         self.needs_disclaimer = needs_disclaimer
         self.db_council_id = db_council_id
+        # ADDED for Welwyn Hatfield (2026-09-13) — two genuine platform
+        # quirks confirmed via fylde4_diagnostic.py, both defaulting to
+        # False so Worcester/Vale of Glamorgan's existing, confirmed
+        # production behaviour is completely unchanged.
+        self.needs_cookie_dismiss = needs_cookie_dismiss
+        self.use_iso_dates = use_iso_dates
 
     def _log(self, msg: str) -> None:
         print(f"    [{self.council_name}] {msg}")
@@ -282,11 +289,49 @@ class PlanningRegisterPortal:
                 continue
         self._log("⚠ Could not click through disclaimer with any known selector")
 
+    async def _dismiss_cookie_banner_if_needed(self, page) -> None:
+        """ADDED for Welwyn Hatfield (2026-09-13) — confirmed real,
+        specific need via fylde4_diagnostic.py's actual error: a cookie
+        consent banner overlay physically intercepts pointer events on
+        the real submit button ("<div id='ccc-overlay'>...intercepts
+        pointer events"). The first council in this platform family
+        needing this. Best-effort across several real candidate
+        selectors, confirmed working via "button:has-text('Accept')"."""
+        if not self.needs_cookie_dismiss:
+            return
+        for sel in [
+            "#ccc-dismiss-button", "#ccc-notify-accept", "button:has-text('Accept')",
+            "button:has-text('I accept')", "button:has-text('OK')",
+            "#ccc button", ".ccc-accept-button",
+        ]:
+            try:
+                loc = page.locator(sel)
+                if await loc.count() > 0 and await loc.first.is_visible():
+                    await loc.first.click(timeout=3_000)
+                    self._log(f"Cookie consent banner dismissed via: {sel!r}")
+                    await asyncio.sleep(0.5)
+                    return
+            except Exception:
+                continue
+        self._log("⚠ Could not find a cookie consent dismiss button "
+                   "(may not have appeared, or a new selector needed)")
+
     async def scrape(self, browser) -> list[dict]:
         today = date.today()
         start = today - timedelta(days=DAYS_BACK)
-        start_str = start.strftime("%d/%m/%Y")
-        end_str = today.strftime("%d/%m/%Y")
+        # ADDED for Welwyn Hatfield (2026-09-13) — confirmed real via
+        # fylde4_diagnostic.py: its date fields are native HTML5
+        # <input type="date">, which require ISO format (YYYY-MM-DD)
+        # as the real underlying value regardless of the page's
+        # visual DD/MM/YYYY placeholder text. Worcester/Vale of
+        # Glamorgan's own confirmed-working DD/MM/YYYY format is
+        # unchanged when this flag is False (the default).
+        if self.use_iso_dates:
+            start_str = start.isoformat()
+            end_str = today.isoformat()
+        else:
+            start_str = start.strftime("%d/%m/%Y")
+            end_str = today.strftime("%d/%m/%Y")
 
         all_apps: list[dict] = []
         seen_refs: set[str] = set()
@@ -301,6 +346,12 @@ class PlanningRegisterPortal:
             except PlaywrightTimeout:
                 pass
 
+            # ADDED for Welwyn Hatfield — cookie banner dismissal must
+            # happen before any other interaction, confirmed via the
+            # real diagnostic run order. No-op for councils where
+            # needs_cookie_dismiss is False (the default).
+            await self._dismiss_cookie_banner_if_needed(page)
+
             if self.needs_disclaimer:
                 await self._click_disclaimer_if_present(page)
                 if self.search_url not in page.url:
@@ -312,7 +363,25 @@ class PlanningRegisterPortal:
             planning_checkbox = page.locator("input[name='SearchPlanning'][type='checkbox']")
             if await planning_checkbox.count() > 0:
                 if not await planning_checkbox.first.is_checked():
-                    await planning_checkbox.first.check(timeout=5_000)
+                    try:
+                        await planning_checkbox.first.check(timeout=5_000)
+                    except Exception:
+                        # REAL FALLBACK — confirmed needed for Welwyn
+                        # Hatfield via fylde4_diagnostic.py, whose
+                        # checkbox click failed with real errors
+                        # ("outside of viewport", "did not change its
+                        # state") even with force=True. Setting state
+                        # directly via JS and dispatching a real
+                        # 'change' event bypasses mouse-simulation
+                        # entirely — confirmed working end-to-end.
+                        # Worcester/Vale of Glamorgan's own confirmed
+                        # .check() path is tried FIRST and unaffected
+                        # when it already succeeds.
+                        await planning_checkbox.first.evaluate(
+                            "el => { el.checked = true; "
+                            "el.dispatchEvent(new Event('change', {bubbles: true})); }"
+                        )
+                        self._log("SearchPlanning checkbox set via direct JS fallback")
 
             form_loc = page.locator("form").filter(has=page.locator("#DateReceivedFrom"))
             search_scope = form_loc if await form_loc.count() > 0 else page
@@ -474,8 +543,12 @@ async def main():
         sys.exit(1)
 
     portals = [
-        PlanningRegisterPortal(name, base_url, needs_disclaimer, COUNCIL_DB_IDS[name])
-        for name, base_url, needs_disclaimer in PLANNING_REGISTER_COUNCILS
+        PlanningRegisterPortal(
+            name, base_url, needs_disclaimer, COUNCIL_DB_IDS[name],
+            needs_cookie_dismiss=needs_cookie_dismiss, use_iso_dates=use_iso_dates,
+        )
+        for name, base_url, needs_disclaimer, needs_cookie_dismiss, use_iso_dates
+        in PLANNING_REGISTER_COUNCILS
     ]
 
     print(f"Scraping {len(portals)} councils…\n")
