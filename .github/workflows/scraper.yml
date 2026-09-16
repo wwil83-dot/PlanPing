@@ -3710,6 +3710,47 @@ jobs:
           DAYS_BACK: "30"
         run: cd scrapers && python bridgend_scraper.py
 
+  vowh_soxon_scraper:
+    # DELIBERATELY manual-trigger only for now — brand new platform,
+    # never run live, matching every other new platform's first job
+    # this session before a confirmed clean production run. Genuinely
+    # different results-rendering platform from Fylde/Worcester/Vale
+    # of Glamorgan/Welwyn Hatfield — a native HTML5 <details> element
+    # hiding the date fields, a whole list of PlanningApplicationTypes
+    # checkboxes instead of one boolean, an "Apply" submit button, and
+    # AJAX-based in-page results. See vowh_soxon_councils.py and
+    # vowh_soxon_scraper.py's own module docstrings for the full
+    # 9-round diagnostic trail. HONEST LIMITATION: the real result-row
+    # structure was never directly confirmed with actual populated
+    # data — every diagnostic run returned a genuine but empty
+    # "Search Results (0)" — this first real run is the first time the
+    # PlanningApplicationTypes-checkbox fix gets tested against real
+    # data. Check this run's log closely for the COUNT MISMATCH and
+    # ROW STRUCTURE diagnostics built into the scraper for exactly
+    # this reason.
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'vowh_soxon_scraper'
+    runs-on: [self-hosted, uk-runner]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright beautifulsoup4 httpx
+      - run: playwright install --with-deps chromium
+      - name: Run Vale of White Horse / South Oxfordshire scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_MINUTES: "15"
+          DAYS_BACK: "30"
+        run: cd scrapers && python vowh_soxon_scraper.py
+
   backlog_batch_recon4:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'backlog_batch_recon4'
     runs-on: [self-hosted, uk-runner]
