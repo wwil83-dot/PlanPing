@@ -98,6 +98,20 @@ on:
                           # real postcode) — plausibly genuine given
                           # site-description-style addresses seen in
                           # the real data, not yet confirmed as a bug.
+    - cron: '35 9 * * *'  # Vale of White Horse / South Oxfordshire nightly
+                          # scrape — promoted after two confirmed clean
+                          # production runs (2026-09-17): 225 real
+                          # applications saved both times (84 Vale of
+                          # White Horse + 141 South Oxfordshire), zero
+                          # errors. REPLACES the earlier search-form
+                          # approach entirely — that council's own site
+                          # banner confirms its search feature is
+                          # genuinely broken. Uses the Weekly List CSV
+                          # export instead, triggered via a real button
+                          # click rather than a plain link. HONEST
+                          # LIMITATION: this is a "Received" report with
+                          # no decision/status column — everything from
+                          # this source files as 'pending'.
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
     - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
@@ -4029,7 +4043,9 @@ jobs:
     # LIMITATION: this is a "Received" report with no decision/status
     # column at all — everything from this source files as 'pending'.
     # DELIBERATELY manual-trigger only for now — never run live yet.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'vowh_soxon_weeklylist_scraper'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'vowh_soxon_weeklylist_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '35 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
