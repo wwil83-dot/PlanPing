@@ -11,7 +11,7 @@ from typing import Optional
 from jinja2 import Environment, FileSystemLoader
 
 from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.db import get_db, lifespan
@@ -19,6 +19,12 @@ from app.geocode import postcode_lookup
 
 app = FastAPI(lifespan=lifespan, title="PlanPing")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+
+@app.get("/googled05728f4001c6ecf.html", response_class=PlainTextResponse)
+async def google_verification():
+    return "google-site-verification: googled05728f4001c6ecf.html"
+
 
 _jinja = Environment(loader=FileSystemLoader("app/templates"), autoescape=True)
 
