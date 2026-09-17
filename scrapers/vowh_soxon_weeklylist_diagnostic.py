@@ -73,62 +73,32 @@ async def diagnose(browser, name: str, base_url: str):
 
     print(f"    [{name}] Real Weekly List page URL: {page.url}")
 
-    # REAL FIX (round 2) — confirmed via the actual run: "CSV"/"PDF"
-    # links are very likely icon-based (an <a> wrapping an <img>, no
-    # literal "CSV" text inside the link itself) — the same kind of
-    # separated label/value structure already found on Welwyn
-    # Hatfield's results page earlier this session. Broadened to catch
-    # any real href containing .csv, plus any real link near text
-    # nodes reading "CSV".
-    all_links = await page.locator("a[href]").all()
-    real_csv_hrefs = []
-    for link in all_links:
-        href = await link.get_attribute("href")
-        if href and (".csv" in href.lower() or "csv" in href.lower()
-                     or "export" in href.lower() or "download" in href.lower()):
-            real_csv_hrefs.append(href)
+    # REAL FIX (round 3) — confirmed via the actual page HTML: this is
+    # NOT a plain <a href> link at all. It's a JS-triggered
+    # <button class="getWeeklyListCSV" data-date="...">, explaining
+    # why every href-based search found nothing — there's no URL to
+    # find, only a click handler. Finding and clicking the real first
+    # button directly.
+    csv_buttons = await page.locator("button.getWeeklyListCSV").all()
+    print(f"    [{name}] Real getWeeklyListCSV buttons found: {len(csv_buttons)}")
 
-    print(f"    [{name}] Real hrefs containing csv/export/download: {len(real_csv_hrefs)}")
-    for h in real_csv_hrefs[:5]:
-        print(f"      {h}")
-
-    if not real_csv_hrefs:
-        # REAL FIX (round 2) — the first attempt only dumped the first
-        # 3000 chars, which never got past <head> (scripts/styles) —
-        # never actually reached the real body content at all. Finding
-        # and dumping the real content area directly this time.
-        print(f"    [{name}] No obvious CSV href found — searching for the real content area")
+    if not csv_buttons:
+        print(f"    [{name}] No real CSV button found — dumping the real content area")
         try:
-            main_content = await page.locator("main, .container, table, .weekly-list, body").first.inner_html()
-            print(f"    [{name}] Real content area HTML (first 4000 chars):")
+            main_content = await page.locator("main, .container, body").first.inner_html()
             print(main_content[:4000])
         except Exception as e:
             print(f"    [{name}] Could not extract content area: {type(e).__name__}: {e}")
-
-        # Also dump every real link on the page, regardless of href
-        # content — the most direct way to see what's actually there.
-        print(f"\n    [{name}] Real full link inventory ({len(all_links)} links):")
-        for i, link in enumerate(all_links[:40]):
-            try:
-                href = await link.get_attribute("href")
-                text = (await link.inner_text()).strip()
-                has_img = await link.locator("img").count() > 0
-                print(f"      [{i}] href={href!r} text={text!r} has_img={has_img}")
-            except Exception:
-                continue
-
         await context.close()
         return
 
-    first_csv_url = real_csv_hrefs[0]
-    if not first_csv_url.startswith("http"):
-        first_csv_url = base_url + first_csv_url
-
-    print(f"    [{name}] Attempting real download from: {first_csv_url}")
+    first_button = csv_buttons[0]
+    real_date = await first_button.get_attribute("data-date")
+    print(f"    [{name}] Real first button's data-date: {real_date!r} — clicking it")
 
     try:
         async with page.expect_download(timeout=15_000) as download_info:
-            await page.goto(first_csv_url)
+            await first_button.click(timeout=5_000)
         download = await download_info.value
         safe_name = name.lower().replace(" ", "_")
         save_path = f"/tmp/weeklylist_{safe_name}.csv"
@@ -146,6 +116,7 @@ async def diagnose(browser, name: str, base_url: str):
         print(f"    [{name}] REAL ERROR downloading/reading CSV: {type(e).__name__}: {e}")
 
     await context.close()
+    return
 
 
 async def main():
