@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 {% block title %}{{ council.name }} Planning Applications — PlanFind{% endblock %}
+{% block head_extra %}
+{% if recent %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+{% endif %}
+{% endblock %}
 {% block content %}
 <header class="hero hero-compact">
   <div class="hero-inner">
@@ -26,15 +31,6 @@
         · <a href="{{ council.portal_url }}" target="_blank" rel="noopener">Visit council portal →</a>
         {% endif %}
       </p>
-      {# ADDED (2026-08-13) — explicit, clearly-labeled statement of
-         when WE last successfully scraped this council, deliberately
-         separate from any individual application's own date below
-         (which is when THAT application was submitted to the council —
-         a genuinely different thing). Real user confusion prompted
-         this: /councils correctly showed "Live, updated today" while
-         this page showed a week-old date with nothing explaining that
-         it belonged to a specific application, not to our own scraper
-         status. #}
       {% if council.status %}
       <p class="results-sub" style="margin-top:.3rem">
         {{ council.status.emoji }} Our data:
@@ -61,6 +57,23 @@
 
   {% if recent %}
 
+  {# ADDED (2026-09-16) — real, direct report: the "📍 Approx." badge
+     below had no accompanying map at all, unlike the postcode search
+     page which already shows exactly this kind of marker distinction.
+     Same toggleable map pattern as results.html, reusing the exact
+     same map_markers shape built in main.py's council_page route.
+     HONEST LIMITATION: only applications with a real lat/lng get a
+     marker for now — "Approx." applications have no coordinate at all
+     yet, so they correctly don't appear on the map rather than showing
+     in the wrong place, but that's a separate, bigger piece of work
+     (giving councils their own fallback centroid) not yet done. #}
+  {% if map_markers %}
+  <div style="margin-bottom:1rem">
+    <button class="btn btn-primary" style="font-size:1rem;padding:12px 22px" id="map-toggle-btn" onclick="toggleCouncilMap()">🗺️ Show map</button>
+  </div>
+  <div id="council-map" style="display:none;height:420px;border-radius:10px;border:1px solid var(--border);margin-bottom:1.25rem"></div>
+  {% endif %}
+
   {# Highlight any major applications at the top #}
   {% set major_apps = recent | selectattr("is_major") | list %}
   {% if major_apps %}
@@ -69,7 +82,7 @@
       ⚠ Major &amp; Outline Applications
     </h3>
     {% for app in major_apps %}
-    <article class="app-card app-card-major status-{{ app.status | lower }}">
+    <article class="app-card app-card-major status-{{ app.status | lower }}" id="app-card-{{ app.id }}">
       <div class="app-card-top">
         <div class="app-meta">
           <span class="app-ref">{{ app.reference }}</span>
@@ -103,7 +116,7 @@
     </h3>
     {% for app in recent %}
     {% if not app.is_major %}
-    <article class="app-card status-{{ app.status | lower }}">
+    <article class="app-card status-{{ app.status | lower }}" id="app-card-{{ app.id }}">
       <div class="app-card-top">
         <div class="app-meta">
           <span class="app-ref">{{ app.reference }}</span>
@@ -176,4 +189,95 @@
   color: #fff;
 }
 </style>
+
+{% block scripts %}
+{% if map_markers %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  var _councilMapInitialized = false;
+  var _lastHighlightedCouncilCard = null;
+
+  function toggleCouncilMap() {
+    var mapDiv = document.getElementById('council-map');
+    var btn = document.getElementById('map-toggle-btn');
+    var showing = mapDiv.style.display !== 'none';
+
+    if (showing) {
+      mapDiv.style.display = 'none';
+      btn.textContent = '🗺️ Show map';
+      return;
+    }
+
+    mapDiv.style.display = 'block';
+    btn.textContent = '📋 Hide map';
+
+    // Only build the map once — Leaflet can't cleanly re-init into the
+    // same div, and there's no need to rebuild it on every toggle.
+    // Same real reasoning as results.html's toggleResultsMap.
+    if (_councilMapInitialized) return;
+    _councilMapInitialized = true;
+
+    var apps = {{ map_markers | tojson }};
+    if (apps.length === 0) return;
+
+    // No single fixed search point here (unlike /search's searched
+    // postcode) — centers on the first real marker instead, same
+    // approach main.py's council_page route uses for the lat/lng it
+    // passes through.
+    var centerLat = {{ lat if lat is not none else 'null' }};
+    var centerLng = {{ lng if lng is not none else 'null' }};
+
+    var map = L.map('council-map').setView([centerLat, centerLng], 12);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    var bounds = [];
+
+    apps.forEach(function (app) {
+      var isCentroid = app.is_centroid;
+      var marker = L.circleMarker([app.lat, app.lng], {
+        radius: isCentroid ? 5 : 7,
+        color: isCentroid ? '#999' : '#c0392b',
+        fillColor: isCentroid ? '#ccc' : '#e74c3c',
+        fillOpacity: isCentroid ? 0.5 : 0.85,
+        weight: 1.5
+      }).addTo(map);
+
+      var popupHtml = '<strong>' + (app.reference || '') + '</strong><br>' +
+        (app.address || '') +
+        (isCentroid ? '<br><em style="font-size:.75rem">Approximate location</em>' : '') +
+        '<br><a href="/application/' + app.id + '">View details →</a>';
+      marker.bindPopup(popupHtml);
+
+      // Same click-to-highlight behaviour as results.html
+      marker.on('click', function () {
+        var card = document.getElementById('app-card-' + app.id);
+        if (!card) return;
+
+        if (_lastHighlightedCouncilCard) {
+          _lastHighlightedCouncilCard.classList.remove('map-highlighted');
+        }
+        card.classList.add('map-highlighted');
+        _lastHighlightedCouncilCard = card;
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        setTimeout(function () {
+          card.classList.remove('map-highlighted');
+          if (_lastHighlightedCouncilCard === card) _lastHighlightedCouncilCard = null;
+        }, 2500);
+      });
+
+      bounds.push([app.lat, app.lng]);
+    });
+
+    if (bounds.length > 1) {
+      map.fitBounds(bounds, { padding: [30, 30] });
+    }
+  }
+</script>
+{% endif %}
+{% endblock %}
 {% endblock %}
