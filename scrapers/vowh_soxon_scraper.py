@@ -1,37 +1,37 @@
 #!/usr/bin/env python3
 """
-PlanFind — Vale of White Horse & South Oxfordshire scraper (2026-09-13).
+PlanFind — Vale of White Horse & South Oxfordshire Weekly List CSV
+scraper (2026-09-17).
 
-Real, confirmed evidence trail — see vowh_soxon_councils.py's module
-docstring for the full summary, and fylde_cluster_recon.py /
-fylde4_diagnostic.py (9 diagnostic rounds) for how it was found.
+REPLACES the earlier search-form based scraper — see
+vowh_soxon_councils.py's module docstring for the full context on why
+(the council's own search feature is confirmed broken) and the
+real, confirmed CSV structure this is built from.
 
-HONEST LIMITATION, worth repeating here directly: every real test run
-during diagnosis returned a genuinely successful but EMPTY search
-("Search Results (0) - Online Register"), because the
-PlanningApplicationTypes-checkbox theory was only ever tested as a
-theory, never confirmed against real populated results before this
-scraper was written. The results parser below is built defensively —
-it extracts the real total count from the page title first (ground
-truth, independent of table-parsing), tries a broad set of real
-table-finding strategies, and logs clearly if what it finds doesn't
-match. The FIRST real production run should be checked closely.
-Pagination is similarly unconfirmed — no diagnostic ever reached a
-populated multi-page result — so this uses a generic, defensive
-Next-link search and stops cleanly (not an error) if none is found,
-treating a single page as the safe default until proven otherwise.
+REAL, CONFIRMED MECHANISM (via vowh_soxon_weeklylist_diagnostic.py):
+the Weekly List page has one button per week (button.getWeeklyListCSV,
+data-date="DD/MM/YYYY"), a JS-triggered download — not a plain link,
+so this needs a real browser click + Playwright's download capture,
+not a direct HTTP request.
+
+HONEST LIMITATION: this is a "Planning Applications Received" report
+— it has no decision/status column, so every application is filed as
+'pending'. The exact real format of received_complete_date and the
+real values ps2_category takes were never directly confirmed beyond
+the header names themselves — both are handled defensively below with
+diagnostics, not assumed.
 """
 import asyncio
+import csv
+import io
 import os
 import re
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
-from urllib.parse import urljoin
 
 import httpx
-from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
 
 from vowh_soxon_councils import VOWH_SOXON_COUNCILS, COUNCIL_DB_IDS
@@ -46,19 +46,15 @@ CONTEXT_OPTIONS = {
     "viewport": {"width": 1280, "height": 900},
     "locale": "en-GB",
     "ignore_https_errors": True,
+    "accept_downloads": True,
 }
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "15"))
 DAYS_BACK    = int(os.environ.get("DAYS_BACK", "30"))
-MAX_PAGES    = int(os.environ.get("MAX_PAGES", "30"))
 
 START_TIME = time.monotonic()
-
-# Real, confirmed pattern from the actual page title:
-# "Search Results (47) - Online Register"
-TITLE_COUNT_RE = re.compile(r"Search Results \((\d+)\)")
 
 
 def elapsed_minutes() -> float:
@@ -76,89 +72,107 @@ def _extract_postcode(text: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
-_STATUS_DIAGNOSED: dict[str, set[str]] = {}
+_DATE_FORMAT_DIAGNOSED: set[str] = set()
+_DATE_PREFIX_RE = re.compile(r"(\d{1,2}/\d{1,2}/\d{4})")
 
 
-def _normalise_status(s: str, council_name: str) -> str:
-    """Same general keyword vocabulary already proven across this
-    project's other scrapers. Genuinely unconfirmed real status text
-    for this platform — diagnosed clearly rather than guessed."""
-    if not s:
-        return "pending"
-    key = s.lower()
-    if any(x in key for x in ("approv", "grant", "permit")):
-        return "approved"
-    if any(x in key for x in ("refus", "reject")):
-        return "refused"
-    if "withdraw" in key:
-        return "withdrawn"
-    if any(x in key for x in ("consideration", "received", "pending", "awaiting")):
-        return "pending"
+def _parse_received_date(raw: str, council_name: str) -> Optional[date]:
+    """REAL FIX (2026-09-17) — confirmed via the actual first
+    production run: this field's real value stacks a validation
+    status ("Valid") on top of the real date, separated by an embedded
+    line break within the same CSV cell (e.g. "Valid\\r\\n09/09/2026")
+    — not a malformed date, a genuinely different real structure than
+    assumed. Extracts a real DD/M/YYYY-shaped date from anywhere in
+    the raw value rather than requiring the whole field to be just a
+    date. The prefix text itself is diagnosed once if it's ever
+    something other than the one real value confirmed so far
+    ("Valid") — worth knowing if a genuinely different status
+    (e.g. "Invalid") ever shows up here."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None
 
-    diagnosed = _STATUS_DIAGNOSED.setdefault(council_name, set())
-    if key not in diagnosed:
-        diagnosed.add(key)
-        print(f"    [{council_name}] ⚠ STATUS DIAGNOSTIC: unrecognised status "
-              f"{s!r} — filed as 'pending'")
-    return "pending"
+    match = _DATE_PREFIX_RE.search(raw)
+    if match:
+        prefix = raw[:match.start()].strip()
+        if prefix and prefix != "Valid" and prefix not in _DATE_FORMAT_DIAGNOSED:
+            _DATE_FORMAT_DIAGNOSED.add(prefix)
+            print(f"    [{council_name}] ⚠ DATE PREFIX DIAGNOSTIC: received_complete_date "
+                  f"had an unrecognised prefix {prefix!r} (only 'Valid' confirmed "
+                  f"before) — date still extracted, but this prefix's real "
+                  f"meaning is unconfirmed")
+        try:
+            return datetime.strptime(match.group(1), "%d/%m/%Y").date()
+        except ValueError:
+            pass
+
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d %b %Y", "%d %B %Y"):
+        try:
+            return datetime.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+    if raw not in _DATE_FORMAT_DIAGNOSED:
+        _DATE_FORMAT_DIAGNOSED.add(raw)
+        print(f"    [{council_name}] ⚠ DATE FORMAT DIAGNOSTIC: could not parse "
+              f"received_complete_date {raw!r} with any known format")
+    return None
 
 
-_ROW_STRUCTURE_DIAGNOSED: set[str] = set()
+def _parse_weeklylist_csv(raw_bytes: bytes, council_name: str) -> list[dict]:
+    """Real, confirmed structure via vowh_soxon_weeklylist_diagnostic.py:
+    3 metadata/title lines before the real header row. Rather than
+    assume a fixed line count (fragile if it ever changes slightly),
+    finds the real header line by its confirmed, distinctive first
+    column name, then uses csv.DictReader from there — which correctly
+    handles quoted fields containing embedded newlines, unlike a naive
+    line-by-line split."""
+    text = raw_bytes.decode("utf-8-sig", errors="replace")  # utf-8-sig strips a real BOM if present
+    lines = text.splitlines(keepends=True)
 
+    header_idx = None
+    for i, line in enumerate(lines):
+        if line.strip().startswith("application_number"):
+            header_idx = i
+            break
 
-def _parse_results_page(html: str, base_url: str, council_name: str) -> list[dict]:
-    """HONEST LIMITATION (see module docstring): this platform's real
-    result-row structure was never directly confirmed with actual
-    data. Tries table.tblResults first (in case it shares Fylde's
-    family's structure after all, despite everything else diverging),
-    then falls back to ANY real table with rows containing a real
-    application-reference-like link, with clear diagnostics either
-    way."""
-    soup = BeautifulSoup(html, "html.parser")
+    if header_idx is None:
+        print(f"    [{council_name}] ⚠ CSV STRUCTURE DIAGNOSTIC: could not find "
+              f"the real 'application_number' header line — real format may "
+              f"have changed")
+        return []
+
+    csv_text = "".join(lines[header_idx:])
+    reader = csv.DictReader(io.StringIO(csv_text))
+
     apps = []
+    for row in reader:
+        reference = (row.get("application_number") or "").strip()
+        if not reference:
+            continue
 
-    tables = soup.find_all("table", class_="tblResults")
-    if not tables:
-        tables = soup.find_all("table")
-        if tables and council_name not in _ROW_STRUCTURE_DIAGNOSED:
-            _ROW_STRUCTURE_DIAGNOSED.add(council_name)
-            print(f"    [{council_name}] ⚠ ROW STRUCTURE DIAGNOSTIC: no "
-                  f"table.tblResults found — falling back to {len(tables)} "
-                  f"generic <table> element(s). Real structure genuinely "
-                  f"unconfirmed for this platform — check this run's saved "
-                  f"data carefully.")
+        location = (row.get("location1") or "").strip()
+        proposal = (row.get("proposal1") or "").strip()
+        applicant = (row.get("applicants_name") or "").strip()
+        received_raw = (row.get("received_complete_date") or "").strip()
+        # HONEST LIMITATION (see module docstring) — real values never
+        # confirmed beyond the column name; passed through as-is
+        # rather than guessed at.
+        category = (row.get("ps2_category") or "").strip()
 
-    for table in tables:
-        rows = table.find_all("tr")
-        for row in rows:
-            link = row.find("a", href=True)
-            if not link:
-                continue
+        description = proposal
+        if applicant:
+            description = f"{description} (Applicant: {applicant})".strip()
 
-            cells = row.find_all("td")
-            if len(cells) < 3:
-                continue
-
-            reference = link.get_text(strip=True)
-            if not reference or len(reference) < 3:
-                continue
-
-            location_raw = cells[1].get_text(strip=True) if len(cells) > 1 else ""
-            proposal = " ".join(c.get_text(strip=True) for c in cells[2:]) if len(cells) > 2 else ""
-            status_raw = cells[-1].get_text(strip=True) if len(cells) > 3 else ""
-
-            postcode = _extract_postcode(location_raw)
-            detail_url = urljoin(base_url, link["href"])
-
-            apps.append({
-                "reference": reference,
-                "address": location_raw,
-                "postcode": postcode,
-                "description": proposal,
-                "application_type": "Planning",
-                "status": _normalise_status(status_raw, council_name),
-                "council_url": detail_url,
-            })
+        apps.append({
+            "reference": reference,
+            "address": location or None,
+            "postcode": _extract_postcode(location),
+            "description": description or None,
+            "application_type": category or "Planning",
+            "status": "pending",  # confirmed: a "Received" report has no decision data at all
+            "submitted_date": _parse_received_date(received_raw, council_name),
+            "council_url": None,  # not present in this CSV export
+        })
 
     seen_refs: set[str] = set()
     deduped = []
@@ -227,193 +241,108 @@ async def geocode(postcodes: list[str]) -> dict:
     return results
 
 
-class VowhSoxonPortal:
-    def __init__(self, council_name: str, base_url: str, db_council_id: int):
-        self.council_name = council_name
-        self.base_url = base_url.rstrip("/")
-        self.search_url = f"{self.base_url}/Search/Advanced"
-        self.db_council_id = db_council_id
+def _log(council_name: str, msg: str) -> None:
+    print(f"    [{council_name}] {msg}")
 
-    def _log(self, msg: str) -> None:
-        print(f"    [{self.council_name}] {msg}")
 
-    async def _click_disclaimer_if_present(self, page) -> None:
-        """Confirmed real button text: "Accept" (an exact match, unlike
-        Vale of Glamorgan's partial "Accept & Continue")."""
-        if "Disclaimer" not in page.url:
-            return
-        for selector in ["button:has-text('Accept')", "input[value*='Accept' i]"]:
-            try:
-                loc = page.locator(selector)
-                if await loc.count() > 0:
-                    async with page.expect_navigation(wait_until="domcontentloaded", timeout=15_000):
-                        await loc.first.click(timeout=5_000)
-                    return
-            except Exception:
-                continue
-        self._log("⚠ Could not click through disclaimer with any known selector")
-
-    async def scrape(self, browser) -> list[dict]:
-        today = date.today()
-        start = today - timedelta(days=DAYS_BACK)
-        # Confirmed: native HTML5 <input type="date"> — ISO format
-        # required, same as Welwyn Hatfield on the other platform.
-        start_str = start.isoformat()
-        end_str = today.isoformat()
-
-        all_apps: list[dict] = []
-        seen_refs: set[str] = set()
-
-        context = await browser.new_context(**CONTEXT_OPTIONS)
-        page = await context.new_page()
-
+async def _click_disclaimer_if_present(page, council_name: str) -> None:
+    if "Disclaimer" not in page.url:
+        return
+    for selector in ["button:has-text('Accept')", "input[value*='Accept' i]"]:
         try:
-            await page.goto(self.search_url, wait_until="domcontentloaded", timeout=45_000)
+            loc = page.locator(selector)
+            if await loc.count() > 0:
+                async with page.expect_navigation(wait_until="domcontentloaded", timeout=15_000):
+                    await loc.first.click(timeout=5_000)
+                return
+        except Exception:
+            continue
+    _log(council_name, "⚠ Could not click through disclaimer with any known selector")
+
+
+async def scrape_council(browser, council_name: str, base_url: str) -> list[dict]:
+    weekly_list_url = f"{base_url}/Planning/WeeklyList"
+    all_apps: list[dict] = []
+    seen_refs: set[str] = set()
+
+    context = await browser.new_context(**CONTEXT_OPTIONS)
+    page = await context.new_page()
+
+    try:
+        await page.goto(weekly_list_url, wait_until="domcontentloaded", timeout=45_000)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=15_000)
+        except PlaywrightTimeout:
+            pass
+
+        await _click_disclaimer_if_present(page, council_name)
+
+        if "WeeklyList" not in page.url:
+            await page.goto(weekly_list_url, wait_until="domcontentloaded", timeout=45_000)
             try:
                 await page.wait_for_load_state("networkidle", timeout=15_000)
             except PlaywrightTimeout:
                 pass
+    except Exception as e:
+        _log(council_name, f"⚠ Could not load real Weekly List page: {type(e).__name__}: {e!r}")
+        await context.close()
+        return []
 
-            await self._click_disclaimer_if_present(page)
+    csv_buttons = await page.locator("button.getWeeklyListCSV").all()
+    _log(council_name, f"Real getWeeklyListCSV buttons found: {len(csv_buttons)}")
 
-            field = page.locator("#DateReceivedFrom")
-            if await field.count() == 0:
-                self._log("⚠ #DateReceivedFrom not found in DOM at all — stopping")
-                await context.close()
-                return []
+    cutoff = date.today() - timedelta(days=DAYS_BACK)
+    relevant_buttons = []
+    for btn in csv_buttons:
+        raw_date = await btn.get_attribute("data-date")
+        try:
+            btn_date = datetime.strptime(raw_date, "%d/%m/%Y").date()
+        except (ValueError, TypeError):
+            continue
+        if btn_date >= cutoff:
+            relevant_buttons.append((btn_date, btn))
 
-            if not await field.first.is_visible():
-                try:
-                    opened = await field.first.evaluate(
-                        "el => { const d = el.closest('details'); "
-                        "if (d) { d.open = true; return true; } return false; }"
-                    )
-                    self._log(f"Set closest <details> ancestor .open=true: {opened}")
-                except Exception as e:
-                    self._log(f"⚠ Could not open <details> ancestor: {type(e).__name__}: {e}")
+    _log(council_name, f"Real buttons within the last {DAYS_BACK} days: {len(relevant_buttons)}")
 
-            if not await field.first.is_visible():
-                self._log("⚠ #DateReceivedFrom still not visible after opening "
-                           "<details> — stopping")
-                await context.close()
-                return []
-
-            await page.fill("#DateReceivedFrom", start_str, timeout=5_000)
-            await page.fill("#DateReceivedTo", end_str, timeout=5_000)
-
-            type_checkboxes = await page.locator("input[id^='PlanningApplicationTypes_']").all()
-            ticked_count = 0
-            for cb in type_checkboxes:
-                try:
-                    if not await cb.is_checked():
-                        await cb.evaluate(
-                            "el => { el.checked = true; "
-                            "el.dispatchEvent(new Event('change', {bubbles: true})); }"
-                        )
-                        ticked_count += 1
-                except Exception:
-                    continue
-            self._log(f"Ticked {ticked_count} of {len(type_checkboxes)} real "
-                       f"PlanningApplicationTypes checkboxes")
-
-            form_loc = page.locator("form").filter(has=page.locator("#DateReceivedFrom"))
-            scope = form_loc if await form_loc.count() > 0 else page
-
-            submit = scope.locator(
-                "input[type='submit'][value='Apply']:visible, "
-                "button:has-text('Search'):visible, input[type='submit'][value*='Search' i]:visible"
-            )
-            if await submit.count() == 0:
-                self._log("⚠ No visible submit button found — stopping")
-                await context.close()
-                return []
-
-            await submit.first.click(timeout=5_000)
-            try:
-                await page.wait_for_load_state("networkidle", timeout=15_000)
-            except PlaywrightTimeout:
-                pass
-            await asyncio.sleep(2)
+    for btn_date, btn in relevant_buttons:
+        if should_stop():
+            _log(council_name, f"⚠ Time budget reached, stopping at week of {btn_date}")
+            break
+        try:
+            async with page.expect_download(timeout=15_000) as download_info:
+                await btn.click(timeout=5_000)
+            download = await download_info.value
+            raw_bytes = b""
+            temp_path = await download.path()
+            if temp_path:
+                with open(temp_path, "rb") as f:
+                    raw_bytes = f.read()
         except Exception as e:
-            self._log(f"⚠ Search fill/submit failed: {type(e).__name__}: {e!r}")
-            await context.close()
-            return []
+            _log(council_name, f"⚠ Could not download week of {btn_date}: {type(e).__name__}: {e}")
+            continue
 
-        title = await page.title()
-        self._log(f"Post-submit page title: {title!r}")
-        title_match = TITLE_COUNT_RE.search(title)
-        expected_count = int(title_match.group(1)) if title_match else None
-        if expected_count is not None:
-            self._log(f"Real expected result count from page title: {expected_count}")
-
-        html = await page.content()
-        page1_apps = _parse_results_page(html, self.base_url, self.council_name)
-        for a in page1_apps:
+        week_apps = _parse_weeklylist_csv(raw_bytes, council_name)
+        new_count = 0
+        for a in week_apps:
             if a["reference"] not in seen_refs:
                 seen_refs.add(a["reference"])
                 all_apps.append(a)
-        self._log(f"Page 1: {len(page1_apps)} parsed (running total {len(all_apps)})")
+                new_count += 1
+        _log(council_name, f"Week of {btn_date}: {new_count} new "
+             f"(running total {len(all_apps)})")
 
-        if expected_count is not None and len(all_apps) != expected_count:
-            self._log(f"⚠ COUNT MISMATCH DIAGNOSTIC: page title says "
-                       f"{expected_count} real results exist, but the parser "
-                       f"only found {len(all_apps)} — real row structure or "
-                       f"pagination may need attention")
-
-        page_num = 2
-        while page_num <= MAX_PAGES:
-            if should_stop():
-                self._log(f"⚠ Time budget reached at page {page_num}, stopping")
-                break
-            next_link = page.locator(
-                "a:has-text('Next'):visible, a[aria-label*='next' i]:visible"
-            )
-            if await next_link.count() == 0:
-                if page_num == 2:
-                    self._log("No real 'Next' link found — treating as a single page "
-                               "(pagination mechanism unconfirmed for this platform)")
-                break
-            try:
-                await next_link.first.click(timeout=10_000)
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=10_000)
-                except PlaywrightTimeout:
-                    pass
-                await asyncio.sleep(1.5)
-            except Exception as e:
-                self._log(f"⚠ Could not click Next at page {page_num}: {type(e).__name__}")
-                break
-
-            html = await page.content()
-            page_apps = _parse_results_page(html, self.base_url, self.council_name)
-            if not page_apps:
-                self._log(f"Page {page_num}: 0 apps parsed — stopping")
-                break
-
-            new_count = 0
-            for a in page_apps:
-                if a["reference"] not in seen_refs:
-                    seen_refs.add(a["reference"])
-                    all_apps.append(a)
-                    new_count += 1
-            self._log(f"Page {page_num}: {new_count} new (running total {len(all_apps)})")
-            if new_count == 0:
-                self._log(f"Page {page_num}: 0 NEW apps — stopping")
-                break
-            page_num += 1
-
-        await context.close()
-        return all_apps
+    await context.close()
+    return all_apps
 
 
-async def process_council(portal: VowhSoxonPortal, browser) -> int:
-    cid = portal.db_council_id
-    print(f"\n[{portal.council_name}] (council_id={cid})")
+async def process_council(browser, council_name: str, base_url: str) -> int:
+    cid = COUNCIL_DB_IDS[council_name]
+    print(f"\n[{council_name}] (council_id={cid})")
 
     try:
-        raw_apps = await portal.scrape(browser)
+        raw_apps = await scrape_council(browser, council_name, base_url)
     except Exception as e:
-        print(f"    [{portal.council_name}] ✗ Error: {e}")
+        print(f"    [{council_name}] ✗ Error: {e}")
         return 0
 
     if not raw_apps:
@@ -425,7 +354,7 @@ async def process_council(portal: VowhSoxonPortal, browser) -> int:
     postcodes = [a["postcode"] for a in raw_apps if a.get("postcode")]
     coords = await geocode(postcodes) if postcodes else {}
     if postcodes:
-        print(f"    [{portal.council_name}] Geocoding {len(postcodes)} postcodes…")
+        print(f"    [{council_name}] Geocoding {len(postcodes)} postcodes…")
 
     fallback_count = 0
     records = []
@@ -441,33 +370,35 @@ async def process_council(portal: VowhSoxonPortal, browser) -> int:
         records.append({
             "council_id": cid,
             "reference": a["reference"],
-            "address": a.get("address") or None,
+            "address": a.get("address"),
             "postcode": a.get("postcode"),
-            "description": a.get("description") or None,
+            "description": a.get("description"),
             "application_type": a.get("application_type"),
             "status": a["status"],
+            "submitted_date": a["submitted_date"].isoformat() if a.get("submitted_date") else None,
             "council_url": a.get("council_url"),
             "lat": lat,
             "lng": lng,
-            "source": "vowh_soxon_scraper",
+            "source": "vowh_soxon_weeklylist_scraper",
         })
 
     if fallback_count:
-        print(f"    [{portal.council_name}] Council centroid fallback for {fallback_count} apps")
+        print(f"    [{council_name}] Council centroid fallback for {fallback_count} apps")
 
-    print(f"    [{portal.council_name}] Upserting {len(records)} records with council_id={cid}")
+    print(f"    [{council_name}] Upserting {len(records)} records with council_id={cid}")
     ok = await _supa_upsert(records)
     if ok:
-        print(f"    [{portal.council_name}] ✓ Saved {len(records)}")
+        print(f"    [{council_name}] ✓ Saved {len(records)}")
         await _supa_patch_council(cid, {
-            "coverage_source": "vowh_soxon_scraper",
+            "coverage_source": "vowh_soxon_weeklylist_scraper",
             "last_saved_at": datetime.now(timezone.utc).isoformat(),
         })
     return len(records) if ok else 0
 
 
 async def main():
-    print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Vale of White Horse / South Oxfordshire scraper")
+    print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Vale of White Horse / "
+          f"South Oxfordshire Weekly List scraper")
     print(f"Days back:   {DAYS_BACK}")
     print(f"Budget:      {MAX_MINUTES} minutes")
     print(f"SUPABASE:    {'set' if SUPABASE_URL and SUPABASE_KEY else 'MISSING'}\n")
@@ -476,30 +407,13 @@ async def main():
         print("ERROR: SUPABASE_URL / SUPABASE_KEY not set.")
         sys.exit(1)
 
-    unresolved = [name for name, cid in COUNCIL_DB_IDS.items() if cid is None]
-    if unresolved:
-        print("ERROR: the following councils still have a placeholder (None) "
-              "DB id in vowh_soxon_councils.py:")
-        for name in unresolved:
-            print(f"  - {name}")
-        print("\nRun vowh_soxon_councils.py's INSERT_SQL in Supabase "
-              "first, then replace each None above with the real id.")
-        sys.exit(1)
-
-    portals = [
-        VowhSoxonPortal(name, base_url, COUNCIL_DB_IDS[name])
-        for name, base_url in VOWH_SOXON_COUNCILS
-    ]
-
-    print(f"Scraping {len(portals)} councils…\n")
-
+    total = 0
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
         print(f"Chromium launched: {browser.version}\n")
 
-        total = 0
-        for portal in portals:
-            total += await process_council(portal, browser)
+        for council_name, base_url in VOWH_SOXON_COUNCILS:
+            total += await process_council(browser, council_name, base_url)
 
         await browser.close()
 
