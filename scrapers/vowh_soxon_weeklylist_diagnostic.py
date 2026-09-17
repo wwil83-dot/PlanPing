@@ -73,19 +73,19 @@ async def diagnose(browser, name: str, base_url: str):
 
     print(f"    [{name}] Real Weekly List page URL: {page.url}")
 
-    # Real, direct capture of the first row's CSV link href — no
-    # guessing at a URL pattern, reading it straight from the page.
-    csv_links = await page.locator("a", has_text="CSV").all()
-    print(f"    [{name}] Real 'CSV' link-text elements found: {len(csv_links)}")
-
-    # The CSV text often sits next to the real link, not inside an <a>
-    # itself — also check for any anchor whose href looks like a real
-    # download endpoint.
+    # REAL FIX (round 2) — confirmed via the actual run: "CSV"/"PDF"
+    # links are very likely icon-based (an <a> wrapping an <img>, no
+    # literal "CSV" text inside the link itself) — the same kind of
+    # separated label/value structure already found on Welwyn
+    # Hatfield's results page earlier this session. Broadened to catch
+    # any real href containing .csv, plus any real link near text
+    # nodes reading "CSV".
     all_links = await page.locator("a[href]").all()
     real_csv_hrefs = []
     for link in all_links:
         href = await link.get_attribute("href")
-        if href and ("csv" in href.lower() or "export" in href.lower() or "download" in href.lower()):
+        if href and (".csv" in href.lower() or "csv" in href.lower()
+                     or "export" in href.lower() or "download" in href.lower()):
             real_csv_hrefs.append(href)
 
     print(f"    [{name}] Real hrefs containing csv/export/download: {len(real_csv_hrefs)}")
@@ -93,9 +93,30 @@ async def diagnose(browser, name: str, base_url: str):
         print(f"      {h}")
 
     if not real_csv_hrefs:
-        print(f"    [{name}] No obvious CSV href found — dumping first 3000 chars of real page HTML")
-        html = await page.content()
-        print(html[:3000])
+        # REAL FIX (round 2) — the first attempt only dumped the first
+        # 3000 chars, which never got past <head> (scripts/styles) —
+        # never actually reached the real body content at all. Finding
+        # and dumping the real content area directly this time.
+        print(f"    [{name}] No obvious CSV href found — searching for the real content area")
+        try:
+            main_content = await page.locator("main, .container, table, .weekly-list, body").first.inner_html()
+            print(f"    [{name}] Real content area HTML (first 4000 chars):")
+            print(main_content[:4000])
+        except Exception as e:
+            print(f"    [{name}] Could not extract content area: {type(e).__name__}: {e}")
+
+        # Also dump every real link on the page, regardless of href
+        # content — the most direct way to see what's actually there.
+        print(f"\n    [{name}] Real full link inventory ({len(all_links)} links):")
+        for i, link in enumerate(all_links[:40]):
+            try:
+                href = await link.get_attribute("href")
+                text = (await link.inner_text()).strip()
+                has_img = await link.locator("img").count() > 0
+                print(f"      [{i}] href={href!r} text={text!r} has_img={has_img}")
+            except Exception:
+                continue
+
         await context.close()
         return
 
