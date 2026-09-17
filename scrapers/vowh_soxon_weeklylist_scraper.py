@@ -73,17 +73,39 @@ def _extract_postcode(text: str) -> Optional[str]:
 
 
 _DATE_FORMAT_DIAGNOSED: set[str] = set()
+_DATE_PREFIX_RE = re.compile(r"(\d{1,2}/\d{1,2}/\d{4})")
 
 
 def _parse_received_date(raw: str, council_name: str) -> Optional[date]:
-    """HONEST LIMITATION (see module docstring): the real format of
-    this field was never directly confirmed with actual data beyond
-    the column name itself. Tries the most likely UK formats; a
-    genuinely unrecognised format is diagnosed once rather than
-    silently dropped."""
+    """REAL FIX (2026-09-17) — confirmed via the actual first
+    production run: this field's real value stacks a validation
+    status ("Valid") on top of the real date, separated by an embedded
+    line break within the same CSV cell (e.g. "Valid\\r\\n09/09/2026")
+    — not a malformed date, a genuinely different real structure than
+    assumed. Extracts a real DD/M/YYYY-shaped date from anywhere in
+    the raw value rather than requiring the whole field to be just a
+    date. The prefix text itself is diagnosed once if it's ever
+    something other than the one real value confirmed so far
+    ("Valid") — worth knowing if a genuinely different status
+    (e.g. "Invalid") ever shows up here."""
     raw = (raw or "").strip()
     if not raw:
         return None
+
+    match = _DATE_PREFIX_RE.search(raw)
+    if match:
+        prefix = raw[:match.start()].strip()
+        if prefix and prefix != "Valid" and prefix not in _DATE_FORMAT_DIAGNOSED:
+            _DATE_FORMAT_DIAGNOSED.add(prefix)
+            print(f"    [{council_name}] ⚠ DATE PREFIX DIAGNOSTIC: received_complete_date "
+                  f"had an unrecognised prefix {prefix!r} (only 'Valid' confirmed "
+                  f"before) — date still extracted, but this prefix's real "
+                  f"meaning is unconfirmed")
+        try:
+            return datetime.strptime(match.group(1), "%d/%m/%Y").date()
+        except ValueError:
+            pass
+
     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d %b %Y", "%d %B %Y"):
         try:
             return datetime.strptime(raw, fmt).date()
