@@ -27,21 +27,11 @@ def render(template: str, ctx: dict) -> HTMLResponse:
     return HTMLResponse(_jinja.get_template(template).render(**ctx))
 
 
-# ADDED (2026-09-11) — shared cache for council_count/app_count,
-# confirmed via a real Supabase query performance audit: the exact same
-# two queries were being run independently, fresh, in THREE separate
-# places (index, search's postcode-not-found fallback, and about) —
-# 12,715 calls for council_count alone. Neither value changes faster
-# than scrapers actually save new data throughout the day, so a short
-# cache serves all three routes safely. Same 15-minute TTL as the
-# councils-with-counts cache, for the same reasoning.
 _HOMEPAGE_STATS_CACHE: dict = {"council_count": None, "app_count": None, "cached_at": None}
 _HOMEPAGE_STATS_CACHE_TTL = timedelta(minutes=15)
 
 
 async def _get_cached_homepage_stats(db) -> tuple[int, int]:
-    """Returns (council_count, app_count), cached and shared across
-    every route that shows these headline numbers."""
     now = datetime.now(timezone.utc)
     cached_at = _HOMEPAGE_STATS_CACHE["cached_at"]
     if (cached_at is not None
@@ -77,46 +67,17 @@ async def index(request: Request):
     })
 
 
-# ADDED (2026-09-06) — real, direct request: every other "Planning
-# Search" dropdown item (Today's Activity, Street History, Towns, Bulk
-# Search) leads to a focused, single-purpose page — Postcode was the
-# odd one out, dumping people back on the full marketing homepage
-# (hero image, stats, features, coverage map) every time. This gives it
-# the same clean, focused treatment as the others. The actual search
-# form still posts to the exact same /search route — no backend search
-# logic changes at all, just a lighter-weight entry point.
 @app.get("/postcode-search", response_class=HTMLResponse)
 async def postcode_search_page(request: Request):
     return render("postcode_search.html", {"request": request})
 
 
 def _normalize_keyword(keyword: Optional[str]) -> Optional[str]:
-    """Empty or whitespace-only input becomes None (no filter) — same
-    lesson already learned once this session for status/app_type: a
-    blank field submitted alongside real filters must never silently
-    exclude every result. Pulled out as its own function so tests
-    exercise the real logic, not a separate copy that could drift."""
     keyword = keyword.strip() if keyword else ""
     return keyword or None
 
 
 def _parse_date_param(value: Optional[str]) -> Optional[date]:
-    """BUG FIX (2026-08-13) — a real, confirmed production bug. Route
-    parameters typed as `Optional[date]` get validated by FastAPI/
-    Pydantic BEFORE our own code ever runs — an empty string fails that
-    validation as "not a valid date" and returns a 422, since Pydantic
-    treats a blank string as malformed input, not as an absent
-    parameter. This is the exact same empty-string-vs-None lesson
-    already learned and fixed for status/app_type/keyword — but those
-    are plain `Optional[str]` params, where FastAPI passes the empty
-    string straight through and OUR OWN code gets to normalize it. A
-    strictly-typed `Optional[date]` never gives us that chance at all.
-    The real fix: routes accept the raw string (Optional[str]) and call
-    this function to parse it themselves — normalizing blank/whitespace
-    input to None first, exactly like every other filter on this site,
-    THEN parsing whatever's left into a real date. A genuinely malformed
-    date (not just blank) is treated as "no filter" too, rather than
-    crashing the whole page over one bad value in the URL."""
     value = value.strip() if value else ""
     if not value:
         return None
@@ -126,11 +87,6 @@ def _parse_date_param(value: Optional[str]) -> Optional[date]:
         return None
 
 
-# ADDED (2026-08-11) — allowlisted sort options. SQL ORDER BY can't be
-# parameterized with $N placeholders the way column VALUES can — the
-# only safe way to make it user-selectable is to map a validated key
-# to a fixed, hardcoded SQL snippet like this, never interpolate raw
-# user input into the query string directly.
 SORT_OPTIONS = {
     "date_desc": "a.submitted_date DESC NULLS LAST, an.distance_miles",
     "date_asc": "a.submitted_date ASC NULLS LAST, an.distance_miles",
@@ -138,15 +94,6 @@ SORT_OPTIONS = {
 }
 DEFAULT_SORT = "date_desc"
 
-# BUG FIX (2026-08-11) — a genuinely SEPARATE mapping for tag pages,
-# after SORT_OPTIONS above caused a 500 on every single tag-page
-# request regardless of which sort was chosen. Both "date_desc" and
-# "date_asc" reference "an.distance_miles" as a secondary tiebreaker —
-# a table alias from the applications_near() Postgres function used by
-# the main postcode search, which tag pages never join against at all
-# (no postcode/search point on those pages for a distance to be
-# relative to). Deliberately has no "distance" key at all — there's
-# nothing correct it could ever map to here.
 TAG_SORT_OPTIONS = {
     "date_desc": "a.submitted_date DESC NULLS LAST",
     "date_asc": "a.submitted_date ASC NULLS LAST",
@@ -154,21 +101,10 @@ TAG_SORT_OPTIONS = {
 
 
 def _resolve_sort_order(sort: Optional[str]) -> str:
-    """Maps a validated sort key to its fixed SQL snippet, defaulting to
-    DEFAULT_SORT for anything unrecognized (including None) — this is
-    the actual safety boundary: an unknown/malicious value never
-    reaches the query string, it just falls back to the default."""
     return SORT_OPTIONS.get(sort, SORT_OPTIONS[DEFAULT_SORT])
 
 
 def _widen_days_for_date_range(days: int, date_from: Optional[date]) -> int:
-    """applications_near() only accepts a simple lookback window, not an
-    explicit date range — when a real date_from is given, this widens
-    the window passed into that function so its own internal filter
-    can't accidentally exclude something the precise date_from/date_to
-    check (applied separately, directly on a.submitted_date) actually
-    wants. Never narrows — only ever returns days itself, or something
-    larger."""
     if date_from is None:
         return days
     widened = (date.today() - date_from).days
@@ -182,30 +118,10 @@ async def _fetch_applications(db, lat: float, lng: float, radius: float, days: i
                                sort: Optional[str] = None,
                                date_from: Optional[date] = None,
                                date_to: Optional[date] = None) -> list[dict]:
-    # FIX (2026-07-30) — same real bug found and fixed on the tag pages,
-    # applied here at the shared source so every caller (search,
-    # search_csv, bulk_search, application_detail's neighbours) is
-    # covered by one change rather than patching each route separately.
-    # A GET form with multiple dropdowns in one <form> submits every
-    # field, including untouched ones left at their blank default
-    # ("" from <option value="">Any status</option>") — an empty string
-    # isn't the same as an absent parameter, and the old SQL check only
-    # treated a genuinely missing value as "no filter".
     status = status or None
     app_type = app_type or None
     keyword = _normalize_keyword(keyword)
 
-    # ADDED (2026-08-11) — explicit date range. applications_near() is a
-    # Postgres FUNCTION that only accepts a simple lookback window
-    # (p_days_back), not an explicit from/to range — changing that would
-    # mean a real schema migration. Rather than touch the function, when
-    # a real date range is given we widen the days_back passed INTO the
-    # function (so its own internal filter can't accidentally exclude
-    # something we actually want), then apply the precise date_from/
-    # date_to boundary as an additional filter in THIS query, which has
-    # direct access to a.submitted_date. No migration needed, and the
-    # function's existing simple-lookback behaviour is untouched for
-    # every caller that doesn't pass a range.
     effective_days = _widen_days_for_date_range(days, date_from)
     order_by = _resolve_sort_order(sort)
 
@@ -214,7 +130,7 @@ async def _fetch_applications(db, lat: float, lng: float, radius: float, days: i
             a.id, a.reference, a.address, a.postcode,
             a.description, a.application_type, a.status,
             a.submitted_date, a.decision_date, a.council_url,
-            a.lat, a.lng,
+            a.lat, a.lng, a.geocode_quality,
             c.name AS council_name, c.slug AS council_slug,
             c.coverage_source,
             an.distance_miles
@@ -274,27 +190,8 @@ async def _fetch_tagged_applications(db, tag: str, status: Optional[str] = None,
                                       date_to: Optional[date] = None,
                                       limit: int = 200) -> list[dict]:
     keyword = _normalize_keyword(keyword)
-    # BUG FIX (2026-08-11) — this was causing a genuine 500 on EVERY tag
-    # page request, regardless of which sort was actually chosen. The
-    # earlier version only special-cased "distance" as invalid here (no
-    # applications_near() join in this query), but missed that BOTH
-    # remaining SORT_OPTIONS entries (date_desc AND date_asc) ALSO
-    # reference "an.distance_miles" as a secondary tiebreaker — a table
-    # alias that doesn't exist in this query's FROM clause either way.
-    # Postgres correctly rejected every single query with "missing
-    # FROM-clause entry for table an", 100% of the time, since even the
-    # DEFAULT sort fell into this trap. Fixed using TAG_SORT_OPTIONS
-    # (see its own definition above), a genuinely separate mapping that
-    # never references that alias at all.
     order_by = TAG_SORT_OPTIONS.get(sort, TAG_SORT_OPTIONS["date_desc"])
 
-    # ADDED (2026-08-11) — keyword/sort/date range, reusing the exact
-    # same keyword normalization already built and tested for the main
-    # postcode search. No date-widening workaround needed here, unlike
-    # _fetch_applications — this query goes straight against
-    # planning_applications with a plain WHERE clause, not through the
-    # applications_near() Postgres function that only accepts a simple
-    # lookback window.
     rows = await db.fetch(f"""
         SELECT
             a.id, a.reference, a.address, a.postcode,
@@ -326,10 +223,6 @@ async def _fetch_tagged_applications(db, tag: str, status: Optional[str] = None,
 
 
 async def _fetch_tag_council_options(db, tag: str) -> list[dict]:
-    """Councils that genuinely have at least one application under this
-    tag — used to populate the filter dropdown, so it only ever lists
-    real, useful options rather than every council in the system
-    (including ones with zero matches for this particular tag)."""
     rows = await db.fetch("""
         SELECT DISTINCT c.name, c.slug
         FROM planning_applications a
@@ -344,15 +237,6 @@ STATUS_FILTER_OPTIONS = ["pending", "approved", "refused", "withdrawn"]
 TYPE_FILTER_OPTIONS = ["householder", "full", "outline", "listed", "tree",
                        "advert", "prior", "major", "other"]
 
-# Councils whose real, live results view genuinely never displays a
-# submission date at all — confirmed via direct raw-data evidence
-# (2026-07-28), not a scraper bug we're still chasing. Applications from
-# these councils will always show "Unknown date" here even though the
-# application itself obviously has a real date — the council's own
-# portal has it, our scraper's data source just doesn't expose it in
-# this particular view. See arcus_scraper.py's module comments for the
-# full investigation. Worth surfacing this honestly in the UI rather
-# than let it look like a generic missing-data gap.
 COUNCILS_WITHOUT_DATE_DATA = {
     "Powys County Council",
     "Erewash Borough Council",
@@ -362,12 +246,6 @@ COUNCILS_WITHOUT_DATE_DATA = {
 
 
 def _add_date_availability_flag(applications: list[dict]) -> None:
-    """Mutates each application dict in place, adding
-    'date_unavailable_note' — True only when we genuinely know the date
-    is missing for a structural reason (council in the list above), not
-    just because it hasn't been decided/scraped yet. Templates can use
-    this to show a clear "check the council's own portal for the exact
-    date" note instead of a bare, unexplained "Unknown date"."""
     for a in applications:
         a["date_unavailable_note"] = (
             a.get("submitted_date") is None
@@ -383,13 +261,6 @@ async def search(request: Request, postcode: str, radius: float = 1.0, days: int
                   date_from: Optional[str] = None, date_to: Optional[str] = None):
     postcode = postcode.strip().upper()
     location = await postcode_lookup(postcode)
-    # BUG FIX (2026-08-13) — parsed here, not via the route's own type
-    # hint. See _parse_date_param's docstring for the full real-bug
-    # writeup: an Optional[date] parameter gets validated by FastAPI
-    # before our code runs, and an empty string (which the filter form
-    # sends whenever the date fields are left blank) fails that
-    # validation as malformed input rather than being treated as
-    # "no filter" — every filter submission was 422ing site-wide.
     date_from_parsed = _parse_date_param(date_from)
     date_to_parsed = _parse_date_param(date_to)
 
@@ -680,7 +551,7 @@ async def council_page(request: Request, slug: str):
         recent = await db.fetch("""
             SELECT id, reference, address, description,
                    application_type, status, submitted_date,
-                   lat, lng
+                   lat, lng, geocode_quality
             FROM planning_applications
             WHERE council_id = $1
             ORDER BY submitted_date DESC NULLS LAST
@@ -693,31 +564,32 @@ async def council_page(request: Request, slug: str):
         a["is_major"] = _is_major(a.get("application_type", ""), a.get("reference", ""))
         a["is_mapped"] = a.get("lat") is not None
         a["days_ago"] = _days_ago(a.get("submitted_date"))
-        # council_name isn't in the row SELECT above (the whole page is
-        # already scoped to one council) — added here just so the shared
-        # flag helper below can reuse the same logic everywhere else.
         a["council_name"] = council["name"]
 
     _add_date_availability_flag(apps)
 
+    # ADDED (2026-09-16) — real, direct report: this page's "Approx."
+    # badge had no accompanying map at all, unlike the postcode search
+    # page which already shows exactly this kind of marker distinction.
+    # Same map_markers shape as /search and /towns/{slug}, built from
+    # the same real coordinates already selected above — only
+    # applications with a genuine lat/lng get a marker for now.
+    map_markers = [
+        {
+            "id": a["id"],
+            "lat": a["lat"],
+            "lng": a["lng"],
+            "reference": a.get("reference") or "",
+            "address": a.get("address") or "",
+            "is_centroid": a.get("geocode_quality") == "centroid",
+        }
+        for a in apps
+        if a.get("lat") is not None and a.get("lng") is not None
+    ]
+
     council_dict = dict(council)
     council_dict["date_unavailable_note"] = council["name"] in COUNCILS_WITHOUT_DATE_DATA
 
-    # ADDED (2026-08-13) — same real status already built for
-    # /councils, reused here for consistency. This page previously had
-    # NO council-wide "last updated" statement at all — the only date
-    # visible was each individual application's own days_ago, which is
-    # a genuinely different thing (when that application was submitted
-    # to the council, not when we last successfully scraped). A real
-    # user report confirmed exactly this confusion: /councils correctly
-    # said "Live, updated today" while this page showed a one-week-old
-    # date on the top application card, with nothing on the page
-    # distinguishing which fact was which.
-    # Fallback source for _effective_days_since_save when last_saved_at
-    # is NULL — apps is already sorted DESC by submitted_date (NULLS
-    # LAST), so the first entry's own date is the best available
-    # evidence of real freshness if the scraper never recorded
-    # last_saved_at directly.
     fallback_date = apps[0].get("submitted_date") if apps else None
     days_since_save = _effective_days_since_save(council["last_saved_at"], fallback_date)
     council_dict["days_since_save"] = days_since_save
@@ -727,23 +599,14 @@ async def council_page(request: Request, slug: str):
         "request": request,
         "council": council_dict,
         "recent": apps,
+        "map_markers": map_markers,
+        "lat": apps[0]["lat"] if apps and apps[0].get("lat") is not None else None,
+        "lng": apps[0]["lng"] if apps and apps[0].get("lat") is not None else None,
     })
 
 
 @app.get("/about", response_class=HTMLResponse)
 async def about(request: Request):
-    # CHANGED 2026-08-18 — real evidence: about.html was found to be
-    # badly stale (named 4 specific councils as "current coverage" —
-    # Camden, Wigan, Canterbury, South Lakeland — with nothing dynamic
-    # backing that claim, and no way for it to have stayed accurate as
-    # coverage grew). Reusing the exact same council_count/app_count
-    # query the homepage already uses, rather than inventing a new one
-    # or hardcoding numbers here, which would just go stale the same
-    # way again.
-    # CHANGED (2026-09-11) — now via the shared cache (see
-    # _get_cached_homepage_stats) rather than its own third independent
-    # copy of the same query, confirmed as one of three identical
-    # duplicates in a real query performance audit.
     async with get_db() as db:
         council_count, app_count = await _get_cached_homepage_stats(db)
     return render("about.html", {
@@ -804,12 +667,6 @@ async def activity(request: Request):
 @app.get("/trends", response_class=HTMLResponse)
 async def trends(request: Request):
     async with get_db() as db:
-        # Kept as-is, per real, direct request — repositioned smaller
-        # in the template rather than removed. Only reliably populated
-        # for a handful of councils right now (most scrapers don't yet
-        # re-check applications for a decision after first finding
-        # them), a real, separate, parked issue — not a bug in this
-        # query itself.
         approval_rows = await db.fetch("""
             SELECT
                 c.name,
@@ -829,10 +686,6 @@ async def trends(request: Request):
             ORDER BY approval_rate_pct DESC
         """)
 
-        # ADDED (2026-09-07) — real, direct request: reliable today
-        # since it only depends on submitted_date, which every scraper
-        # captures at first discovery — unlike approval rate, this
-        # doesn't depend on ever re-checking an application later.
         most_active_rows = await db.fetch("""
             SELECT c.name, c.slug, COUNT(*) AS recent_count
             FROM planning_applications pa
@@ -843,26 +696,6 @@ async def trends(request: Request):
             LIMIT 10
         """)
 
-        # ADDED (2026-09-07) — reuses the exact same tags @> ARRAY[...]
-        # pattern already trusted throughout Guides and the tag search
-        # pages, one leaderboard per real niche category.
-        # CHANGED (2026-09-07) — real, direct feedback: ranking by raw
-        # count was biased toward whichever council simply has the most
-        # total applications overall (Canterbury topped every single
-        # category, and its total application count — 205,000+ — dwarfs
-        # every other council, likely inflated by the same real data
-        # anomaly already flagged separately: a 37-year average pending
-        # age). Two real fixes together: rank by RATE (tagged
-        # applications as a % of that council's own recent total, not
-        # raw count) rather than absolute volume, and window to the
-        # last 90 days (matching the type-mix section below) rather
-        # than all-time — which also naturally reduces the impact of
-        # whatever old/stale data is behind Canterbury's inflated
-        # total, without needing to chase down that bug's exact root
-        # cause first. A minimum of 3 tagged applications is required
-        # before a council qualifies, so a council with one tagged
-        # application out of one total doesn't show a meaningless
-        # "100%" from a tiny, noisy sample.
         niche_leaders = {}
         for tag_key in ("farm_diversification", "commercial_conversion", "large_site"):
             rows = await db.fetch("""
@@ -885,13 +718,6 @@ async def trends(request: Request):
             """, tag_key)
             niche_leaders[tag_key] = [dict(r) for r in rows]
 
-        # ADDED (2026-09-07) — application_type badges are computed in
-        # Python (_type_badge()), not stored as a column, so this
-        # can't be aggregated directly in SQL without duplicating that
-        # logic — instead, fetch the raw type/reference for a bounded
-        # recent window and reuse the exact same real function every
-        # other page already relies on, so this can never silently
-        # disagree with how types are badged elsewhere on the site.
         type_rows = await db.fetch("""
             SELECT application_type, reference
             FROM planning_applications
@@ -910,11 +736,6 @@ async def trends(request: Request):
             key=lambda x: x["count"], reverse=True,
         )
 
-        # ADDED (2026-09-07) — period-over-period comparison (last 30
-        # days vs the 30 days before that). Requires a minimum prior-
-        # period count (5) before ranking by % change, so a council
-        # going from 1 to 3 applications doesn't show a misleading
-        # "+200%" from a genuinely tiny, noisy sample.
         growth_rows = await db.fetch("""
             SELECT
                 c.name, c.slug,
@@ -962,24 +783,8 @@ async def _render_tag_page(request: Request, tag: str, status: Optional[str],
                             sort: Optional[str] = None,
                             date_from: Optional[str] = None,
                             date_to: Optional[str] = None) -> HTMLResponse:
-    # FIX (2026-07-30) — a real bug, not a guess: both dropdowns live in
-    # the same <form>, so selecting one resubmits the other too. "Any
-    # status"/"All councils" are <option value=""> — a GET form always
-    # includes every field, so an untouched dropdown arrives as a
-    # literal empty string ("status=&council=..."), not an absent
-    # parameter. The SQL check only treated a genuinely MISSING value as
-    # "no filter" — an empty string matched neither NULL nor any real
-    # row, silently excluding everything regardless of the other
-    # filter's real value. Confirmed via a real report: West Oxfordshire
-    # visibly has a match, but selecting it still returned zero results,
-    # because status="" was travelling along unnoticed in the same
-    # request.
     status = status or None
     council = council or None
-    # BUG FIX (2026-08-13) — date_from/date_to arrive here as raw
-    # strings now (not Optional[date]) precisely so an empty string from
-    # an untouched date field doesn't 422 before this function even
-    # runs. See _parse_date_param's docstring for the full writeup.
     date_from_parsed = _parse_date_param(date_from)
     date_to_parsed = _parse_date_param(date_to)
 
@@ -1030,36 +835,11 @@ async def commercial_conversion(request: Request, status: Optional[str] = None, 
     return await _render_tag_page(request, "commercial_conversion", status, council, keyword, sort, date_from, date_to)
 
 
-# ADDED (2026-09-11) — shared cache for /councils and
-# /api/coverage-map-data, confirmed via a real Supabase query
-# performance audit: this council+app_count aggregation (a LEFT JOIN +
-# GROUP BY across the full planning_applications table) averaged 7.4
-# SECONDS per call on both routes, with a worst case of 17-26 seconds
-# and a real cache-hit rate around 53% — far below nearly every other
-# query in the whole audit — directly matching a real report that the
-# coverage page "takes ages to load". Both routes were independently
-# running their own near-duplicate version of essentially the same
-# expensive query. Cached with a much shorter TTL than the town-names
-# fix (15 minutes, not 6 hours) since this data changes throughout the
-# day as scrapers save new applications, not just once a month — still
-# comfortably eliminates the vast majority of repeated slow executions
-# without meaningfully risking stale-looking data (a 15-minute-old
-# application count is not a real problem for either page).
 _COUNCILS_WITH_COUNTS_CACHE: dict = {"rows": None, "cached_at": None}
 _COUNCILS_WITH_COUNTS_CACHE_TTL = timedelta(minutes=15)
 
 
 async def _get_cached_councils_with_counts(db) -> list[dict]:
-    """Fetches the FULL column set /councils needs (a strict superset of
-    what /api/coverage-map-data needs — slug/region/system/portal_url
-    are simply unused by the map endpoint's own loop, which reads by
-    key) once, cached and shared by both routes, rather than each
-    independently running its own near-duplicate expensive query.
-    Returns plain dicts (already copied out of asyncpg's immutable
-    Records) — callers still make their OWN per-request copy via
-    [dict(c) for c in ...] before mutating, so in-place additions like
-    'status' or 'search_haystack' never leak into the shared cached
-    objects or bleed across to the other route."""
     now = datetime.now(timezone.utc)
     cached_at = _COUNCILS_WITH_COUNTS_CACHE["cached_at"]
     if (_COUNCILS_WITH_COUNTS_CACHE["rows"] is not None
@@ -1090,10 +870,6 @@ async def councils_list(request: Request):
     async with get_db() as db:
         councils = await _get_cached_councils_with_counts(db)
 
-    # Converted to plain dicts (asyncpg Records are immutable) so the
-    # date-availability note can be added — same confirmed, real
-    # limitation as the search-results pages, see
-    # COUNCILS_WITHOUT_DATE_DATA above.
     councils = [dict(c) for c in councils]
     for c in councils:
         c["date_unavailable_note"] = c["name"] in COUNCILS_WITHOUT_DATE_DATA
@@ -1105,25 +881,7 @@ async def councils_list(request: Request):
     ]
     for c in covered:
         c["area_aliases"] = COUNCIL_AREA_ALIASES.get(c["name"], [])
-        # Lowercase combined name+aliases string for a simple client-side
-        # search match — so searching "Harrogate" finds the real North
-        # Yorkshire Council card, not just its own literal name.
         c["search_haystack"] = " ".join([c["name"]] + c["area_aliases"]).lower()
-        # ADDED (2026-08-13) — a real, honest status (Live/Delayed/
-        # Offline), computed from last_saved_at (when WE last actually
-        # scraped successfully), not latest_date (when the most recent
-        # APPLICATION was submitted — a genuinely different thing: a
-        # council can have old applications but still be scraping fine
-        # nightly, or have recent applications sitting there while our
-        # own scraper has actually stopped running).
-        #
-        # BUG FIX (2026-08-13) — confirmed real gap via a direct user
-        # report: Camden (coverage_source='data_gov_uk') had
-        # last_saved_at = NULL despite 64,572 real applications, freshest
-        # dated yesterday — falsely showing as "Offline". See
-        # _effective_days_since_save's docstring for the full writeup.
-        # latest_date (already selected above) is exactly the right
-        # fallback signal here.
         days_since_save = _effective_days_since_save(c["last_saved_at"], c["latest_date"])
         c["days_since_save"] = days_since_save
         c["status"] = _coverage_status(c["coverage_source"], days_since_save)
@@ -1149,31 +907,6 @@ async def councils_list(request: Request):
 
 @app.get("/api/coverage-map-data")
 async def coverage_map_data():
-    """ADDED (2026-08-13) — lightweight JSON for the homepage boundary
-    map. Deliberately a separate, small endpoint rather than embedding
-    this data directly in index.html's own render — the actual UK
-    boundary GeoJSON (~380 authority shapes) is fetched directly by the
-    BROWSER from the real ONS Open Geography FeatureServer at page-load
-    time (the standard way to consume these ArcGIS-hosted boundary
-    datasets, and it avoids proxying tens of MB of geometry through our
-    own backend on every homepage visit). This endpoint only needs to
-    return OUR side of the match: council name + real status, small
-    enough to embed or fetch cheaply, matched against the boundary
-    shapes client-side by name.
-
-    Returns the exact same real status (Live/Delayed/Offline) already
-    computed for /councils and the council detail page, reusing the
-    same helpers (_effective_days_since_save, _coverage_status) so all
-    three surfaces can never silently disagree about a council's real
-    state.
-
-    CHANGED (2026-09-11) — now shares the same cached query as
-    /councils (see _get_cached_councils_with_counts) rather than
-    running its own near-duplicate version. Confirmed via a real query
-    performance audit: this endpoint's own version of this query
-    averaged 7.4 seconds per call with a 26-second worst case, called
-    516 times — one of the two biggest contributors to real, reported
-    slow page loads."""
     async with get_db() as db:
         councils = await _get_cached_councils_with_counts(db)
 
@@ -1192,11 +925,6 @@ async def coverage_map_data():
     return JSONResponse(result)
 
 
-# Real, confirmed reasons for specific councils that have gone quiet —
-# only councils we've actually manually diagnosed with real evidence
-# this session, not a guess. Anything not listed here still shows on
-# the coverage-gaps page (using last_saved_at, which we do have), just
-# without inventing a specific cause we haven't actually confirmed.
 KNOWN_GAP_REASONS = {
     "Solihull Metropolitan Borough Council":
         "The council's server is refusing connections from our automated "
@@ -1212,54 +940,12 @@ KNOWN_GAP_REASONS = {
         "our automated systems (confirmed via repeated, independent tests).",
 }
 
-# How many days without a successful save before we consider a
-# previously-working council to be a genuine gap, not just a quiet
-# night. Generous enough to avoid flagging a single bad run, tight
-# enough to catch a real, sustained problem quickly. Also reused below
-# by _coverage_status() as the "Offline" boundary, so both pages agree
-# on what "gone quiet" actually means rather than using two different,
-# silently inconsistent thresholds.
 GAP_THRESHOLD_DAYS = 10
 
-# ADDED (2026-08-13) — a genuine three-state status, not just the
-# existing covered/manual_link/pending split, which only answers
-# whether a council has EVER been covered, not whether it's currently
-# healthy. "Delayed" is a real middle state that neither existing page
-# currently shows at all — /coverage-gaps only surfaces things already
-# past the full GAP_THRESHOLD_DAYS, nothing shows "starting to look a
-# bit stale but not a confirmed gap yet".
-# CHANGED (2026-09-11) — raised 2 -> 3 days. The old value assumed
-# every council gets checked nightly, matching the comment's original
-# reasoning ("allows for one missed night"). That's no longer true for
-# Idox councils specifically: the real 8-batch odd/even split (see
-# scrape.yml) means any given Idox council is only actually checked
-# every 2 nights by design, not every night. At the old 2-day
-# threshold, a perfectly healthy Idox council sitting right at the end
-# of its normal 2-night gap would flip to "Delayed" falsely, every
-# single cycle, purely from the new schedule's own normal rhythm — not
-# a real problem. 3 days gives real room for that legitimate 2-night
-# gap plus one missed run, without needing a different threshold per
-# platform.
 DELAYED_THRESHOLD_DAYS = 3
 
 
 def _effective_days_since_save(last_saved_at, fallback_date: Optional[date]) -> Optional[int]:
-    """BUG FIX (2026-08-13) — a real, confirmed gap found via a direct
-    user report: Camden (coverage_source='data_gov_uk', fed by the
-    separate national open-data harvester, not any of the Idox/Arcus/
-    Civica/Northgate scrapers) had last_saved_at = NULL despite 64,572
-    real applications with the freshest dated literally yesterday — the
-    harvester script evidently never sets that column at all, even on
-    a genuinely successful save. Without this fallback, _coverage_status
-    would show ANY council in that same situation as flatly "Offline"
-    while it's actually current — the opposite of what an honest status
-    feature should ever do. Prefers the real last_saved_at when it
-    exists (the correct, precise signal); only falls back to the most
-    recent application's own submitted_date when last_saved_at is
-    genuinely absent, as the next-best available evidence of freshness.
-    The real, permanent fix is for every ingestion path to set
-    last_saved_at on every successful save — this fallback is a safety
-    net for whenever one doesn't, not a replacement for that."""
     if last_saved_at is not None:
         return (date.today() - last_saved_at.date()).days
     if fallback_date is not None:
@@ -1268,13 +954,6 @@ def _effective_days_since_save(last_saved_at, fallback_date: Optional[date]) -> 
 
 
 def _coverage_status(coverage_source: str, days_since_save: Optional[int]) -> dict:
-    """Real, honest status computed from data we already store — no new
-    columns or migration needed. days_since_save is normally
-    (CURRENT_DATE - last_saved_at::date), the same real, stored field
-    /coverage-gaps already uses — but see _effective_days_since_save
-    for a real, confirmed case where that field can be NULL despite
-    genuinely fresh data, and the fallback this function relies on
-    callers to have already applied before this point."""
     if coverage_source in ("pending", "none", "manual_link"):
         return {"key": "offline", "emoji": "🔴", "label": "Not yet covered"}
     if days_since_save is None:
@@ -1286,19 +965,6 @@ def _coverage_status(coverage_source: str, days_since_save: Optional[int]) -> di
     return {"key": "live", "emoji": "🟢", "label": "Live"}
 
 
-# Real, confirmed areas covered by a single merged scraper entry — NOT
-# separate councils, and deliberately NOT counted separately in
-# covered_count. Some councils' modern unitary portal genuinely merges
-# several former district councils into one search (confirmed via real
-# evidence, e.g. North Yorkshire's own "Hello and welcome to Public
-# Access for Harrogate, Scarborough, Craven, Hambleton and Selby
-# Planning Areas" notice). Counting each historic name as its own
-# "covered" entry would inflate the headline number in a misleading way
-# — if the one real portal behind them goes down, all of them would go
-# dark from a single root cause, not independent problems. Shown as
-# searchable aliases instead, so someone looking for "Harrogate" or
-# "Craven" specifically can still find a clear answer, correctly
-# attributed to the real underlying council.
 COUNCIL_AREA_ALIASES = {
     "North Yorkshire Council": [
         "Harrogate", "Scarborough", "Craven", "Hambleton", "Selby",
@@ -1309,25 +975,6 @@ COUNCIL_AREA_ALIASES = {
 
 @app.get("/coverage-gaps", response_class=HTMLResponse)
 async def coverage_gaps(request: Request):
-    """Honest, specific transparency about councils that WERE working and
-    have since gone quiet — deliberately distinct from /councils' three
-    buckets, which are about whether a council has EVER been covered.
-    This page is about regressions: real data existed, collection has
-    since stopped. Inspired directly by a comparable competitor's
-    "Known Data Gaps" page, which names the exact councils, the exact
-    date, and what date the data is frozen at — the same standard we're
-    matching here.
-
-    HONEST LIMITATION: our diagnostics currently only print the specific
-    failure reason (timeout vs WAF vs 404 etc.) to console logs during a
-    scrape run — they aren't persisted anywhere in the database. This
-    page can reliably say a council has gone quiet and since when
-    (last_saved_at is real, stored data), but can only give a specific
-    root cause for the handful of councils in KNOWN_GAP_REASONS above,
-    which we've actually manually diagnosed with real evidence.
-    Everything else gets an honest "no new data since X" without
-    inventing a cause we haven't confirmed.
-    """
     async with get_db() as db:
         rows = await db.fetch("""
             SELECT name, slug, system, coverage_source, portal_url,
@@ -1353,29 +1000,12 @@ async def coverage_gaps(request: Request):
     })
 
 
-# ---------------------------------------------------------------------
-# Town pages — ADDED 2026-09-05. Real UK towns/villages sourced from OS
-# Open Names (see import_towns.py), stored in the `towns` table with
-# real coordinates. Deliberately reuses _fetch_applications() directly
-# — the exact same function the postcode search already uses — with the
-# town's own stored lat/lng in place of a postcode_lookup() result. No
-# new query logic: a town page is functionally identical to a postcode
-# search anchored at a fixed point instead of a user-entered postcode.
-# ---------------------------------------------------------------------
-
-TOWN_RADIUS_MILES = 3.0  # wider than postcode search's 1-mile default —
-                          # a town/city genuinely covers more ground than
-                          # a single postcode, and OS Open Names gives us
-                          # one coordinate for the whole place, not a
-                          # precise centre-of-town point.
+TOWN_RADIUS_MILES = 3.0
 TOWN_DAYS_BACK = 30
 
 
 @app.get("/towns", response_class=HTMLResponse)
 async def towns_index(request: Request, q: Optional[str] = None):
-    """Browse/search all towns — real name search via the pg_trgm index
-    already added in the schema migration, falling back to an
-    alphabetical-by-county browse when no query is given."""
     q_clean = (q or "").strip()
 
     async with get_db() as db:
@@ -1396,8 +1026,6 @@ async def towns_index(request: Request, q: Optional[str] = None):
             """)
 
         total_towns = await db.fetchval("SELECT COUNT(*) FROM towns")
-        # Real counties list for a browse-by-county dropdown, matching
-        # the pattern already liked from Planning Signal's directory.
         counties = await db.fetch("""
             SELECT DISTINCT county FROM towns
             WHERE county IS NOT NULL AND county != ''
@@ -1416,9 +1044,6 @@ async def towns_index(request: Request, q: Optional[str] = None):
 
 @app.get("/towns/county/{county_slug}", response_class=HTMLResponse)
 async def towns_by_county(request: Request, county_slug: str):
-    """Real county browse — county_slug matches the same slugify()
-    pattern used for town slugs (lowercase, hyphenated), matched against
-    the real stored county name case-insensitively."""
     county_name = county_slug.replace("-", " ")
 
     async with get_db() as db:
@@ -1439,7 +1064,7 @@ async def towns_by_county(request: Request, county_slug: str):
         "total_towns": len(rows),
         "counties": [],
         "searched": False,
-        "county_filter": rows[0]["county"],  # real stored casing, not the slug
+        "county_filter": rows[0]["county"],
     })
 
 
@@ -1457,19 +1082,11 @@ async def town_page(request: Request, slug: str, radius: float = TOWN_RADIUS_MIL
         if not town:
             raise HTTPException(404, "Town not found")
 
-        # Real, exact same function the postcode search already uses —
-        # only the coordinate source differs (town's own stored lat/lng,
-        # not a fresh postcode_lookup() call).
         applications = await _fetch_applications(
             db, town["lat"], town["lng"], radius, days, status, app_type,
             keyword, sort, date_from_parsed, date_to_parsed,
         )
 
-        # Real nearest council match, same real ILIKE approach already
-        # used by the postcode /search route — town names and council
-        # names don't always match directly (a town can straddle or sit
-        # within a differently-named council), so this is a best-effort
-        # real lookup, not guaranteed to always find one.
         council = None
         if town["county"]:
             council = await db.fetchrow("""
@@ -1518,16 +1135,6 @@ async def town_page(request: Request, slug: str, radius: float = TOWN_RADIUS_MIL
     })
 
 
-# ---------------------------------------------------------------------
-# Guides — ADDED 2026-09-06. Real, researched content covering both the
-# general planning process (for the large majority of basic-search
-# users) and PlanFind's own differentiated niches (farm diversification,
-# commercial conversion, large sites). Body content is stored as
-# Markdown in the database and rendered to HTML at request time via
-# Python's `markdown` library — friendlier for writing/editing future
-# guides than raw HTML, without needing a full CMS.
-# ---------------------------------------------------------------------
-
 GUIDE_CATEGORY_META = {
     "getting_started": {
         "title": "Getting Started",
@@ -1547,16 +1154,6 @@ GUIDE_CATEGORY_META = {
     },
 }
 
-# ADDED (2026-09-06) — real, direct request: show a live count of
-# currently-tracked applications next to the 3 categories that
-# genuinely have one, linking straight through to the matching search
-# page. Deliberately explicit rather than assumed identical: the real
-# tag stored in planning_applications.tags is "large_site" (singular,
-# see TAG_META above), while this guide category is "large_sites"
-# (plural) — using the guide category key directly as the tag would
-# have silently returned zero for Large Sites specifically. No stat
-# for "getting_started" — it's general process content, not tied to
-# any single application tag.
 GUIDE_CATEGORY_TAG = {
     "farm_diversification": "farm_diversification",
     "commercial_conversion": "commercial_conversion",
@@ -1568,20 +1165,6 @@ GUIDE_CATEGORY_SEARCH_URL = {
     "large_sites": "/large-sites",
 }
 
-# ADDED (2026-09-06) — real, direct request: national annual context
-# next to PlanFind's own live count, not just our own number in
-# isolation. These are official MHCLG statistics, not something this
-# app can query live — genuinely static facts that update maybe once a
-# year when MHCLG publishes new figures, not every page load. Verified
-# directly against MHCLG's own "Housing supply: net additional
-# dwellings, England: 2024 to 2025" release and the "Planning
-# applications in England: January to March 2026" release before
-# writing — both real, accredited official statistics, not a guess.
-# HONEST LIMITATION: these will go stale as MHCLG publishes newer
-# releases (they do so quarterly/annually) — the source + period is
-# shown directly on the stat so nobody mistakes this for PlanFind's own
-# live data, and it should be revisited when next year's release comes
-# out.
 GUIDE_CATEGORY_NATIONAL_STAT = {
     "farm_diversification": {
         "number": "462",
@@ -1613,11 +1196,6 @@ async def guides_index(request: Request):
             ORDER BY category, title
         """)
 
-        # Real, live counts — one query per real tag, reusing the exact
-        # same tags @> ARRAY[...] pattern _fetch_tag_council_options and
-        # _fetch_tagged_applications already use elsewhere, so this
-        # count can never silently disagree with what the matching
-        # search page itself would show.
         category_counts: dict[str, int] = {}
         for cat_key, tag in GUIDE_CATEGORY_TAG.items():
             count = await db.fetchval(
@@ -1647,9 +1225,6 @@ async def guide_detail(request: Request, slug: str):
         if not guide:
             raise HTTPException(404, "Guide not found")
 
-        # Real, simple "related guides" — same category, excluding this
-        # one — so each guide page has a natural next step rather than
-        # a dead end.
         related = await db.fetch("""
             SELECT slug, title, summary
             FROM guides
@@ -1669,13 +1244,6 @@ async def guide_detail(request: Request, slug: str):
     })
 
 
-# ---------------------------------------------------------------------
-# Find a Professional — ADDED 2026-09-06. Sourced from Companies
-# House's free "Basic Company Data" bulk product (see
-# import_professionals.py), refreshed monthly. DELIBERATELY a sample,
-# not an exhaustive list — capped per town+trade combination. Every
-# public-facing page must say so explicitly, per real, direct request.
-# ---------------------------------------------------------------------
 PROFESSIONAL_TRADE_LABELS = {
     "architect":        "Architects",
     "general_builder":  "General Builders",
@@ -1687,39 +1255,11 @@ PROFESSIONAL_TRADE_LABELS = {
     "glazier":          "Glaziers",
 }
 
-# ADDED (2026-09-11) — real, confirmed fix from a Supabase query
-# performance audit: this exact query (DISTINCT town names, used to
-# populate the client-side autocomplete dropdown) was reading
-# 457,554,268 rows total across 39,772 calls — by a wide margin the
-# single largest consumer of database egress found anywhere in the
-# whole audit, dwarfing every other query combined. It was being
-# re-run from scratch on every single visit to /find-a-professional,
-# filtered or not, despite the underlying professionals dataset only
-# refreshing MONTHLY (see import_professionals.py). A simple in-memory
-# cache with a generous TTL is a safe, honest fit for data that stale
-# this rarely — even a multi-hour cache carries negligible risk of
-# showing outdated names, while cutting the real query count from
-# ~39,772/period down to at most a handful. Deliberately a plain
-# module-level dict rather than a new caching library or Redis — no
-# other caching infrastructure exists anywhere else in this file, and
-# this fix shouldn't need to introduce a whole new dependency just to
-# solve one query.
-# EXPANDED (2026-09-11) — also caches last_synced_at now, fetched in
-# the SAME refresh cycle. It's queried by the same route
-# (find_a_professional) on the exact same monthly-refresh cadence as
-# town names, and was itself being re-run 39,805 times independently —
-# no reason to keep it as a separate query/cache when one shared fetch
-# covers both.
 _PROFESSIONALS_STATIC_CACHE: dict = {"names": None, "last_synced": None, "cached_at": None}
 _PROFESSIONALS_STATIC_CACHE_TTL = timedelta(hours=6)
 
 
 async def _get_cached_professionals_static_data(db) -> tuple[list[str], object]:
-    """Returns (town_names, last_synced), cached together. 6 hours is a
-    conservative choice given the real monthly refresh cadence of the
-    underlying professionals dataset — safe to lengthen further if even
-    fewer queries are wanted, since genuine staleness risk here is
-    minimal either way."""
     now = datetime.now(timezone.utc)
     cached_at = _PROFESSIONALS_STATIC_CACHE["cached_at"]
     if (_PROFESSIONALS_STATIC_CACHE["names"] is not None
@@ -1746,24 +1286,10 @@ async def _get_cached_professionals_static_data(db) -> tuple[list[str], object]:
 async def find_a_professional(request: Request, trade: Optional[str] = None, town: Optional[str] = None,
                                 keyword: Optional[str] = None, page: int = 1):
     trade = trade or None
-    # CHANGED (2026-09-06) — real, direct request: type a town name
-    # directly rather than scroll through a dropdown. Matches by real
-    # name text now (ILIKE), same approach /towns itself already uses,
-    # instead of requiring an exact slug selected from a <select>.
     town = (town or "").strip() or None
     keyword = _normalize_keyword(keyword)
     has_filter = bool(trade or town or keyword)
 
-    # URGENT REAL FIX (2026-09-07) — a real live run just took this
-    # from 22,089 to 158,592 professionals after fixing the town-
-    # matching bug, and the very next real visit to this page with NO
-    # filters applied returned a 503 — the route was trying to load
-    # and render all 158,592 rows in one unfiltered request, which
-    # very likely exhausted Render's request timeout or memory limit.
-    # Two real protections now: nothing is queried at all until at
-    # least one filter is set, and even a single broad filter (e.g.
-    # "Architects" alone, which could still span thousands of rows
-    # across many towns) is paginated rather than loaded unbounded.
     PAGE_SIZE = 50
     page = max(1, page)
     offset = (page - 1) * PAGE_SIZE
@@ -1796,13 +1322,6 @@ async def find_a_professional(request: Request, trade: Optional[str] = None, tow
             """, trade, town, keyword, PAGE_SIZE, offset)
 
     async with get_db() as db:
-        # REAL FIX (2026-09-11) — see _get_cached_professionals_static_data's
-        # own docstring for the full context: town_names alone was the
-        # single largest egress consumer found in a real query
-        # performance audit (457M+ rows read), and last_synced_at was
-        # separately re-run 39,805 times — both re-run in full on every
-        # visit despite the underlying data only changing monthly. Now
-        # fetched and cached together in one pass.
         town_names, last_synced = await _get_cached_professionals_static_data(db)
 
     professionals = [dict(r) for r in professionals]
@@ -1916,11 +1435,6 @@ async def unsubscribe(request: Request, token: str):
 
 
 def _is_outline_reference(reference: str) -> bool:
-    """Checks the LAST slash-separated segment of a reference number for
-    a real outline suffix (e.g. '26/01234/OUT', '26/01234/OUT1' for
-    phased outlines, '26/01234/OUTEIA' for outline with EIA) — not just
-    any string ending in the letters "out", to avoid false-matching
-    something coincidental elsewhere in a longer reference."""
     if not reference:
         return False
     last_segment = reference.strip().split("/")[-1].upper()
@@ -1933,14 +1447,6 @@ def _is_major(app_type: str, reference: str = "") -> bool:
                       "PERMISSION IN PRINCIPLE", "PIP", "TECHNICAL DETAILS"]
     if any(k in t for k in major_keywords):
         return True
-    # FIX (2026-07-30) — real, confirmed gap: some councils' own
-    # application_type field comes back blank or unhelpful for a given
-    # record (the FIELD DIAGNOSTIC / DATE LABEL DIAGNOSTIC warnings seen
-    # scattered through recent scrape logs are exactly this situation).
-    # In those cases the only remaining signal is the reference number
-    # itself — an outline application with a blank type field was
-    # falling through to "other"/not-major entirely, missing real major
-    # developments.
     return _is_outline_reference(reference)
 
 
@@ -1962,8 +1468,6 @@ def _type_badge(app_type: str, reference: str = "") -> str:
         return "prior"
     if "major" in t or "eia" in t:
         return "major"
-    # Same fallback as _is_major above — only reached when the type
-    # field gave us nothing usable to match against.
     if _is_outline_reference(reference):
         return "outline"
     return "other"
@@ -2012,17 +1516,6 @@ def _coverage_message(council, council_name: str) -> dict:
     name = council["name"]
     portal = council["portal_url"] or ""
 
-    # FIX (2026-07-26): this list was missing 'civica_scraper', found via
-    # a real, confirmed discrepancy between the homepage stat (134) and
-    # the /councils page (135) — St Albans (Civica, real data, 29+
-    # applications) was silently excluded from the homepage count and
-    # would ALSO have shown "coverage is coming soon" here to any real
-    # St Albans resident searching their own postcode, despite genuine
-    # live data existing. Listed explicitly (not the exclusion-based
-    # approach used in council_count above) since this function doesn't
-    # have easy access to re-run that query — kept in sync manually,
-    # worth checking here first if a future scraper addition causes the
-    # same class of bug again.
     if source in ("idox_scraper", "arcus_scraper", "civica_scraper",
                   "northgate_scraper", "gov_api", "data_gov_uk"):
         return {
