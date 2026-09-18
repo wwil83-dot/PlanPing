@@ -930,6 +930,65 @@ async def coverage_map_data():
 
     return JSONResponse(result)
 
+# ---------------------------------------------------------------------
+# Sitemap & robots.txt — ADDED 2026-09-17. Real, dynamically-built
+# sitemap covering every real, live page on the site (not a hand-
+# maintained static file, which would immediately go stale as
+# councils/towns/guides are added). Reuses the SAME cached council
+# query already used by /councils and /api/coverage-map-data
+# (_get_cached_councils_with_counts) rather than a fresh duplicate
+# query, matching this file's existing caching discipline.
+# ---------------------------------------------------------------------
+
+SITE_BASE_URL = "https://planfind.co.uk"  # CHANGE this if your real production domain differs
+
+
+@app.get("/sitemap.xml")
+async def sitemap():
+    async with get_db() as db:
+        councils = await _get_cached_councils_with_counts(db)
+        towns = await db.fetch("SELECT slug FROM towns")
+        guides = await db.fetch("SELECT slug FROM guides")
+
+    # Only real, genuinely covered councils — matching the same
+    # covered/pending split already used by /councils, so a council
+    # with no real data yet doesn't get indexed as an empty page.
+    covered_slugs = [
+        c["slug"] for c in councils
+        if c["coverage_source"] not in ("pending", "none", "manual_link")
+        and c["app_count"] > 0
+    ]
+
+    static_urls = [
+        "/", "/councils", "/trends", "/guides", "/towns", "/about",
+        "/coverage-gaps", "/find-a-professional", "/large-sites",
+        "/farm-diversification", "/commercial-conversion",
+        "/postcode-search", "/bulk-search", "/street-history", "/activity",
+    ]
+
+    urls = list(static_urls)
+    urls += [f"/council/{slug}" for slug in covered_slugs]
+    urls += [f"/towns/{t['slug']}" for t in towns]
+    urls += [f"/guides/{g['slug']}" for g in guides]
+
+    xml_parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
+    for path in urls:
+        xml_parts.append(f"<url><loc>{SITE_BASE_URL}{path}</loc></url>")
+    xml_parts.append("</urlset>")
+
+    return PlainTextResponse(content="\n".join(xml_parts), media_type="application/xml")
+
+
+@app.get("/robots.txt")
+async def robots():
+    # Points crawlers directly at the sitemap — the standard,
+    # automatic discovery method alongside manually submitting it in
+    # Search Console.
+    content = f"User-agent: *\nAllow: /\nSitemap: {SITE_BASE_URL}/sitemap.xml\n"
+    return PlainTextResponse(content=content, media_type="text/plain")
 
 KNOWN_GAP_REASONS = {
     "Solihull Metropolitan Borough Council":
