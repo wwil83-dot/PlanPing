@@ -1733,9 +1733,19 @@ IDOX_COUNCILS = [
     ("Fife Council",
      "https://planning.fife.gov.uk/online"),
 
-    ("East Lothian Council",
-     "https://pa.eastlothian.gov.uk/online-applications"),
-
+    # BROKEN — confirmed 2026-09-18 via east_lothian_idox_diagnostic.py:
+    # real, total connection timeout (45s, ERR_CONNECTION_TIMED_OUT) on
+    # both weekly and monthly list URLs — the same real datacenter-ASN
+    # block category already confirmed for Derby/Highland/NE
+    # Lincolnshire/Sheffield/Bassetlaw/St Helens/North Kesteven. Not a
+    # WAF challenge page; the real URL (triple-confirmed via web
+    # search, the council's own ArcGIS item description, and this
+    # config) is genuinely correct — the block is about IP origin, not
+    # a wrong address. coverage_source set to 'manual_link' in
+    # Supabase to match — see accompanying SQL.
+    # ("East Lothian Council",
+    #  "https://pa.eastlothian.gov.uk/online-applications"),
+    
     # CORRECTED 2026-08-13 — confirmed via fresh, real evidence. Old
     # subdomain was wrong the whole time, likely explaining Stirling's
     # persistent "Nothing loaded" failures.
