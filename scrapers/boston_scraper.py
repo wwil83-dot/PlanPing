@@ -160,19 +160,48 @@ def _parse_results_page(html: str) -> tuple[list[dict], int]:
             # label/value pairs looked joined in flattened text but
             # were actually separate DOM nodes) — not worth risking
             # the same mistake twice.
-            results_list = soup.find("ul", id="results") or soup.find("ul", class_="list")
-            if results_list:
-                items = results_list.find_all("li", recursive=False)
-                print(f"    Real <li> items found directly inside the real results list "
-                      f"(id={results_list.get('id')!r}, class={results_list.get('class')!r}): "
-                      f"{len(items)}")
-                if items:
-                    print(f"    Real, exact HTML of the first item:")
-                    print(items[0].prettify()[:3000])
+            # REAL FIX (round 3) — both id='results' and class='list'
+            # matched the wrong element (a navigation menu that
+            # happens to share the same class name) two runs in a
+            # row. Rather than guess a third selector name blind,
+            # searching directly for the real, already-confirmed text
+            # "Ref. No" and walking up the DOM from there to find its
+            # actual containing element — this can't miss, since that
+            # text is only ever generated once inside each real result
+            # item.
+            import re as _re
+            ref_text_node = soup.find(string=_re.compile(r"Ref\.\s*No"))
+            if ref_text_node:
+                # Walk up a few levels to find a real, reasonably-sized
+                # containing element (a single result item, not the
+                # whole page) — print each ancestor's tag/class/id so
+                # the real repeating item container is directly
+                # visible, however many levels up it actually sits.
+                print(f"    Real text node found: {ref_text_node!r}")
+                ancestor = ref_text_node.parent
+                for level in range(6):
+                    if ancestor is None:
+                        break
+                    print(f"    Ancestor level {level}: <{ancestor.name}> "
+                          f"class={ancestor.get('class')!r} id={ancestor.get('id')!r}")
+                    ancestor = ancestor.parent
+
+                # Print the real, exact HTML of the closest reasonably-
+                # sized ancestor (walking up until we find one with a
+                # real class or id, or hit 4 levels up).
+                container = ref_text_node.parent
+                for _ in range(4):
+                    if container and (container.get("class") or container.get("id")):
+                        break
+                    if container:
+                        container = container.parent
+                if container:
+                    print(f"    Real, exact HTML of the closest classed/id'd ancestor:")
+                    print(container.prettify()[:3000])
             else:
-                print(f"    ⚠ No real results list found by id='results' or class='list' "
-                      f"either — real structure genuinely differs from every pattern "
-                      f"tried so far")
+                print(f"    ⚠ Real text 'Ref. No' not found anywhere on the page — "
+                      f"the search may genuinely not have returned real results "
+                      f"this time")
 
     for table in tables:
         rows = table.find_all("tr")
