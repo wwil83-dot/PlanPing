@@ -151,6 +151,24 @@ def _parse_results_page(html: str) -> tuple[list[dict], int]:
                   f"of any kind found on this page — the real page structure may "
                   f"differ from what was expected, or the search may not have "
                   f"actually submitted")
+            # REAL FIX — same lesson already learned for Welwyn
+            # Hatfield earlier this session: a second blind structural
+            # guess isn't worth the risk. Dump the real page directly
+            # instead so the actual structure can be seen and a
+            # correct parser built from real evidence.
+            print(f"    Real page title-adjacent content follows for direct inspection:")
+            title_tag = soup.find("title")
+            print(f"    Real <title>: {title_tag.get_text(strip=True) if title_tag else '(none)'}")
+            body = soup.find("body")
+            if body:
+                real_body_text = body.get_text(" | ", strip=True)
+                print(f"    Real body text (first 2000 chars): {real_body_text[:2000]!r}")
+            ul_lists = soup.find_all("ul")
+            print(f"    Real <ul> elements found: {len(ul_lists)}")
+            for i, ul in enumerate(ul_lists[:3]):
+                ul_class = ul.get("class")
+                ul_id = ul.get("id")
+                print(f"      [{i}] class={ul_class!r} id={ul_id!r}")
 
     for table in tables:
         rows = table.find_all("tr")
