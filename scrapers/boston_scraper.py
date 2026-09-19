@@ -134,111 +134,76 @@ def _parse_results_page(html: str) -> tuple[list[dict], int]:
     total count is deliberately surfaced separately so a genuine
     "no Boston applications this period" result can be told apart
     from "the parser found nothing at all", which would otherwise
-    look identical from the caller's side."""
+    look identical from the caller's side.
+
+    REAL, CONFIRMED STRUCTURE (found via direct diagnostic, after
+    ruling out a table, id='results', and class='list' — none of
+    which matched): <ul id="searchresults"> containing
+    <li class="searchresult"> items. Each item has:
+      - status:      div.badge-status > div.value
+      - description: a.summaryLink > div.summaryLinkTextClamp
+                      (its href is the real detail page URL)
+      - address:     p.address
+      - reference + received date: p.metaInfo, its own text split on
+        the "·" divider into "Ref. No: X" / "Received: X" /
+        "Validated: X" segments.
+    """
     global _ROW_STRUCTURE_DIAGNOSED
     soup = BeautifulSoup(html, "html.parser")
     apps = []
 
-    tables = soup.find_all("table", class_="searchresults")
-    if not tables:
-        tables = soup.find_all("table")
-        if tables and not _ROW_STRUCTURE_DIAGNOSED:
-            _ROW_STRUCTURE_DIAGNOSED = True
-            print(f"    ⚠ ROW STRUCTURE DIAGNOSTIC: no table.searchresults found — "
-                  f"falling back to {len(tables)} generic <table> element(s) on the page")
-        elif not tables:
-            print(f"    ⚠ ROW STRUCTURE DIAGNOSTIC: genuinely NO <table> elements "
-                  f"of any kind found on this page — the real page structure may "
-                  f"differ from what was expected, or the search may not have "
-                  f"actually submitted")
-            # REAL FIX (round 2) — confirmed via the actual run: this
-            # is genuinely a <ul class="list"> structure, the same
-            # kind already found for Welwyn Hatfield earlier this
-            # session. Dumping the REAL, exact prettified HTML of one
-            # real <li> item directly — flattened body text already
-            # proved misleading once tonight (Welwyn Hatfield's
-            # label/value pairs looked joined in flattened text but
-            # were actually separate DOM nodes) — not worth risking
-            # the same mistake twice.
-            # REAL FIX (round 3) — both id='results' and class='list'
-            # matched the wrong element (a navigation menu that
-            # happens to share the same class name) two runs in a
-            # row. Rather than guess a third selector name blind,
-            # searching directly for the real, already-confirmed text
-            # "Ref. No" and walking up the DOM from there to find its
-            # actual containing element — this can't miss, since that
-            # text is only ever generated once inside each real result
-            # item.
-            import re as _re
-            # REAL FIX (round 4) — the previous search matched the
-            # sort-by dropdown's option text ("Ref. No." with a
-            # period), not a real result item. Real result items use
-            # "Ref. No:" with a colon instead (confirmed in the
-            # earlier flattened body text) — searching for that exact,
-            # more specific pattern this time.
-            ref_text_node = soup.find(string=_re.compile(r"Ref\.\s*No\s*:"))
-            if ref_text_node:
-                # Walk up a few levels to find a real, reasonably-sized
-                # containing element (a single result item, not the
-                # whole page) — print each ancestor's tag/class/id so
-                # the real repeating item container is directly
-                # visible, however many levels up it actually sits.
-                print(f"    Real text node found: {ref_text_node!r}")
-                ancestor = ref_text_node.parent
-                for level in range(6):
-                    if ancestor is None:
-                        break
-                    print(f"    Ancestor level {level}: <{ancestor.name}> "
-                          f"class={ancestor.get('class')!r} id={ancestor.get('id')!r}")
-                    ancestor = ancestor.parent
+    results_container = soup.find("ul", id="searchresults")
+    items = results_container.find_all("li", class_="searchresult") if results_container else []
 
-                # Real, exact HTML of the whole containing
-                # li.searchresult item (not just the metaInfo child),
-                # so every field (status, description, address,
-                # reference) can be seen together in one pass.
-                li_ancestor = ref_text_node
-                while li_ancestor and not (li_ancestor.name == "li"
-                                            and li_ancestor.get("class")
-                                            and "searchresult" in li_ancestor.get("class")):
-                    li_ancestor = li_ancestor.parent
+    if not items and not _ROW_STRUCTURE_DIAGNOSED:
+        _ROW_STRUCTURE_DIAGNOSED = True
+        print(f"    ⚠ ROW STRUCTURE DIAGNOSTIC: no real ul#searchresults > "
+              f"li.searchresult items found — real structure may have changed "
+              f"since confirmation")
 
-                if li_ancestor:
-                    print(f"\n    Real, exact HTML of the FULL li.searchresult item:")
-                    print(li_ancestor.prettify()[:5000])
-                else:
-                    print(f"\n    ⚠ Could not walk up to a real li.searchresult ancestor")
-            else:
-                print(f"    ⚠ Real text 'Ref. No' not found anywhere on the page — "
-                      f"the search may genuinely not have returned real results "
-                      f"this time")
+    for item in items:
+        summary_link = item.find("a", class_="summaryLink")
+        if not summary_link:
+            continue
 
-    for table in tables:
-        rows = table.find_all("tr")
-        for row in rows:
-            link = row.find("a", href=True)
-            if not link:
-                continue
-            cells = row.find_all("td")
-            if len(cells) < 3:
-                continue
+        reference_from_href = None
+        href = summary_link.get("href")
+        detail_url = None
+        if href:
+            detail_url = href if href.startswith("http") else \
+                f"https://publicaccess.e-lindsey.gov.uk{href}"
 
-            reference = link.get_text(strip=True)
-            if not reference or len(reference) < 3:
-                continue
+        desc_div = summary_link.find("div", class_="summaryLinkTextClamp")
+        description = desc_div.get_text(strip=True) if desc_div else ""
 
-            location_raw = cells[1].get_text(strip=True) if len(cells) > 1 else ""
-            proposal = cells[2].get_text(strip=True) if len(cells) > 2 else ""
-            status_raw = cells[-1].get_text(strip=True) if len(cells) > 3 else ""
+        address_p = item.find("p", class_="address")
+        address = address_p.get_text(strip=True) if address_p else ""
 
-            apps.append({
-                "reference": reference,
-                "address": location_raw,
-                "postcode": _extract_postcode(location_raw),
-                "description": proposal,
-                "application_type": "Planning",
-                "status": _normalise_status(status_raw),
-                "council_url": None,
-            })
+        status_value = item.select_one(".badge-status .value")
+        status_raw = status_value.get_text(strip=True) if status_value else ""
+
+        meta_info = item.find("p", class_="metaInfo")
+        reference = ""
+        if meta_info:
+            meta_text = meta_info.get_text(" ", strip=True)
+            for part in meta_text.split("·"):
+                part = part.strip()
+                if part.lower().startswith("ref"):
+                    reference = part.split(":", 1)[1].strip() if ":" in part else ""
+                    break
+
+        if not reference or len(reference) < 3:
+            continue
+
+        apps.append({
+            "reference": reference,
+            "address": address,
+            "postcode": _extract_postcode(address),
+            "description": description,
+            "application_type": "Planning",
+            "status": _normalise_status(status_raw),
+            "council_url": detail_url,
+        })
 
     total_before_filter = len(apps)
 
@@ -381,7 +346,11 @@ async def scrape() -> list[dict]:
             if should_stop():
                 print(f"    ⚠ Time budget reached at page {page_num}, stopping")
                 break
-            next_link = page.locator("a[aria-label='Next Page.']:visible")
+            # Real, confirmed body text showed numbered pagination
+            # with a plain "Next" text link ("1 2 3 4 Next"), not the
+            # aria-label="Next Page." pattern used by table-based Idox
+            # installations elsewhere in this project.
+            next_link = page.locator("a:has-text('Next'):visible")
             if await next_link.count() == 0:
                 print(f"    No visible 'Next' link — stopping at page {page_num - 1}")
                 break
