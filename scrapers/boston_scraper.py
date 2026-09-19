@@ -170,7 +170,13 @@ def _parse_results_page(html: str) -> tuple[list[dict], int]:
             # text is only ever generated once inside each real result
             # item.
             import re as _re
-            ref_text_node = soup.find(string=_re.compile(r"Ref\.\s*No"))
+            # REAL FIX (round 4) — the previous search matched the
+            # sort-by dropdown's option text ("Ref. No." with a
+            # period), not a real result item. Real result items use
+            # "Ref. No:" with a colon instead (confirmed in the
+            # earlier flattened body text) — searching for that exact,
+            # more specific pattern this time.
+            ref_text_node = soup.find(string=_re.compile(r"Ref\.\s*No\s*:"))
             if ref_text_node:
                 # Walk up a few levels to find a real, reasonably-sized
                 # containing element (a single result item, not the
