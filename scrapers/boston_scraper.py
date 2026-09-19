@@ -160,16 +160,19 @@ def _parse_results_page(html: str) -> tuple[list[dict], int]:
             # label/value pairs looked joined in flattened text but
             # were actually separate DOM nodes) — not worth risking
             # the same mistake twice.
-            results_list = soup.find("ul", class_="list")
+            results_list = soup.find("ul", id="results") or soup.find("ul", class_="list")
             if results_list:
                 items = results_list.find_all("li", recursive=False)
-                print(f"    Real <li> items found directly inside ul.list: {len(items)}")
+                print(f"    Real <li> items found directly inside the real results list "
+                      f"(id={results_list.get('id')!r}, class={results_list.get('class')!r}): "
+                      f"{len(items)}")
                 if items:
                     print(f"    Real, exact HTML of the first item:")
                     print(items[0].prettify()[:3000])
             else:
-                print(f"    ⚠ No real ul.list found either — real structure "
-                      f"genuinely differs from every pattern tried so far")
+                print(f"    ⚠ No real results list found by id='results' or class='list' "
+                      f"either — real structure genuinely differs from every pattern "
+                      f"tried so far")
 
     for table in tables:
         rows = table.find_all("tr")
