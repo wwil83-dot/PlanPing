@@ -192,18 +192,21 @@ def _parse_results_page(html: str) -> tuple[list[dict], int]:
                           f"class={ancestor.get('class')!r} id={ancestor.get('id')!r}")
                     ancestor = ancestor.parent
 
-                # Print the real, exact HTML of the closest reasonably-
-                # sized ancestor (walking up until we find one with a
-                # real class or id, or hit 4 levels up).
-                container = ref_text_node.parent
-                for _ in range(4):
-                    if container and (container.get("class") or container.get("id")):
-                        break
-                    if container:
-                        container = container.parent
-                if container:
-                    print(f"    Real, exact HTML of the closest classed/id'd ancestor:")
-                    print(container.prettify()[:3000])
+                # Real, exact HTML of the whole containing
+                # li.searchresult item (not just the metaInfo child),
+                # so every field (status, description, address,
+                # reference) can be seen together in one pass.
+                li_ancestor = ref_text_node
+                while li_ancestor and not (li_ancestor.name == "li"
+                                            and li_ancestor.get("class")
+                                            and "searchresult" in li_ancestor.get("class")):
+                    li_ancestor = li_ancestor.parent
+
+                if li_ancestor:
+                    print(f"\n    Real, exact HTML of the FULL li.searchresult item:")
+                    print(li_ancestor.prettify()[:5000])
+                else:
+                    print(f"\n    ⚠ Could not walk up to a real li.searchresult ancestor")
             else:
                 print(f"    ⚠ Real text 'Ref. No' not found anywhere on the page — "
                       f"the search may genuinely not have returned real results "
