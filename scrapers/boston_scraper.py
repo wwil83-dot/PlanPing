@@ -122,13 +122,19 @@ def _normalise_status(s: str) -> str:
 _ROW_STRUCTURE_DIAGNOSED = False
 
 
-def _parse_results_page(html: str) -> list[dict]:
+def _parse_results_page(html: str) -> tuple[list[dict], int]:
     """Standard, real Idox results structure already confirmed across
     dozens of other working councils in this project: table with
     class 'searchresults', one row per application. Built defensively
     with a generic fallback and a one-time diagnostic, since this
     specific portal's exact row markup wasn't independently captured
-    before writing this parser."""
+    before writing this parser.
+
+    Returns (boston_filtered_apps, total_apps_before_filter) — the
+    total count is deliberately surfaced separately so a genuine
+    "no Boston applications this period" result can be told apart
+    from "the parser found nothing at all", which would otherwise
+    look identical from the caller's side."""
     global _ROW_STRUCTURE_DIAGNOSED
     soup = BeautifulSoup(html, "html.parser")
     apps = []
@@ -139,7 +145,12 @@ def _parse_results_page(html: str) -> list[dict]:
         if tables and not _ROW_STRUCTURE_DIAGNOSED:
             _ROW_STRUCTURE_DIAGNOSED = True
             print(f"    ⚠ ROW STRUCTURE DIAGNOSTIC: no table.searchresults found — "
-                  f"falling back to {len(tables)} generic <table> element(s)")
+                  f"falling back to {len(tables)} generic <table> element(s) on the page")
+        elif not tables:
+            print(f"    ⚠ ROW STRUCTURE DIAGNOSTIC: genuinely NO <table> elements "
+                  f"of any kind found on this page — the real page structure may "
+                  f"differ from what was expected, or the search may not have "
+                  f"actually submitted")
 
     for table in tables:
         rows = table.find_all("tr")
@@ -169,6 +180,8 @@ def _parse_results_page(html: str) -> list[dict]:
                 "council_url": None,
             })
 
+    total_before_filter = len(apps)
+
     # REAL FILTER — the whole point of this scraper: only keep rows
     # whose real address confirms this is genuinely a Boston
     # application, not East Lindsey's or South Holland's, since this
@@ -181,7 +194,7 @@ def _parse_results_page(html: str) -> list[dict]:
         if a["reference"] not in seen_refs:
             seen_refs.add(a["reference"])
             deduped.append(a)
-    return deduped
+    return deduped, total_before_filter
 
 
 def _h():
@@ -295,13 +308,13 @@ async def scrape() -> list[dict]:
         print(f"    Post-submit URL: {page.url}")
 
         html = await page.content()
-        page1_apps = _parse_results_page(html)
+        page1_apps, page1_total = _parse_results_page(html)
         for a in page1_apps:
             if a["reference"] not in seen_refs:
                 seen_refs.add(a["reference"])
                 all_apps.append(a)
-        print(f"    Page 1: {len(page1_apps)} real Boston applications found "
-              f"(running total {len(all_apps)})")
+        print(f"    Page 1: {page1_total} real applications parsed in total, "
+              f"{len(page1_apps)} were Boston's (running total {len(all_apps)})")
 
         page_num = 2
         while page_num <= MAX_PAGES:
@@ -324,16 +337,16 @@ async def scrape() -> list[dict]:
                 break
 
             html = await page.content()
-            page_apps = _parse_results_page(html)
+            page_apps, page_total = _parse_results_page(html)
             new_count = 0
             for a in page_apps:
                 if a["reference"] not in seen_refs:
                     seen_refs.add(a["reference"])
                     all_apps.append(a)
                     new_count += 1
-            print(f"    Page {page_num}: {new_count} new real Boston applications "
-                  f"(running total {len(all_apps)})")
-            if new_count == 0 and len(page_apps) == 0:
+            print(f"    Page {page_num}: {page_total} real applications parsed in total, "
+                  f"{new_count} new Boston ones (running total {len(all_apps)})")
+            if page_total == 0:
                 print(f"    Page {page_num}: 0 real applications parsed at all — stopping")
                 break
             page_num += 1
