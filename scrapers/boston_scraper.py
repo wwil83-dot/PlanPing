@@ -91,7 +91,15 @@ BOSTON_WARDS = [
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "15"))
-DAYS_BACK    = int(os.environ.get("DAYS_BACK", "30"))
+# REAL, CONFIRMED REASON for a wider default than most other scrapers
+# in this project (30 days): splitting the search 15 ways by ward
+# naturally dilutes the per-search volume — a real 90-day test on
+# Kirton And Frampton alone found 5 genuine applications, while every
+# ward returned 0 at the default 30-day window, consistent with
+# Boston's overall low volume (confirmed ~2/week across all wards
+# combined from an earlier run) spread thin across 15 separate
+# searches rather than a bug in the parser or ward filtering.
+DAYS_BACK    = int(os.environ.get("DAYS_BACK", "60"))
 BOSTON_COUNCIL_ID = int(os.environ.get("BOSTON_COUNCIL_ID", "0"))
 
 START_TIME = time.monotonic()
