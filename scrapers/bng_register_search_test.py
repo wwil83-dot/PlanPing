@@ -73,10 +73,22 @@ async def main():
                     pass
 
                 print(f"\nReal results URL: {page.url}")
+
+                # REAL FIX — confirmed via the actual run: this page is
+                # client-side rendered, and networkidle alone finished
+                # before the real AJAX-loaded results appeared (body
+                # text just showed "Loading Message..."). Waiting for
+                # that real loading text to genuinely disappear instead.
+                try:
+                    await page.wait_for_selector("text=Loading Message", state="detached", timeout=15_000)
+                except PlaywrightTimeout:
+                    print("⚠ 'Loading Message...' never disappeared within 15s")
+                await asyncio.sleep(2)
+
                 print(f"Real results page title: {await page.title()}")
                 body_text = await page.locator("body").inner_text()
-                print(f"\nReal body text (first 2000 chars):")
-                print(repr(body_text[:2000]))
+                print(f"\nReal body text (first 3000 chars):")
+                print(repr(body_text[:3000]))
             else:
                 print("⚠ No real Search button found after entering the term")
         else:
