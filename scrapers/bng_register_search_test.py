@@ -30,6 +30,46 @@ CONTEXT_OPTIONS = {
 BASE_URL = "https://environment.data.gov.uk/biodiversity-net-gain"
 
 
+async def search_lpa(page, lpa_name: str):
+    print(f"\n{'=' * 60}")
+    print(f"Testing: {lpa_name}")
+    print('=' * 60)
+
+    search_box = page.locator("input[type='search'], input[type='text']").first
+    await search_box.fill("", timeout=5_000)
+    await search_box.fill(lpa_name, timeout=5_000)
+
+    submit = page.locator("button:has-text('Search')")
+    async with page.expect_navigation(wait_until="domcontentloaded", timeout=30_000):
+        await submit.first.click(timeout=5_000)
+    try:
+        await page.wait_for_load_state("networkidle", timeout=15_000)
+    except PlaywrightTimeout:
+        pass
+
+    print(f"Real results URL: {page.url}")
+
+    try:
+        await page.wait_for_selector("text=Loading Message", state="detached", timeout=15_000)
+    except PlaywrightTimeout:
+        print("⚠ 'Loading Message...' never disappeared within 15s")
+    await asyncio.sleep(2)
+
+    body_text = await page.locator("body").inner_text()
+    if "No search results found" in body_text:
+        print("Real result: NO SITES FOUND")
+    else:
+        print("Real result: SITES FOUND")
+        print(f"Real body excerpt: {body_text[:800]!r}")
+
+    # Navigate back to a fresh search page before the next term.
+    await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=45_000)
+    try:
+        await page.wait_for_load_state("networkidle", timeout=15_000)
+    except PlaywrightTimeout:
+        pass
+
+
 async def main():
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
@@ -48,51 +88,20 @@ async def main():
             await accept.first.click(timeout=5_000)
             print("Real cookie banner accepted")
 
-        print(f"Real page title: {await page.title()}")
+        # Real, deliberately mixed set: large, high-development
+        # councils where zero sites after 2+ years of mandatory BNG
+        # would be a genuine surprise, plus Boston again as a direct
+        # re-check against the exact same confirmed search flow.
+        real_test_councils = [
+            "Birmingham City Council",
+            "Manchester City Council",
+            "Leeds City Council",
+            "Cornwall Council",
+            "Boston Borough Council",
+        ]
 
-        inputs = await page.locator("input, select").all()
-        print(f"\nReal form controls found: {len(inputs)}")
-        for inp in inputs:
-            name = await inp.get_attribute("name")
-            itype = await inp.get_attribute("type")
-            placeholder = await inp.get_attribute("placeholder")
-            print(f"  name={name!r} type={itype!r} placeholder={placeholder!r}")
-
-        search_box = page.locator("input[type='search'], input[type='text']").first
-        if await search_box.count() > 0:
-            await search_box.fill("Boston Borough Council", timeout=5_000)
-            print("\nReal search term entered: 'Boston Borough Council'")
-
-            submit = page.locator("button:has-text('Search')")
-            if await submit.count() > 0:
-                async with page.expect_navigation(wait_until="domcontentloaded", timeout=30_000):
-                    await submit.first.click(timeout=5_000)
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=15_000)
-                except PlaywrightTimeout:
-                    pass
-
-                print(f"\nReal results URL: {page.url}")
-
-                # REAL FIX — confirmed via the actual run: this page is
-                # client-side rendered, and networkidle alone finished
-                # before the real AJAX-loaded results appeared (body
-                # text just showed "Loading Message..."). Waiting for
-                # that real loading text to genuinely disappear instead.
-                try:
-                    await page.wait_for_selector("text=Loading Message", state="detached", timeout=15_000)
-                except PlaywrightTimeout:
-                    print("⚠ 'Loading Message...' never disappeared within 15s")
-                await asyncio.sleep(2)
-
-                print(f"Real results page title: {await page.title()}")
-                body_text = await page.locator("body").inner_text()
-                print(f"\nReal body text (first 3000 chars):")
-                print(repr(body_text[:3000]))
-            else:
-                print("⚠ No real Search button found after entering the term")
-        else:
-            print("⚠ No real search input found")
+        for lpa_name in real_test_councils:
+            await search_lpa(page, lpa_name)
 
         await context.close()
         await browser.close()
