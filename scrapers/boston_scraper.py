@@ -113,6 +113,12 @@ def _normalise_status(s: str) -> str:
         return "withdrawn"
     if any(x in key for x in ("appeal", "awaiting", "regist", "pending")):
         return "pending"
+    # Known but genuinely ambiguous, same category as "determined"
+    # elsewhere in this project — confirms a decision exists without
+    # revealing which outcome (approved/refused). Filed as 'pending'
+    # as the least-wrong default rather than re-flagged every run.
+    if "decided" in key:
+        return "pending"
     if key not in _STATUS_DIAGNOSED:
         _STATUS_DIAGNOSED.add(key)
         print(f"    ⚠ STATUS DIAGNOSTIC: unrecognised status {s!r} — filed as 'pending'")
@@ -206,6 +212,21 @@ def _parse_results_page(html: str) -> tuple[list[dict], int]:
         })
 
     total_before_filter = len(apps)
+
+    # REAL DIAGNOSTIC (2026-09-27) — a real production run returned
+    # only 2 Boston applications in a week, a large gap from the old
+    # system's own confirmed ~250 in two weeks. One real theory: Boston
+    # Borough covers surrounding villages (Frampton, Wyberton, Old
+    # Leake confirmed from the old system's own results) whose address
+    # might not include the literal word "Boston" at all, silently
+    # excluding them from the current filter. Logs every unique
+    # address's last segment once per run so this can be checked
+    # directly against real data rather than guessed at.
+    if apps:
+        real_addresses = [a["address"] for a in apps if a.get("address")]
+        print(f"    Real full addresses seen on this page ({len(real_addresses)}):")
+        for addr in real_addresses:
+            print(f"      {addr!r}")
 
     # REAL FILTER — the whole point of this scraper: only keep rows
     # whose real address confirms this is genuinely a Boston
