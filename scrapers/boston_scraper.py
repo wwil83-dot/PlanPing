@@ -120,6 +120,26 @@ def _extract_postcode(text: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
+_DATE_FORMAT_DIAGNOSED: set[str] = set()
+
+
+def _parse_received_date(raw: str) -> Optional[date]:
+    """Real, confirmed format from every diagnostic dump tonight:
+    'Fri 11 Sep 2026' (day-of-week abbreviation, day, month
+    abbreviation, year) — e.g. from 'Received: Fri 11 Sep 2026'."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw, "%a %d %b %Y").date()
+    except ValueError:
+        if raw not in _DATE_FORMAT_DIAGNOSED:
+            _DATE_FORMAT_DIAGNOSED.add(raw)
+            print(f"    ⚠ DATE FORMAT DIAGNOSTIC: could not parse "
+                  f"received date {raw!r} with the expected format")
+        return None
+
+
 _STATUS_DIAGNOSED: set[str] = set()
 
 
@@ -185,13 +205,15 @@ def _parse_results_page(html: str) -> list[dict]:
 
         meta_info = item.find("p", class_="metaInfo")
         reference = ""
+        received_raw = ""
         if meta_info:
             meta_text = meta_info.get_text(" ", strip=True)
             for part in meta_text.split("·"):
                 part = part.strip()
                 if part.lower().startswith("ref"):
                     reference = part.split(":", 1)[1].strip() if ":" in part else ""
-                    break
+                elif part.lower().startswith("received"):
+                    received_raw = part.split(":", 1)[1].strip() if ":" in part else ""
 
         if not reference or len(reference) < 3:
             continue
@@ -203,6 +225,7 @@ def _parse_results_page(html: str) -> list[dict]:
             "description": description,
             "application_type": "Planning",
             "status": _normalise_status(status_raw),
+            "submitted_date": _parse_received_date(received_raw),
             "council_url": detail_url,
         })
 
@@ -398,6 +421,7 @@ async def main():
             "description": a.get("description") or None,
             "application_type": a.get("application_type"),
             "status": a["status"],
+            "submitted_date": a["submitted_date"].isoformat() if a.get("submitted_date") else None,
             "council_url": a.get("council_url"),
             "lat": lat,
             "lng": lng,
