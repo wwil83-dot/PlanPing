@@ -103,16 +103,22 @@ async def main():
             await accept.first.click(timeout=5_000)
             print("Real cookie banner accepted")
 
-        # Real, deliberately mixed set: large, high-development
-        # councils where zero sites after 2+ years of mandatory BNG
-        # would be a genuine surprise, plus Boston again as a direct
-        # re-check against the exact same confirmed search flow.
+        # REAL FIX (round 2) — every full "X City/Borough Council" name
+        # came back with a confirmed, genuine "no results" — including
+        # for Birmingham, Manchester, Leeds and Cornwall, where zero
+        # real sites after 2.5+ years of mandatory BNG would be
+        # implausible. Testing bare place names (the LPA might be
+        # stored differently than its full official name) and a
+        # generic habitat term, to isolate whether the search engine
+        # works at all versus specifically rejecting full council
+        # names.
         real_test_councils = [
-            "Birmingham City Council",
-            "Manchester City Council",
-            "Leeds City Council",
-            "Cornwall Council",
-            "Boston Borough Council",
+            "Birmingham",
+            "Manchester",
+            "Leeds",
+            "Cornwall",
+            "Boston",
+            "grassland",
         ]
 
         for lpa_name in real_test_councils:
