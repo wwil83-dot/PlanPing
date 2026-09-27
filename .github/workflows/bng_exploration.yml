@@ -1,0 +1,31 @@
+name: BNG Register Exploration
+
+# One-off, manual-trigger exploratory test — genuinely separate from
+# PlanFind, deliberately its own workflow file rather than added to
+# scrape.yml. Real question: does searching the biodiversity gain
+# sites register by LPA name return a bulk list of that council's
+# registered sites, which would make per-council enumeration a
+# genuine, practical way to cover the whole register. No Supabase, no
+# scheduling — just prints what it finds directly to the run log.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bng_register_search_test:
+    runs-on: [self-hosted, uk-runner]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright
+      - run: playwright install --with-deps chromium
+      - name: Test the real BNG register search behaviour
+        run: python bng_register_search_test.py
