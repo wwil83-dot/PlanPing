@@ -68,9 +68,15 @@ async def main():
         start = today - timedelta(days=30)
 
         if real_date_fields:
-            from_field = next((f for f in real_date_fields if "from" in f.lower()), None)
-            to_field = next((f for f in real_date_fields if "to" in f.lower()), None)
-            print(f"Real 'from' field: {from_field!r}, real 'to' field: {to_field!r}")
+            # REAL FIX — the real fields use "Start"/"End" (e.g.
+            # date(applicationReceivedStart)), not "from"/"to" as
+            # assumed — that mismatch meant neither field matched
+            # last time, and no date was actually filled in at all.
+            from_field = next((f for f in real_date_fields
+                                if "received" in f.lower() and "start" in f.lower()), None)
+            to_field = next((f for f in real_date_fields
+                              if "received" in f.lower() and "end" in f.lower()), None)
+            print(f"Real 'start' field: {from_field!r}, real 'end' field: {to_field!r}")
             if from_field:
                 await page.fill(f"input[name='{from_field}']", start.strftime("%d/%m/%Y"), timeout=5_000)
             if to_field:
