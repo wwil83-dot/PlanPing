@@ -1,40 +1,47 @@
 #!/usr/bin/env python3
 """
-PlanFind — Boston Borough Council scraper (2026-09-18).
+PlanFind — Boston Borough Council scraper (2026-09-27, ward-based rebuild).
 
-REAL, CONFIRMED CONTEXT: Boston's own search system
-(boston.gov.uk/article/27319/Planning-Applications-Search) is being
-actively retired — the council's own notice confirms migration to a
-new shared platform "to support the continued alignment of planning
-services and systems across our Partnership Councils." That shared
-platform is confirmed to be publicaccess.e-lindsey.gov.uk/online-
-applications — a real, existing Idox portal, already branded "South &
-East Lincolnshire Councils Partnership" (Boston, East Lindsey, South
-Holland), and already the base URL used by East Lindsey's own,
-separate scraper entry.
+REPLACES the earlier address-text-filtered version. That approach was
+confirmed genuinely unreliable: UK postal towns and local government
+districts frequently don't align (Stickney and Stickford both have
+"Boston" as their postal town but are confirmed, via Wikipedia and
+Lincolnshire council sources, to actually sit in East Lindsey district
+— a real, direct example of the exact failure mode this rebuild
+avoids).
 
-REAL, CONFIRMED VIA DIAGNOSTIC: this shared portal has NO clean
-"local authority" filter — its ward and parish dropdowns mix all
-three councils' areas together in one flat list (e.g. "Fishtoft Ward"
-is Boston's, "Crowland And Deeping St Nicholas Ward" is South
-Holland's, "Alford" is East Lindsey's). A direct unfiltered monthly-
-list search confirmed a real Boston address ("Joshua House, Grand
-Sluice Lane, Boston, PE21 9HL") appearing in results, confirming this
-portal genuinely does serve Boston's applications. Given no reliable
-dropdown filter exists, this scraper filters by matching "Boston" in
-each result's own address text after retrieving results — the same
-approach already proven for other shared-server situations elsewhere
-in this project (e.g. Cheltenham/Ipswich, verified by real address
-text).
+REAL, CONFIRMED FIX: filters by real ward instead, using Boston
+Borough Council's own 15 real wards (sourced from the council's
+official ward poster at democracy.boston.gov.uk and real election
+records), precisely matched against this shared portal's own ward
+dropdown values:
+  Coastal=COAS, Fenside=FENS, Fishtoft=FISH, Five Village=FIVE,
+  Kirton And Frampton=KIFR, Old Leake And Wrangle=OLWR, Skirbeck=SKIR,
+  St Thomas'=STTO, Staniland=STAN, Station=STAT,
+  Swineshead And Holland Fen=SWHF, Trinity Ward Boston=TRINB,
+  West=WEST, Witham=WITM, Wyberton=WYBE.
+Two genuine false positives were confirmed and excluded during
+matching: "Moulton, Weston And Cowbit Ward" (a South Holland ward,
+matched only by a stray "west" substring inside "Weston"), and the
+plain "Trinity Ward" without the "Boston" suffix (a different
+council's ward — the "Boston" suffix on TRINB is the portal's own way
+of disambiguating a real name collision between two councils' wards).
 
-HONEST LIMITATION: this is the SAME real dependency as East Lindsey's
-own scraper — if this shared portal ever goes down or changes
-structure, both are affected together. East Lindsey's own existing
-scraper entry currently has NO equivalent Boston-address filter,
-meaning it has very likely been silently saving Boston's applications
-mislabeled as East Lindsey's own — a separate, real cleanup not yet
-done (deliberately deferred, per direct instruction, to focus on
-getting Boston itself working first).
+REAL, CONFIRMED SUBMISSION FLOW: the advanced search's ward field
+alone triggers a real "Too many results found. Please enter some more
+parameters." validation error when no date range is given (it matches
+the portal's entire history, not just recent applications). Real date
+field names confirmed via direct inspection: date(applicationReceivedStart)
+and date(applicationReceivedEnd) — NOT the "from"/"to" naming assumed
+at first, which caused two earlier false-empty diagnostic runs.
+Confirmed: ward + this date range together clears the validation
+cleanly with no error.
+
+Results parsing reuses the exact structure already confirmed for this
+same portal's monthly list earlier tonight (ul#searchresults >
+li.searchresult, with p.address / p.metaInfo / .badge-status .value /
+a.summaryLink), since it's the same underlying platform regardless of
+which search type was used to reach the results page.
 """
 import asyncio
 import os
@@ -63,11 +70,28 @@ CONTEXT_OPTIONS = {
 BASE_URL = "https://publicaccess.e-lindsey.gov.uk/online-applications"
 COUNCIL_NAME = "Boston Borough Council"
 
+BOSTON_WARDS = [
+    ("Coastal", "COAS"),
+    ("Fenside", "FENS"),
+    ("Fishtoft", "FISH"),
+    ("Five Village", "FIVE"),
+    ("Kirton And Frampton", "KIFR"),
+    ("Old Leake And Wrangle", "OLWR"),
+    ("Skirbeck", "SKIR"),
+    ("St Thomas'", "STTO"),
+    ("Staniland", "STAN"),
+    ("Station", "STAT"),
+    ("Swineshead And Holland Fen", "SWHF"),
+    ("Trinity (Boston)", "TRINB"),
+    ("West", "WEST"),
+    ("Witham", "WITM"),
+    ("Wyberton", "WYBE"),
+]
+
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "15"))
 DAYS_BACK    = int(os.environ.get("DAYS_BACK", "30"))
-MAX_PAGES    = int(os.environ.get("MAX_PAGES", "30"))
 BOSTON_COUNCIL_ID = int(os.environ.get("BOSTON_COUNCIL_ID", "0"))
 
 START_TIME = time.monotonic()
@@ -88,16 +112,6 @@ def _extract_postcode(text: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
-def _is_boston_address(address: str) -> bool:
-    """REAL, CONFIRMED filter: a direct diagnostic run confirmed real
-    Boston addresses on this shared portal explicitly include the
-    word "Boston" (e.g. "...Grand Sluice Lane, Boston, PE21 9HL").
-    Deliberately a plain substring check on the real address text
-    itself, not a dropdown-based pre-filter, since no reliable
-    council-level dropdown exists on this shared portal."""
-    return bool(address) and "boston" in address.lower()
-
-
 _STATUS_DIAGNOSED: set[str] = set()
 
 
@@ -113,10 +127,6 @@ def _normalise_status(s: str) -> str:
         return "withdrawn"
     if any(x in key for x in ("appeal", "awaiting", "regist", "pending")):
         return "pending"
-    # Known but genuinely ambiguous, same category as "determined"
-    # elsewhere in this project — confirms a decision exists without
-    # revealing which outcome (approved/refused). Filed as 'pending'
-    # as the least-wrong default rather than re-flagged every run.
     if "decided" in key:
         return "pending"
     if key not in _STATUS_DIAGNOSED:
@@ -128,32 +138,7 @@ def _normalise_status(s: str) -> str:
 _ROW_STRUCTURE_DIAGNOSED = False
 
 
-def _parse_results_page(html: str) -> tuple[list[dict], int]:
-    """Standard, real Idox results structure already confirmed across
-    dozens of other working councils in this project: table with
-    class 'searchresults', one row per application. Built defensively
-    with a generic fallback and a one-time diagnostic, since this
-    specific portal's exact row markup wasn't independently captured
-    before writing this parser.
-
-    Returns (boston_filtered_apps, total_apps_before_filter) — the
-    total count is deliberately surfaced separately so a genuine
-    "no Boston applications this period" result can be told apart
-    from "the parser found nothing at all", which would otherwise
-    look identical from the caller's side.
-
-    REAL, CONFIRMED STRUCTURE (found via direct diagnostic, after
-    ruling out a table, id='results', and class='list' — none of
-    which matched): <ul id="searchresults"> containing
-    <li class="searchresult"> items. Each item has:
-      - status:      div.badge-status > div.value
-      - description: a.summaryLink > div.summaryLinkTextClamp
-                      (its href is the real detail page URL)
-      - address:     p.address
-      - reference + received date: p.metaInfo, its own text split on
-        the "·" divider into "Ref. No: X" / "Received: X" /
-        "Validated: X" segments.
-    """
+def _parse_results_page(html: str) -> list[dict]:
     global _ROW_STRUCTURE_DIAGNOSED
     soup = BeautifulSoup(html, "html.parser")
     apps = []
@@ -172,12 +157,10 @@ def _parse_results_page(html: str) -> tuple[list[dict], int]:
         if not summary_link:
             continue
 
-        reference_from_href = None
         href = summary_link.get("href")
         detail_url = None
         if href:
-            detail_url = href if href.startswith("http") else \
-                f"https://publicaccess.e-lindsey.gov.uk{href}"
+            detail_url = href if href.startswith("http") else f"{BASE_URL.rsplit('/', 1)[0]}{href}"
 
         desc_div = summary_link.find("div", class_="summaryLinkTextClamp")
         description = desc_div.get_text(strip=True) if desc_div else ""
@@ -211,36 +194,13 @@ def _parse_results_page(html: str) -> tuple[list[dict], int]:
             "council_url": detail_url,
         })
 
-    total_before_filter = len(apps)
-
-    # REAL DIAGNOSTIC (2026-09-27) — a real production run returned
-    # only 2 Boston applications in a week, a large gap from the old
-    # system's own confirmed ~250 in two weeks. One real theory: Boston
-    # Borough covers surrounding villages (Frampton, Wyberton, Old
-    # Leake confirmed from the old system's own results) whose address
-    # might not include the literal word "Boston" at all, silently
-    # excluding them from the current filter. Logs every unique
-    # address's last segment once per run so this can be checked
-    # directly against real data rather than guessed at.
-    if apps:
-        real_addresses = [a["address"] for a in apps if a.get("address")]
-        print(f"    Real full addresses seen on this page ({len(real_addresses)}):")
-        for addr in real_addresses:
-            print(f"      {addr!r}")
-
-    # REAL FILTER — the whole point of this scraper: only keep rows
-    # whose real address confirms this is genuinely a Boston
-    # application, not East Lindsey's or South Holland's, since this
-    # portal's results are otherwise unfiltered by council.
-    boston_only = [a for a in apps if _is_boston_address(a["address"])]
-
     seen_refs: set[str] = set()
     deduped = []
-    for a in boston_only:
+    for a in apps:
         if a["reference"] not in seen_refs:
             seen_refs.add(a["reference"])
             deduped.append(a)
-    return deduped, total_before_filter
+    return deduped
 
 
 def _h():
@@ -301,9 +261,61 @@ async def geocode(postcodes: list[str]) -> dict:
     return results
 
 
+async def scrape_ward(page, ward_name: str, ward_code: str,
+                       start_str: str, end_str: str) -> list[dict]:
+    advanced_url = f"{BASE_URL}/search.do?action=advanced"
+    try:
+        await page.goto(advanced_url, wait_until="domcontentloaded", timeout=45_000)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=15_000)
+        except PlaywrightTimeout:
+            pass
+
+        ward_select = page.locator("select[name='searchCriteria.ward']")
+        if await ward_select.count() == 0:
+            print(f"    [{ward_name}] ⚠ No real ward select found — stopping this ward")
+            return []
+        await ward_select.select_option(value=ward_code)
+
+        await page.fill("input[name='date(applicationReceivedStart)']", start_str, timeout=5_000)
+        await page.fill("input[name='date(applicationReceivedEnd)']", end_str, timeout=5_000)
+
+        submit = page.locator("input[type='submit'], button[type='submit']")
+        if await submit.count() == 0:
+            print(f"    [{ward_name}] ⚠ No real submit control found — stopping this ward")
+            return []
+
+        async with page.expect_navigation(wait_until="domcontentloaded", timeout=30_000):
+            await submit.first.click(timeout=5_000)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=15_000)
+        except PlaywrightTimeout:
+            pass
+    except Exception as e:
+        print(f"    [{ward_name}] ⚠ Search fill/submit failed: {type(e).__name__}: {e!r}")
+        return []
+
+    error_like = page.locator("[class*='error' i]")
+    if await error_like.count() > 0:
+        error_text = (await error_like.first.text_content() or "").strip()
+        if error_text:
+            print(f"    [{ward_name}] ⚠ Real validation message: {error_text!r}")
+            return []
+
+    html = await page.content()
+    apps = _parse_results_page(html)
+    print(f"    [{ward_name}] {len(apps)} real applications found")
+    return apps
+
+
 async def scrape() -> list[dict]:
     all_apps: list[dict] = []
     seen_refs: set[str] = set()
+
+    today = date.today()
+    start = today - timedelta(days=DAYS_BACK)
+    start_str = start.strftime("%d/%m/%Y")
+    end_str = today.strftime("%d/%m/%Y")
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
@@ -311,95 +323,15 @@ async def scrape() -> list[dict]:
         context = await browser.new_context(**CONTEXT_OPTIONS)
         page = await context.new_page()
 
-        try:
-            monthly_url = f"{BASE_URL}/search.do?action=monthlyList"
-            await page.goto(monthly_url, wait_until="domcontentloaded", timeout=45_000)
-            try:
-                await page.wait_for_load_state("networkidle", timeout=15_000)
-            except PlaywrightTimeout:
-                pass
-
-            month_select = page.locator("select[name='month']")
-            if await month_select.count() == 0:
-                print("    ⚠ No real month select found — stopping")
-                await context.close()
-                await browser.close()
-                return []
-
-            received_radio = page.locator(
-                "input[type='radio'][value*='Received' i], input[type='radio'][value*='received' i]"
-            )
-            if await received_radio.count() > 0:
-                await received_radio.first.check(timeout=5_000)
-
-            submit = page.locator("input[type='submit'], button[type='submit']")
-            if await submit.count() == 0:
-                print("    ⚠ No real submit control found — stopping")
-                await context.close()
-                await browser.close()
-                return []
-
-            async with page.expect_navigation(wait_until="domcontentloaded", timeout=30_000):
-                await submit.first.click(timeout=5_000)
-            try:
-                await page.wait_for_load_state("networkidle", timeout=15_000)
-            except PlaywrightTimeout:
-                pass
-        except Exception as e:
-            print(f"    ⚠ Search fill/submit failed: {type(e).__name__}: {e!r}")
-            await context.close()
-            await browser.close()
-            return []
-
-        print(f"    Post-submit URL: {page.url}")
-
-        html = await page.content()
-        page1_apps, page1_total = _parse_results_page(html)
-        for a in page1_apps:
-            if a["reference"] not in seen_refs:
-                seen_refs.add(a["reference"])
-                all_apps.append(a)
-        print(f"    Page 1: {page1_total} real applications parsed in total, "
-              f"{len(page1_apps)} were Boston's (running total {len(all_apps)})")
-
-        page_num = 2
-        while page_num <= MAX_PAGES:
+        for ward_name, ward_code in BOSTON_WARDS:
             if should_stop():
-                print(f"    ⚠ Time budget reached at page {page_num}, stopping")
+                print(f"⚠ Time budget reached, stopping before ward {ward_name}")
                 break
-            # Real, confirmed body text showed numbered pagination
-            # with a plain "Next" text link ("1 2 3 4 Next"), not the
-            # aria-label="Next Page." pattern used by table-based Idox
-            # installations elsewhere in this project.
-            next_link = page.locator("a:has-text('Next'):visible")
-            if await next_link.count() == 0:
-                print(f"    No visible 'Next' link — stopping at page {page_num - 1}")
-                break
-            try:
-                await next_link.first.click(timeout=10_000)
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=10_000)
-                except PlaywrightTimeout:
-                    pass
-                await asyncio.sleep(1.5)
-            except Exception as e:
-                print(f"    ⚠ Could not click Next at page {page_num}: {type(e).__name__}")
-                break
-
-            html = await page.content()
-            page_apps, page_total = _parse_results_page(html)
-            new_count = 0
-            for a in page_apps:
+            ward_apps = await scrape_ward(page, ward_name, ward_code, start_str, end_str)
+            for a in ward_apps:
                 if a["reference"] not in seen_refs:
                     seen_refs.add(a["reference"])
                     all_apps.append(a)
-                    new_count += 1
-            print(f"    Page {page_num}: {page_total} real applications parsed in total, "
-                  f"{new_count} new Boston ones (running total {len(all_apps)})")
-            if page_total == 0:
-                print(f"    Page {page_num}: 0 real applications parsed at all — stopping")
-                break
-            page_num += 1
 
         await context.close()
         await browser.close()
@@ -408,7 +340,8 @@ async def scrape() -> list[dict]:
 
 
 async def main():
-    print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Boston Borough Council scraper")
+    print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Boston Borough Council scraper "
+          f"(ward-based)")
     print(f"Days back:   {DAYS_BACK}")
     print(f"Budget:      {MAX_MINUTES} minutes")
     print(f"SUPABASE:    {'set' if SUPABASE_URL and SUPABASE_KEY else 'MISSING'}\n")
@@ -417,9 +350,7 @@ async def main():
         print("ERROR: SUPABASE_URL / SUPABASE_KEY not set.")
         sys.exit(1)
     if not BOSTON_COUNCIL_ID:
-        print("ERROR: BOSTON_COUNCIL_ID not set. Run the INSERT_SQL for Boston "
-              "Borough Council in Supabase first, then set this environment "
-              "variable to the real returned id.")
+        print("ERROR: BOSTON_COUNCIL_ID not set.")
         sys.exit(1)
 
     raw_apps = await scrape()
@@ -428,7 +359,7 @@ async def main():
         await _supa_patch_council(BOSTON_COUNCIL_ID, {
             "last_scraped_at": datetime.now(timezone.utc).isoformat()
         })
-        print("\nNo real Boston applications found this run.")
+        print("\nNo real Boston applications found across any ward this run.")
         return
 
     postcodes = [a["postcode"] for a in raw_apps if a.get("postcode")]
