@@ -49,18 +49,33 @@ async def search_lpa(page, lpa_name: str):
 
     print(f"Real results URL: {page.url}")
 
+    # REAL FIX — confirmed via the actual run: waiting for "Loading
+    # Message..." to disappear wasn't reliable — both "SITES FOUND"
+    # results still showed that exact loading text in their captured
+    # excerpt, meaning the page was still mid-load, not genuinely
+    # confirmed to have real results. Waiting for one of the two real,
+    # concrete outcomes instead (the "no results" message, or the
+    # loading text genuinely gone), with a longer timeout in case a
+    # real, larger result set simply takes longer to render than an
+    # empty one does.
     try:
-        await page.wait_for_selector("text=Loading Message", state="detached", timeout=15_000)
+        await page.wait_for_function(
+            "() => !document.body.innerText.includes('Loading Message')",
+            timeout=30_000,
+        )
     except PlaywrightTimeout:
-        print("⚠ 'Loading Message...' never disappeared within 15s")
-    await asyncio.sleep(2)
+        print("⚠ Still showing 'Loading Message...' after 30s — real content may not have loaded")
+    await asyncio.sleep(1)
 
     body_text = await page.locator("body").inner_text()
-    if "No search results found" in body_text:
-        print("Real result: NO SITES FOUND")
+    still_loading = "Loading Message" in body_text
+    if still_loading:
+        print("Real result: INCONCLUSIVE — still loading after 30s, not a confirmed result")
+    elif "No search results found" in body_text:
+        print("Real result: NO SITES FOUND (confirmed — loading finished, real 'no results' message shown)")
     else:
-        print("Real result: SITES FOUND")
-        print(f"Real body excerpt: {body_text[:800]!r}")
+        print("Real result: SITES FOUND (confirmed — loading finished, no 'no results' message)")
+        print(f"Real body excerpt: {body_text[:1500]!r}")
 
     # Navigate back to a fresh search page before the next term.
     await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=45_000)
