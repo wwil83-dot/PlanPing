@@ -137,6 +137,10 @@ def _normalise_status(s: str) -> str:
         return "pending"
     if "decided" in key:
         return "pending"
+    # Same category — a genuinely ambiguous real status confirmed via
+    # production data, not a diagnosis of which outcome occurred.
+    if key == "unknown":
+        return "pending"
     if key not in _STATUS_DIAGNOSED:
         _STATUS_DIAGNOSED.add(key)
         print(f"    ⚠ STATUS DIAGNOSTIC: unrecognised status {s!r} — filed as 'pending'")
