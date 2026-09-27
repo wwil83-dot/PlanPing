@@ -4158,7 +4158,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MAX_MINUTES: "15"
-          DAYS_BACK: "30"
+          DAYS_BACK: "60"
           BOSTON_COUNCIL_ID: "560"
         run: cd scrapers && python boston_scraper.py
 
