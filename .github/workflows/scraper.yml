@@ -112,6 +112,23 @@ on:
                           # LIMITATION: this is a "Received" report with
                           # no decision/status column — everything from
                           # this source files as 'pending'.
+    - cron: '40 9 * * *'  # Boston Borough Council nightly scrape —
+                          # promoted after a confirmed clean production
+                          # run (2026-09-27): 19 real applications
+                          # saved across 6 real wards, only 1 centroid
+                          # fallback. Uses the shared "South & East
+                          # Lincolnshire Councils Partnership" Idox
+                          # portal, filtered by Boston's 15 confirmed
+                          # real wards (not address text — UK postal
+                          # towns and district boundaries don't always
+                          # align, confirmed via Stickney/Stickford
+                          # both having "Boston" as their postal town
+                          # while genuinely sitting in East Lindsey).
+                          # HONEST LIMITATION: uses a 60-day window
+                          # rather than the usual 30, since splitting
+                          # the search 15 ways by ward dilutes
+                          # per-search volume given Boston's overall
+                          # low application count.
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
     - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
@@ -4138,7 +4155,9 @@ jobs:
     # mislabeled Boston applications) is still pending, deliberately
     # deferred. DELIBERATELY manual-trigger only for now — never run
     # live yet.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'boston_scraper'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'boston_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '40 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
