@@ -74,8 +74,7 @@ body {
   gap: 4px;
   white-space: nowrap;
 }
-.nav-dropdown-trigger:hover,
-.nav-dropdown.open .nav-dropdown-trigger { color: var(--blue); }
+.nav-dropdown-trigger:hover, .nav-dropdown.open .nav-dropdown-trigger { color: var(--blue); }
 .nav-dropdown-trigger::after {
   content: '';
   width: 6px;
@@ -464,7 +463,23 @@ h1 em { font-style: italic; color: #7dd98a; }
      below the trigger keeps it fully on-screen and easy to tap. */
   .nav-dropdown-menu { position: static; min-width: 100%; box-shadow: none; border: none; padding: 0 0 0 .75rem; margin-top: .3rem; opacity: 1; visibility: visible; transform: none; display: none; }
   .nav-dropdown.open .nav-dropdown-menu { display: flex; }
-  .nav-dropdown:hover .nav-dropdown-menu:not(.open) { display: none; }
+  /* REAL BUG FIX (2026-09-27) — this line used to read
+     ".nav-dropdown:hover .nav-dropdown-menu:not(.open) { display: none; }".
+     The .open class is only ever added to the parent .nav-dropdown
+     (confirmed in base.html's own click handler), never to the menu
+     itself — so ".nav-dropdown-menu:not(.open)" was always true for
+     the menu, regardless of the parent's real state. That gave this
+     rule four class-level conditions (specificity 0,4,0), genuinely
+     higher than ".nav-dropdown.open .nav-dropdown-menu"'s three
+     (0,3,0) just above it. On Android, tapping an element with hover
+     styles defined often triggers a brief simulated :hover state —
+     when that happened at the same moment a real tap correctly added
+     .open, this rule's higher specificity won and forced the menu
+     back to display:none, even though the tap and the JS both worked
+     correctly. Real, confirmed cause of "the dropdown does nothing
+     visible when tapped" on mobile. Removed entirely — the two rules
+     above it already handle showing/hiding correctly on their own.
+  */
 }
 
 /* ── Back to top ── */
@@ -494,7 +509,6 @@ h1 em { font-style: italic; color: #7dd98a; }
 #back-to-top:hover { background: var(--blue-dark); }
 #back-to-top.visible { opacity: 1; visibility: visible; transform: translateY(0); }
 
-
 /* ADDED (2026-09-06) — real, direct request: the guides pages felt flat
    (plain inline-styled cards, no hover feedback at all — inline styles
    can't support :hover regardless) and lacked the colour the rest of
@@ -522,7 +536,6 @@ h1 em { font-style: italic; color: #7dd98a; }
   box-shadow: 0 8px 20px rgba(0,0,0,.1);
 }
 
-
 /* ADDED (2026-09-07) — real, direct request: the "Nearby applications"
    cards on the application detail page used inline styles, which
    can't support :hover at all — moved to a real class (styling
@@ -543,7 +556,6 @@ h1 em { font-style: italic; color: #7dd98a; }
   transform: translateY(-3px);
   box-shadow: 0 8px 20px rgba(0,0,0,.1);
 }
-
 
 /* ADDED (2026-09-07) — real, direct request: filter bars (postcode
    results, tag pages, town pages, professionals directory) used a
@@ -568,7 +580,6 @@ h1 em { font-style: italic; color: #7dd98a; }
 }
 .filter-bar label { color: rgba(255,255,255,.85) !important; }
 .filter-bar .btn-link { color: #fff !important; text-decoration-color: rgba(255,255,255,.5); }
-
 
 /* ── Guides ── */
 .guide-category-icon {
@@ -672,7 +683,6 @@ h1 em { font-style: italic; color: #7dd98a; }
   .guide-stat-panel-cols { flex-direction: column; align-items: flex-start; gap: 1rem; }
   .guide-stat-panel-vdivider { display: none; }
 }
-
 
 /* ── About page ── */
 .about-card {
