@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
 """
-BNG register solvability check (2026-09-27).
+BNG register solvability check, round 2 (2026-09-27).
 
-Two real, still-unanswered questions before deciding whether a BNG
-broker product is buildable:
+Confirmed from round 1: searching term=BGS returns the whole register
+(395 sites), pagination at 100/page works with no overlap, and each
+site has a predictable detail URL (/search/BGS-xxxxxxxxx) whose first
+("Gain site") tab shows size, grid reference and the registering
+body. Still unseen: the Habitat, Allocation and Amendments tabs —
+the ones that would show whether units / allocations are public.
 
-1. ENUMERATION — the register's search has no "list everything"
-   option. Which search strategies (reference prefix, habitat terms)
-   return large result sets, and does pagination via the confirmed
-   URL parameters (term, page, resultsPerPage) work?
-2. DETAIL PAGE — what does a single site's own page actually expose
-   (habitat units, allocations, location, status)? This decides
-   whether the data a broker needs is public at all.
-
-Reuses the confirmed working search flow: results load client-side
-(a "Loading Message..." placeholder first), so every page waits for
-that text to genuinely disappear before reading anything.
+This (1) enumerates all sites via the BGS search and reports who
+holds them and how precise the grid references are, and (2) opens
+several sites, clicks each remaining tab and dumps what it shows.
 """
 import asyncio
 import re
+from collections import Counter
 
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
 
@@ -35,6 +32,9 @@ CONTEXT_OPTIONS = {
 }
 
 BASE_URL = "https://environment.data.gov.uk/biodiversity-net-gain"
+RESULT_RE = re.compile(
+    r"(BGS-\d+)\s*\nGrid reference:\s*([^\n]*)\nLocal Planning Authority or responsible body:\s*([^\n]*)"
+)
 
 
 async def wait_for_content(page):
@@ -48,8 +48,7 @@ async def wait_for_content(page):
     await asyncio.sleep(1)
 
 
-async def open_search(page, term: str, page_num: int = 1, per_page: int = 10) -> str:
-    url = f"{BASE_URL}/search?term={term}&page={page_num}&resultsPerPage={per_page}"
+async def load(page, url: str) -> str:
     await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
     try:
         await page.wait_for_load_state("networkidle", timeout=15_000)
@@ -59,11 +58,12 @@ async def open_search(page, term: str, page_num: int = 1, per_page: int = 10) ->
     return await page.locator("body").inner_text()
 
 
-def result_count(body_text: str):
-    if "No search results found" in body_text:
-        return 0
-    m = re.search(r"(\d[\d,]*)\s+results?\b", body_text)
-    return int(m.group(1).replace(",", "")) if m else None
+def trim_detail(text: str) -> str:
+    start = text.find("Gain site reference number")
+    end = text.find("Start a new search")
+    if start == -1:
+        return text[:2500]
+    return text[start:end if end != -1 else None][:2500]
 
 
 async def main():
@@ -84,60 +84,62 @@ async def main():
             print("Real cookie banner accepted\n")
 
         print("=" * 60)
-        print("PART 1: which search terms return large result sets?")
+        print("PART 1: enumerate the whole register via term=BGS")
         print("=" * 60)
-        terms = ["BGS", "BGS-", "grassland", "woodland", "heathland", "wetland",
-                 "hedgerow", "scrub", "cropland", "orchard", "coastal", "urban",
-                 "LPA", "Limited"]
-        for term in terms:
-            body = await open_search(page, term)
-            print(f"  {term!r}: {result_count(body)} results")
+        sites = {}
+        for page_num in range(1, 6):
+            body = await load(page, f"{BASE_URL}/search?term=BGS&page={page_num}&resultsPerPage=100")
+            found = RESULT_RE.findall(body)
+            print(f"  page {page_num}: {len(found)} sites parsed")
+            for ref, grid, body_name in found:
+                sites[ref] = (grid.strip(), body_name.strip())
+            if not found:
+                break
+        print(f"  TOTAL distinct sites: {len(sites)}")
+
+        bodies = Counter(b for _, b in sites.values())
+        print(f"\n  distinct registering bodies: {len(bodies)}")
+        print("  top 15 by number of sites:")
+        for name, n in bodies.most_common(15):
+            print(f"    {n:4d}  {name}")
+        lpa_named = sum(n for name, n in bodies.items() if "LPA" in name)
+        print(f"\n  sites whose body name contains 'LPA': {lpa_named}")
+        print(f"  sites held by other bodies (companies/trusts): {len(sites) - lpa_named}")
+
+        digit_lengths = Counter(
+            len(re.sub(r"\D", "", g)) for g, _ in sites.values()
+        )
+        print(f"\n  grid reference digit counts (6=100m, 8=10m, 10=1m): {dict(digit_lengths)}")
 
         print("\n" + "=" * 60)
-        print("PART 2: does pagination work at 100 per page? ('grassland')")
+        print("PART 2: the Habitat / Allocation / Amendments tabs")
         print("=" * 60)
-        body = await open_search(page, "grassland", page_num=1, per_page=100)
-        refs_p1 = re.findall(r"BGS-\d+", body)
-        print(f"  page 1: {len(refs_p1)} references, count line: {result_count(body)}")
-        body = await open_search(page, "grassland", page_num=2, per_page=100)
-        refs_p2 = re.findall(r"BGS-\d+", body)
-        print(f"  page 2: {len(refs_p2)} references")
-        print(f"  overlap between page 1 and 2: {len(set(refs_p1) & set(refs_p2))}")
+        sample_refs = ["BGS-140524001"] + [r for r in list(sites)[:4] if r != "BGS-140524001"]
+        for ref in sample_refs[:4]:
+            print(f"\n----- {ref} -----")
+            await load(page, f"{BASE_URL}/search/{ref}")
 
-        print("\n" + "=" * 60)
-        print("PART 3: what does a single site's detail page expose?")
-        print("=" * 60)
-        body = await open_search(page, "grassland", per_page=10)
-        links = page.locator("a:has-text('BGS-')")
-        link_count = await links.count()
-        print(f"  result links containing a BGS- reference: {link_count}")
+            boundary = page.locator("a:has-text('Link to land boundary')")
+            if await boundary.count() > 0:
+                print(f"  land boundary link: {await boundary.first.evaluate('el => el.href')}")
 
-        detail_href = None
-        if link_count > 0:
-            detail_href = await links.first.evaluate("el => el.href")
-            print(f"  first link href: {detail_href}")
-        else:
-            print("  no anchor links — listing other clickable candidates")
-            for sel in ["a", "button"]:
-                els = page.locator(f"main {sel}, body {sel}")
-                n = await els.count()
-                for i in range(min(n, 15)):
-                    txt = (await els.nth(i).inner_text()).strip()[:60]
-                    href = await els.nth(i).get_attribute("href")
-                    print(f"    <{sel}> text={txt!r} href={href!r}")
-
-        if detail_href:
-            await page.goto(detail_href, wait_until="domcontentloaded", timeout=45_000)
-            try:
-                await page.wait_for_load_state("networkidle", timeout=15_000)
-            except PlaywrightTimeout:
-                pass
-            await wait_for_content(page)
-            print(f"\n  detail page URL: {page.url}")
-            print(f"  detail page title: {await page.title()}")
-            detail_text = await page.locator("body").inner_text()
-            print(f"\n  detail page text (first 6000 chars):")
-            print(repr(detail_text[:6000]))
+            for tab in ["Habitat", "Allocation", "Amendments"]:
+                target = page.locator(
+                    f"[role='tab']:has-text('{tab}'), a:has-text('{tab}'), button:has-text('{tab}')"
+                ).first
+                if await target.count() == 0:
+                    print(f"  [{tab}] tab element not found")
+                    continue
+                try:
+                    await target.click(timeout=5_000)
+                    await asyncio.sleep(1.5)
+                    await wait_for_content(page)
+                except Exception as e:
+                    print(f"  [{tab}] click failed: {type(e).__name__}")
+                    continue
+                text = await page.locator("body").inner_text()
+                print(f"\n  [{tab}] url after click: {page.url}")
+                print(f"  [{tab}] content: {trim_detail(text)!r}")
 
         await context.close()
         await browser.close()
