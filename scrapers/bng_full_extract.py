@@ -27,7 +27,7 @@ import os
 import re
 import statistics
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 
 import httpx
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
@@ -200,7 +200,7 @@ async def click_tab(page, name: str, marker: str) -> str:
     target = page.locator(
         f"[role='tab']:has-text('{name}'), a:has-text('{name}'), button:has-text('{name}')"
     ).first
-    await target.click(timeout=8_000)
+    await target.click(timeout=15_000)
     text = ""
     for _ in range(8):
         await asyncio.sleep(1)
@@ -252,7 +252,7 @@ async def worker(context, queue, results, errors, total):
         except asyncio.QueueEmpty:
             break
         record, last = None, ""
-        for _ in range(2):
+        for _ in range(3):
             try:
                 record = await scrape_site(page, ref)
                 break
@@ -269,35 +269,157 @@ async def worker(context, queue, results, errors, total):
     await page.close()
 
 
+FILLER = {"council", "borough", "city", "district", "county", "metropolitan", "royal",
+          "london", "of", "the", "unitary", "authority", "lpa", "and"}
+
+
+def council_key(name: str) -> str:
+    """Comparable key so 'County Durham LPA' and 'Durham County Council'
+    both become 'durham'. Falls back to a lighter strip when everything
+    would be removed (e.g. 'City of London')."""
+    tokens = re.sub(r"[^a-z0-9 ]", " ", (name or "").lower().replace("&", " and ")).split()
+    core = [t for t in tokens if t not in FILLER]
+    return " ".join(core) or " ".join(t for t in tokens if t not in {"lpa", "council"})
+
+
+def map_councils(lpa_names, councils):
+    """{allocation LPA name: set of PlanFind council ids}. A key also
+    matches councils whose key starts with it plus a space, so
+    'Somerset LPA' reaches 'Somerset Council (South)' and '(Mendip)'."""
+    by_key = {}
+    for c in councils:
+        by_key.setdefault(council_key(c["name"]), []).append(c["id"])
+    mapping = {}
+    for lpa in set(lpa_names):
+        key = council_key(lpa)
+        ids = set(by_key.get(key, []))
+        if key:
+            for k, id_list in by_key.items():
+                if k.startswith(key + " "):
+                    ids.update(id_list)
+        mapping[lpa] = ids
+    return mapping
+
+
+def ref_year(ref):
+    for pat in (r"^(\d{4})[/\-]", r"^(\d{2})[/\-]", r"^[A-Za-z]{1,6}/(\d{2})/",
+                r"^[A-Za-z]{1,3}(\d{2})/", r"^\d+-(\d{4})-"):
+        m = re.match(pat, ref or "")
+        if m:
+            y = int(m.group(1))
+            y = y + 2000 if y < 100 else y
+            if 2015 <= y <= 2027:
+                return y
+    return None
+
+
+def classify(allocations, mapping, found, covered_ids):
+    out = []
+    for a in allocations:
+        ids = mapping.get(a["lpa"], set())
+        ref = a.get("planning_ref")
+        if not ids:
+            status = "unmapped"
+        elif not ref:
+            status = "no_reference"
+        elif found.get(ref, set()) & ids:
+            status = "matched"
+        elif ref in found:
+            status = "other_council_only"
+        else:
+            status = "absent"
+        out.append({**a, "status": status, "council_ids": sorted(ids),
+                    "covered": bool(ids & covered_ids)})
+    return out
+
+
 async def planfind_matches(allocations):
     if not (SUPABASE_URL and SUPABASE_KEY):
         print("  (SUPABASE_URL/KEY not set — skipping PlanFind cross-check)")
         return
-    refs = sorted({a["planning_ref"] for a in allocations if a.get("planning_ref")})
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
-    matched = {}
+    found = {}
     try:
         async with httpx.AsyncClient(timeout=90) as c:
+            r = await c.get(
+                f"{SUPABASE_URL}/rest/v1/councils",
+                params={"select": "id,name,coverage_source", "active": "eq.true", "limit": "2000"},
+                headers=headers,
+            )
+            if r.status_code != 200:
+                print(f"  ⚠ Supabase councils HTTP {r.status_code}: {r.text[:200]}")
+                return
+            councils = r.json()
+            covered_ids = {c_["id"] for c_ in councils
+                           if c_.get("coverage_source") not in (None, "pending", "none", "manual_link")}
+            mapping = map_councils([a["lpa"] for a in allocations], councils)
+
+            refs = sorted({a["planning_ref"] for a in allocations if a.get("planning_ref")})
             for i in range(0, len(refs), 40):
-                batch = refs[i:i + 40]
-                in_list = ",".join('"' + r.replace('"', "") + '"' for r in batch)
+                in_list = ",".join('"' + x.replace('"', "") + '"' for x in refs[i:i + 40])
                 r = await c.get(
                     f"{SUPABASE_URL}/rest/v1/planning_applications",
-                    params={"reference": f"in.({in_list})", "select": "reference,council_id"},
+                    params={"reference": f"in.({in_list})", "select": "reference,council_id",
+                            "limit": "5000"},
                     headers=headers,
                 )
                 if r.status_code != 200:
                     print(f"  ⚠ Supabase HTTP {r.status_code}: {r.text[:200]}")
                     return
                 for row in r.json():
-                    matched[row["reference"]] = row["council_id"]
+                    found.setdefault(row["reference"], set()).add(row["council_id"])
     except Exception as e:
         print(f"  ⚠ PlanFind cross-check failed: {type(e).__name__}: {e}")
         return
-    print(f"  distinct allocation planning references: {len(refs)}")
-    print(f"  already present in PlanFind's planning_applications: {len(matched)}")
-    for ref in list(matched)[:5]:
-        print(f"    e.g. {ref} (council_id {matched[ref]})")
+
+    rows = classify(allocations, mapping, found, covered_ids)
+    counts = Counter(r_["status"] for r_ in rows)
+    print(f"  allocations: {len(rows)}   distinct references: "
+          f"{len({r_['planning_ref'] for r_ in rows if r_['planning_ref']})}")
+    for s in ("matched", "absent", "other_council_only", "unmapped", "no_reference"):
+        print(f"    {s:20s} {counts.get(s, 0)}")
+    print("    (matched = same reference AND the right council; other_council_only = "
+          "the reference exists in PlanFind but under a different council)")
+
+    covered = [r_ for r_ in rows if r_["covered"]]
+    cm = sum(1 for r_ in covered if r_["status"] == "matched")
+    print(f"\n  allocations in councils PlanFind actively covers: {len(covered)}")
+    print(f"    found under the right council: {cm} ({100 * cm / max(len(covered), 1):.0f}%)")
+
+    by_year = defaultdict(lambda: [0, 0])
+    for r_ in covered:
+        y = ref_year(r_["planning_ref"])
+        by_year[y][0] += 1
+        by_year[y][1] += r_["status"] == "matched"
+    print("  match rate by reference year (covered councils only):")
+    for y in sorted(by_year, key=lambda v: (v is None, v)):
+        tot, m = by_year[y]
+        print(f"    {str(y) if y else 'unknown':8s} {m:4d} / {tot:4d}  ({100 * m / max(tot, 1):.0f}%)")
+
+    print("\n  top LPAs by allocations:")
+    per_lpa = defaultdict(lambda: [0, 0, 0])
+    for r_ in rows:
+        per_lpa[r_["lpa"]][0] += 1
+        per_lpa[r_["lpa"]][1] += r_["status"] == "matched"
+        per_lpa[r_["lpa"]][2] = len(r_["council_ids"])
+    for lpa, (n, m, nids) in sorted(per_lpa.items(), key=lambda kv: -kv[1][0])[:12]:
+        note = "no council mapped" if nids == 0 else f"{nids} council row(s)"
+        print(f"    {n:4d} allocations, {m:4d} matched  {lpa}  [{note}]")
+
+    unmapped = Counter(r_["lpa"] for r_ in rows if r_["status"] == "unmapped")
+    print(f"\n  LPA names with no council mapped ({len(unmapped)}), most allocations first:")
+    for name, n in unmapped.most_common(15):
+        print(f"    {n:4d}  {name}")
+
+    with open("/tmp/bng_allocations_matched.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["gain_site", "lpa", "planning_ref", "project_name", "area_units",
+                    "status", "covered", "council_ids"])
+        for r_ in rows:
+            w.writerow([r_["gain_site"], r_["lpa"], r_["planning_ref"], r_["project_name"],
+                        r_["units"].get("Area", ""), r_["status"], r_["covered"],
+                        ";".join(map(str, r_["council_ids"]))])
+    print("\n  saved /tmp/bng_allocations_matched.csv")
 
 
 async def main():
