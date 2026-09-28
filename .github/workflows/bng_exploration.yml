@@ -1,20 +1,24 @@
 name: BNG Register Exploration
 
-# One-off, manual-trigger exploratory test — genuinely separate from
-# PlanFind, deliberately its own workflow file rather than added to
-# scrape.yml. Real question: does searching the biodiversity gain
-# sites register by LPA name return a bulk list of that council's
-# registered sites, which would make per-council enumeration a
-# genuine, practical way to cover the whole register. No Supabase, no
-# scheduling — just prints what it finds directly to the run log.
+# Manual-trigger exploration, deliberately separate from PlanFind's
+# scrape.yml. Pulls the whole Biodiversity Gain Sites register
+# (~395 sites) into files and prints the numbers needed to judge
+# whether a product is viable. Read-only against PlanFind's database
+# (only used for the optional planning-reference cross-check).
+#
+# Tip: run once with max_sites = 20 as a quick trial before the full run.
 
 on:
   workflow_dispatch:
+    inputs:
+      max_sites:
+        description: 'Limit sites for a trial run (0 = all sites)'
+        default: '0'
 
 jobs:
-  bng_register_search_test:
+  bng_full_extract:
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 10
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,7 +29,21 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-v1
-      - run: pip install playwright
+      - run: pip install playwright httpx pyproj
       - run: playwright install --with-deps chromium
-      - name: Test the real BNG register search behaviour
-        run: cd scrapers && python bng_register_search_test.py
+      - name: Extract the BNG register
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MAX_SITES: ${{ github.event.inputs.max_sites }}
+          WORKERS: "3"
+        run: cd scrapers && python bng_full_extract.py
+      - name: Upload the extracted data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bng-register-data
+          path: |
+            /tmp/bng_sites.json
+            /tmp/bng_allocations.csv
+          retention-days: 14
