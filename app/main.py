@@ -669,6 +669,69 @@ async def activity(request: Request):
         "highlights": highlights,
     })
 
+# ---------------------------------------------------------------------
+# Biodiversity Net Gain (BNG) — ADDED 2026-09-29. Real, confirmed data
+# from the Defra/Natural England biodiversity gain sites register (see
+# bng_scraper.py's own module docstring for the full evidence trail).
+#
+# HONEST LIMITATIONS, deliberately surfaced here in the route logic
+# too, not just in the scraper and templates:
+#   - council_id on a gain site is a best-effort match via reverse-
+#     geocoding its OS grid reference — confirmed accurate for ~392 of
+#     ~395 sites in testing, not a guaranteed-perfect boundary match.
+#   - registering_body is the legal Section 106 authority or covenant
+#     holder, NOT necessarily who to contact about buying units.
+#   - Allocation planning references very often predate PlanFind's own
+#     coverage of that council (confirmed directly for Durham: real
+#     allocation references were from 2024/2025, while PlanFind's
+#     earliest Durham record is July 2026) — matched_application_id
+#     being null on the overwhelming majority of allocations is
+#     expected, not a bug.
+#   - The register itself has no prices, availability, or landowner
+#     contact information. This can only ever point someone toward the
+#     real register for further research.
+# ---------------------------------------------------------------------
+
+@app.get("/biodiversity-gain-sites", response_class=HTMLResponse)
+async def bng_sites_index(request: Request):
+    async with get_db() as db:
+        sites = await db.fetch("""
+            SELECT b.reference, b.size_ha, b.lat, b.lng, b.registering_body,
+                   b.baseline_area_ha, b.planned_area_ha, b.land_boundary_url,
+                   c.name AS council_name, c.slug AS council_slug
+            FROM bng_gain_sites b
+            LEFT JOIN councils c ON c.id = b.council_id
+            WHERE b.lat IS NOT NULL AND b.lng IS NOT NULL
+            ORDER BY b.reference
+        """)
+        total_sites = await db.fetchval("SELECT COUNT(*) FROM bng_gain_sites")
+        total_allocations = await db.fetchval("SELECT COUNT(*) FROM bng_allocations")
+        last_scraped = await db.fetchval("SELECT MAX(last_scraped_at) FROM bng_gain_sites")
+
+    sites = [dict(s) for s in sites]
+
+    map_markers = [
+        {
+            "id": s["reference"],
+            "lat": s["lat"],
+            "lng": s["lng"],
+            "reference": s["reference"],
+            "size_ha": s.get("size_ha"),
+            "council_name": s.get("council_name") or "Council not confirmed",
+            "registering_body": s.get("registering_body") or "",
+        }
+        for s in sites
+    ]
+
+    return render("bng_sites.html", {
+        "request": request,
+        "sites": sites,
+        "map_markers": map_markers,
+        "total_sites": total_sites,
+        "sites_with_coordinates": len(sites),
+        "total_allocations": total_allocations,
+        "last_scraped": last_scraped,
+    })
 
 @app.get("/trends", response_class=HTMLResponse)
 async def trends(request: Request):
