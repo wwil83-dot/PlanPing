@@ -446,8 +446,15 @@ async def main():
         print("  ✓ saved" if ok else "  ✗ failed — see errors above")
 
         allocation_records = []
+        seen_keys = set()
+        duplicates_dropped = 0
         for s in sites:
             for a in s["allocations"]:
+                key = (s["reference"], a.get("planning_ref"), a["lpa"])
+                if key in seen_keys:
+                    duplicates_dropped += 1
+                    continue
+                seen_keys.add(key)
                 allocation_records.append({
                     "gain_site_reference": s["reference"],
                     "lpa_name": a["lpa"],
@@ -458,6 +465,17 @@ async def main():
                     "hedgerow_units": a["units"].get("Hedgerow"),
                     "watercourse_units": a["units"].get("Watercourse"),
                 })
+        if duplicates_dropped:
+            # REAL, CONFIRMED FIX — a production run failed with
+            # Postgres error 21000 ("ON CONFLICT DO UPDATE command
+            # cannot affect row a second time"): the same
+            # (gain_site_reference, planning_reference, lpa_name)
+            # combination appeared more than once within a batch,
+            # which an upsert can't resolve on its own. De-duplicating
+            # here rather than assuming the real page data is always
+            # unique.
+            print(f"    ⚠ dropped {duplicates_dropped} duplicate allocation rows "
+                  f"(same gain site + planning reference + LPA seen more than once)")
         print(f"Saving {len(allocation_records)} allocations…")
         ok2 = await upsert_allocations(client, allocation_records)
         print("  ✓ saved" if ok2 else "  ✗ failed — see errors above")
@@ -466,7 +484,16 @@ async def main():
     print(f"\n{'=' * 50}")
     print(f"Finished in {elapsed_minutes():.1f} minutes")
     print(f"Sites saved: {len(site_records)} ({mapped} matched to a real council)")
-    print(f"Allocations saved: {len(allocation_records)}")
+    # REAL FIX — this used to print len(allocation_records) regardless
+    # of whether ok2 was True, meaning a production run reported
+    # "Allocations saved: 3058" even though the upsert had actually
+    # failed with real HTTP 500 errors. Reflecting the real outcome
+    # instead.
+    if ok2:
+        print(f"Allocations saved: {len(allocation_records)}")
+    else:
+        print(f"Allocations: SAVE FAILED — {len(allocation_records)} were attempted, "
+              f"see the ✗ errors above for the real cause")
 
 
 if __name__ == "__main__":
