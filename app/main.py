@@ -603,14 +603,17 @@ async def council_page(request: Request, slug: str):
         if a.get("lat") is not None and a.get("lng") is not None
     ]
 
+       def _num(v):
+        return float(v) if v is not None else None
+
     bng_sites = [dict(s) for s in bng_sites]
     bng_map_markers = [
         {
             "id": s["reference"],
-            "lat": s["lat"],
-            "lng": s["lng"],
+            "lat": _num(s["lat"]),
+            "lng": _num(s["lng"]),
             "reference": s["reference"],
-            "size_ha": s.get("size_ha"),
+            "size_ha": _num(s.get("size_ha")),
         }
         for s in bng_sites
         if s.get("lat") is not None and s.get("lng") is not None
