@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Biodiversity Gain Sites — PlanFind{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+{% endblock %}
+
+{% block content %}
+<header class="hero hero-compact">
+  <div class="hero-inner">
+    <h2 class="results-title" style="color:#fff">Registered Biodiversity Gain Sites</h2>
+    <p class="results-sub" style="color:rgba(255,255,255,.75)">
+      Real, official data from the Defra / Natural England Biodiversity Gain Sites Register —
+      sites registered to deliver habitat improvements required under the Biodiversity Net Gain rules.
+    </p>
+  </div>
+</header>
+
+<main class="main">
+
+  {# Stats band, matching the established pattern used elsewhere on the site #}
+  <div class="stats-band">
+    <div class="stat">
+      <span class="stat-number">{{ total_sites }}</span>
+      <span class="stat-label">Registered gain sites</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat">
+      <span class="stat-number">{{ total_allocations }}</span>
+      <span class="stat-label">Development allocations</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat">
+      <span class="stat-number">{{ sites_with_coordinates }}</span>
+      <span class="stat-label">Shown on the map below</span>
+    </div>
+  </div>
+
+  {# Honest, explicit "what this shows / doesn't show" — per direct
+     instruction: this must be very clear about what the data can and
+     cannot tell someone, positioned as a starting point for further
+     research rather than a complete answer. #}
+  <div class="banner banner-green" style="flex-direction:column;align-items:flex-start;gap:.5rem">
+    <strong>What this data shows</strong>
+    <span>
+      Each pin is a real site registered on the government's official Biodiversity Gain Sites
+      Register — its size, habitat type, and which developments (if any) have drawn biodiversity
+      units from it. This is genuine, official data, sourced directly from the register under the
+      Open Government Licence.
+    </span>
+  </div>
+  <div class="banner banner-amber" style="flex-direction:column;align-items:flex-start;gap:.5rem">
+    <strong>What this data does not show</strong>
+    <span>
+      The register does not publish prices, whether a site's units are currently for sale, or
+      landowner contact details. The "registering body" shown for each site is the legal party
+      holding the site's Section 106 agreement or conservation covenant — not necessarily who to
+      contact about buying units. This page is a starting point for research, not a marketplace —
+      every site links through to the official government register for further detail.
+    </span>
+  </div>
+
+  {% if last_scraped %}
+  <p class="results-sub" style="margin-bottom:1.25rem">
+    Data last refreshed {{ last_scraped.strftime('%-d %B %Y') if last_scraped else 'recently' }}.
+    Source: <a href="https://environment.data.gov.uk/biodiversity-net-gain" target="_blank" rel="noopener">Defra Biodiversity Gain Sites Register</a>,
+    available under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open Government Licence v3.0</a>.
+  </p>
+  {% endif %}
+
+  <div style="margin-bottom:1rem">
+    <button class="btn btn-primary" style="font-size:1rem;padding:12px 22px" id="map-toggle-btn" onclick="toggleBngMap()">🗺️ Show map</button>
+  </div>
+  <div id="bng-map" style="display:none;height:520px;border-radius:10px;border:1px solid var(--border);margin-bottom:1.25rem"></div>
+
+  <div class="app-list">
+    {% for site in sites %}
+    <article class="app-card" id="bng-card-{{ site.reference }}">
+      <div class="app-card-top">
+        <div class="app-meta">
+          <span class="app-ref">{{ site.reference }}</span>
+          {% if site.council_name %}
+          <span class="app-council">{{ site.council_name }}</span>
+          {% endif %}
+          {% if site.size_ha %}
+          <span class="app-distance">{{ site.size_ha }} ha</span>
+          {% endif %}
+        </div>
+      </div>
+      {% if site.registering_body %}
+      <p class="app-description">
+        Registering body (legal covenant holder, not necessarily a sales contact):
+        <strong>{{ site.registering_body }}</strong>
+      </p>
+      {% endif %}
+      <div class="app-footer">
+        <span class="app-date">
+          {% if site.baseline_area_ha and site.planned_area_ha %}
+          {{ site.baseline_area_ha }} ha baseline → {{ site.planned_area_ha }} ha planned habitat
+          {% endif %}
+        </span>
+        <div class="app-actions">
+          {% if site.land_boundary_url %}
+          <a href="{{ site.land_boundary_url }}" target="_blank" rel="noopener" class="btn btn-sm">Land boundary →</a>
+          {% endif %}
+          <a href="https://environment.data.gov.uk/biodiversity-net-gain/search/{{ site.reference }}" target="_blank" rel="noopener" class="btn btn-sm btn-details">
+            View on official register →
+          </a>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  var _bngMapInitialized = false;
+
+  function toggleBngMap() {
+    var mapDiv = document.getElementById('bng-map');
+    var btn = document.getElementById('map-toggle-btn');
+    var showing = mapDiv.style.display !== 'none';
+
+    if (showing) {
+      mapDiv.style.display = 'none';
+      btn.textContent = '🗺️ Show map';
+      return;
+    }
+
+    mapDiv.style.display = 'block';
+    btn.textContent = '📋 Hide map';
+
+    if (_bngMapInitialized) return;
+    _bngMapInitialized = true;
+
+    var sites = {{ map_markers | tojson }};
+    if (sites.length === 0) return;
+
+    // Centres roughly on England/Wales — reasonable default given
+    // sites are spread nationally, not anchored to one search point
+    // the way postcode results are.
+    var map = L.map('bng-map').setView([52.8, -1.5], 6);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    var bounds = [];
+
+    sites.forEach(function (site) {
+      var marker = L.circleMarker([site.lat, site.lng], {
+        radius: 6,
+        color: '#2e8b3a',
+        fillColor: '#3a9e3f',
+        fillOpacity: 0.75,
+        weight: 1.5
+      }).addTo(map);
+
+      var popupHtml = '<strong>' + site.reference + '</strong><br>' +
+        (site.size_ha ? site.size_ha + ' ha · ' : '') +
+        site.council_name +
+        (site.registering_body ? '<br><em style="font-size:.75rem">' + site.registering_body + '</em>' : '') +
+        '<br><a href="https://environment.data.gov.uk/biodiversity-net-gain/search/' + site.reference + '" target="_blank">View on official register →</a>';
+      marker.bindPopup(popupHtml);
+
+      marker.on('click', function () {
+        var card = document.getElementById('bng-card-' + site.reference);
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+
+      bounds.push([site.lat, site.lng]);
+    });
+
+    if (bounds.length > 1) {
+      map.fitBounds(bounds, { padding: [30, 30] });
+    }
+  }
+</script>
+{% endblock %}
