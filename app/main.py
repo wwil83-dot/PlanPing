@@ -736,13 +736,21 @@ async def bng_sites_index(request: Request):
 
     sites = [dict(s) for s in sites]
 
+    # REAL FIX — Postgres NUMERIC columns return Python Decimal
+    # objects, which json.dumps (used by Jinja2's |tojson filter)
+    # cannot serialize. This crashed the whole page in production.
+    # Converting every numeric value to a plain float, not just
+    # size_ha, since lat/lng could hit the same issue.
+    def _num(v):
+        return float(v) if v is not None else None
+
     map_markers = [
         {
             "id": s["reference"],
-            "lat": s["lat"],
-            "lng": s["lng"],
+            "lat": _num(s["lat"]),
+            "lng": _num(s["lng"]),
             "reference": s["reference"],
-            "size_ha": s.get("size_ha"),
+            "size_ha": _num(s.get("size_ha")),
             "council_name": s.get("council_name") or "Council not confirmed",
             "registering_body": s.get("registering_body") or "",
         }
