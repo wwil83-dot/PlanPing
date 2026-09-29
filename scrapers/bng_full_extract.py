@@ -455,14 +455,35 @@ async def reference_format_check(allocations):
                         "order": "submitted_date.asc", "limit": "1"},
                 headers=headers,
             )
-            earliest = r.json()
+            # REAL FIX — this query crashed with KeyError: 0 in
+            # production, meaning r.json() came back as a dict (likely
+            # a real API error) rather than the expected list. Checking
+            # the status and real shape before indexing, instead of
+            # assuming success.
+            if r.status_code != 200:
+                print(f"  ⚠ earliest-date query HTTP {r.status_code}: {r.text[:300]}")
+                earliest = []
+            else:
+                body = r.json()
+                if isinstance(body, list):
+                    earliest = body
+                else:
+                    print(f"  ⚠ earliest-date query returned non-list JSON: {body!r}")
+                    earliest = []
             r = await c.get(
                 f"{SUPABASE_URL}/rest/v1/planning_applications",
                 params={"council_id": f"eq.{durham_id}", "select": "reference,submitted_date",
                         "order": "submitted_date.desc", "limit": "10"},
                 headers=headers,
             )
-            latest = r.json()
+            if r.status_code != 200:
+                print(f"  ⚠ latest-date query HTTP {r.status_code}: {r.text[:300]}")
+                latest = []
+            else:
+                body = r.json()
+                latest = body if isinstance(body, list) else []
+                if not isinstance(body, list):
+                    print(f"  ⚠ latest-date query returned non-list JSON: {body!r}")
             r = await c.get(
                 f"{SUPABASE_URL}/rest/v1/planning_applications",
                 params={"council_id": f"eq.{durham_id}", "select": "reference", "limit": "1"},
