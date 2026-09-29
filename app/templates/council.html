@@ -57,6 +57,70 @@
 
   {% if recent %}
 
+{# ---------------------------------------------------------------------
+   ADD THIS to council.html, wherever makes sense in the page layout
+   (a reasonable spot: right after the main planning-applications list/
+   map, before the footer). Only renders anything if this council
+   actually has BNG data, so it's invisible on councils with none. Uses
+   bng_sites and bng_allocation_count, both passed in from the updated
+   council_page() route.
+--------------------------------------------------------------------- #}
+
+{% if bng_sites or bng_allocation_count > 0 %}
+<section style="margin-top:2rem">
+  <h3 style="font-size:1.1rem;font-weight:600;color:var(--blue-dark);margin-bottom:.75rem">
+    Biodiversity Net Gain
+  </h3>
+
+  {# Honest, explicit framing — per direct instruction, this must be
+     very clear about what the data shows and doesn't show, every
+     time it's shown, not just on the dedicated BNG page. #}
+  <div class="banner banner-green" style="flex-direction:column;align-items:flex-start;gap:.4rem;margin-bottom:1rem">
+    <span>
+      {% if bng_sites %}
+      <strong>{{ bng_sites|length }}</strong> registered biodiversity gain site{{ 's' if bng_sites|length != 1 }}
+      {% if bng_allocation_count > 0 %} and <strong>{{ bng_allocation_count }}</strong> development allocation{{ 's' if bng_allocation_count != 1 }}{% endif %}
+      {% else %}
+      <strong>{{ bng_allocation_count }}</strong> development{{ 's' if bng_allocation_count != 1 }} in this council {{ 'has' if bng_allocation_count == 1 else 'have' }} drawn biodiversity units from a registered site elsewhere
+      {% endif %}
+      — from the official Defra Biodiversity Gain Sites Register.
+      This shows real, registered activity, but not prices, availability, or landowner contact
+      details — the "registering body" is a legal covenant holder, not necessarily a sales contact.
+      <a href="/biodiversity-gain-sites">See all sites and what this data can (and can't) tell you →</a>
+    </span>
+  </div>
+
+  {% if bng_sites %}
+  <div class="app-list">
+    {% for site in bng_sites %}
+    <article class="app-card">
+      <div class="app-card-top">
+        <div class="app-meta">
+          <span class="app-ref">{{ site.reference }}</span>
+          {% if site.size_ha %}<span class="app-distance">{{ site.size_ha }} ha</span>{% endif %}
+        </div>
+      </div>
+      {% if site.registering_body %}
+      <p class="app-description">Registering body: <strong>{{ site.registering_body }}</strong></p>
+      {% endif %}
+      <div class="app-footer">
+        <span></span>
+        <div class="app-actions">
+          {% if site.land_boundary_url %}
+          <a href="{{ site.land_boundary_url }}" target="_blank" rel="noopener" class="btn btn-sm">Land boundary →</a>
+          {% endif %}
+          <a href="https://environment.data.gov.uk/biodiversity-net-gain/search/{{ site.reference }}" target="_blank" rel="noopener" class="btn btn-sm btn-details">
+            Official register →
+          </a>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+  
   {# ADDED (2026-09-16) — real, direct report: the "📍 Approx." badge
      below had no accompanying map at all, unlike the postcode search
      page which already shows exactly this kind of marker distinction.
