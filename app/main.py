@@ -603,7 +603,7 @@ async def council_page(request: Request, slug: str):
         if a.get("lat") is not None and a.get("lng") is not None
     ]
 
-    def_num(v):
+    def _num(v):
         return float(v) if v is not None else None
 
     bng_sites = [dict(s) for s in bng_sites]
