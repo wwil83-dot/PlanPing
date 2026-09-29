@@ -422,6 +422,77 @@ async def planfind_matches(allocations):
     print("\n  saved /tmp/bng_allocations_matched.csv")
 
 
+async def reference_format_check(allocations):
+    """Focused diagnostic: is the 2% match rate a real historical gap
+    (PlanFind simply doesn't hold applications old enough to have an
+    allocation yet) or a reference-format mismatch (the strings just
+    don't line up even where the dates overlap)? Checks Durham
+    directly since it had 50 allocations and zero matches."""
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        print("  (SUPABASE_URL/KEY not set — skipping)")
+        return
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+    try:
+        async with httpx.AsyncClient(timeout=60) as c:
+            # REAL FIX — the id used here earlier was a placeholder from
+            # an isolated unit test, never confirmed against the real
+            # database. Looking Durham up by name instead of guessing.
+            r = await c.get(
+                f"{SUPABASE_URL}/rest/v1/councils",
+                params={"name": "ilike.*durham*", "select": "id,name"},
+                headers=headers,
+            )
+            durham_rows = r.json() if r.status_code == 200 else []
+            if not durham_rows:
+                print("  ⚠ no real council matching 'durham' found — skipping")
+                return
+            print(f"  real council rows matching 'durham': {durham_rows}")
+            durham_id = durham_rows[0]["id"]
+
+            r = await c.get(
+                f"{SUPABASE_URL}/rest/v1/planning_applications",
+                params={"council_id": f"eq.{durham_id}", "select": "reference,submitted_date",
+                        "order": "submitted_date.asc", "limit": "1"},
+                headers=headers,
+            )
+            earliest = r.json()
+            r = await c.get(
+                f"{SUPABASE_URL}/rest/v1/planning_applications",
+                params={"council_id": f"eq.{durham_id}", "select": "reference,submitted_date",
+                        "order": "submitted_date.desc", "limit": "10"},
+                headers=headers,
+            )
+            latest = r.json()
+            r = await c.get(
+                f"{SUPABASE_URL}/rest/v1/planning_applications",
+                params={"council_id": f"eq.{durham_id}", "select": "reference", "limit": "1"},
+                headers={**headers, "Prefer": "count=exact"},
+            )
+            total = r.headers.get("content-range", "").split("/")[-1]
+    except Exception as e:
+        print(f"  ⚠ query failed: {type(e).__name__}: {e}")
+        return
+
+    print(f"  Durham (council_id={durham_id}) real row count: {total}")
+    print(f"  earliest submitted_date PlanFind holds: "
+          f"{earliest[0] if earliest else 'none'}")
+    print(f"  10 most recent PlanFind references for Durham:")
+    for row in latest:
+        print(f"    {row['submitted_date']}  {row['reference']!r}")
+
+    durham_allocs = [a for a in allocations if a["lpa"] == "County Durham LPA"]
+    print(f"\n  {len(durham_allocs)} real BNG allocation references for Durham:")
+    for a in durham_allocs[:10]:
+        print(f"    {a['planning_ref']!r}  ({a['project_name']})")
+
+    if latest and durham_allocs:
+        pf_shapes = {re.sub(r"\d", "#", r["reference"]) for r in latest}
+        bng_shapes = {re.sub(r"\d", "#", a["planning_ref"] or "") for a in durham_allocs}
+        print(f"\n  PlanFind reference shapes seen: {pf_shapes}")
+        print(f"  BNG allocation reference shapes seen: {bng_shapes}")
+        print(f"  shapes in common: {pf_shapes & bng_shapes or 'NONE'}")
+
+
 async def main():
     print(f"BNG full extraction — workers={WORKERS}, max_sites={MAX_SITES or 'all'}\n")
     async with async_playwright() as pw:
@@ -508,6 +579,9 @@ async def main():
 
     print("\nPLANFIND CROSS-CHECK")
     await planfind_matches(allocations)
+
+    print("\nREFERENCE FORMAT CHECK (Durham)")
+    await reference_format_check(allocations)
 
     with open("/tmp/bng_sites.json", "w") as f:
         json.dump(sites, f, indent=1)
