@@ -544,7 +544,6 @@ async def application_detail(request: Request, app_id: int):
         "neighbours": neighbours,
     })
 
-
 @app.get("/council/{slug}", response_class=HTMLResponse)
 async def council_page(request: Request, slug: str):
     async with get_db() as db:
@@ -564,6 +563,23 @@ async def council_page(request: Request, slug: str):
             LIMIT 50
         """, council["id"])
 
+        # ADDED (2026-09-29) — real, confirmed BNG register data for
+        # this specific council. See bng_scraper.py's own module
+        # docstring for the full evidence trail and honest
+        # limitations (council_id is a best-effort reverse-geocode
+        # match, registering_body is a legal covenant holder not a
+        # seller contact, allocation planning references very often
+        # predate PlanFind's own coverage of this council).
+        bng_sites = await db.fetch("""
+            SELECT reference, size_ha, lat, lng, registering_body, land_boundary_url
+            FROM bng_gain_sites
+            WHERE council_id = $1
+            ORDER BY reference
+        """, council["id"])
+        bng_allocation_count = await db.fetchval("""
+            SELECT COUNT(*) FROM bng_allocations WHERE council_id = $1
+        """, council["id"])
+
     apps = [dict(r) for r in recent]
     for a in apps:
         a["type_badge"] = _type_badge(a.get("application_type", ""), a.get("reference", ""))
@@ -574,12 +590,6 @@ async def council_page(request: Request, slug: str):
 
     _add_date_availability_flag(apps)
 
-    # ADDED (2026-09-16) — real, direct report: this page's "Approx."
-    # badge had no accompanying map at all, unlike the postcode search
-    # page which already shows exactly this kind of marker distinction.
-    # Same map_markers shape as /search and /towns/{slug}, built from
-    # the same real coordinates already selected above — only
-    # applications with a genuine lat/lng get a marker for now.
     map_markers = [
         {
             "id": a["id"],
@@ -591,6 +601,19 @@ async def council_page(request: Request, slug: str):
         }
         for a in apps
         if a.get("lat") is not None and a.get("lng") is not None
+    ]
+
+    bng_sites = [dict(s) for s in bng_sites]
+    bng_map_markers = [
+        {
+            "id": s["reference"],
+            "lat": s["lat"],
+            "lng": s["lng"],
+            "reference": s["reference"],
+            "size_ha": s.get("size_ha"),
+        }
+        for s in bng_sites
+        if s.get("lat") is not None and s.get("lng") is not None
     ]
 
     council_dict = dict(council)
@@ -608,6 +631,9 @@ async def council_page(request: Request, slug: str):
         "map_markers": map_markers,
         "lat": apps[0]["lat"] if apps and apps[0].get("lat") is not None else None,
         "lng": apps[0]["lng"] if apps and apps[0].get("lat") is not None else None,
+        "bng_sites": bng_sites,
+        "bng_map_markers": bng_map_markers,
+        "bng_allocation_count": bng_allocation_count,
     })
 
 
