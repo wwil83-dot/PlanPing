@@ -138,6 +138,17 @@ on:
                           # effort, allocations rarely match a real
                           # planning_applications row given the
                           # historical gap confirmed for Durham).
+    - cron: '45 9 * * *'  # East Lindsey District Council nightly scrape —
+                          # promoted after a confirmed clean production
+                          # run (2026-09-30): 162 real applications saved
+                          # across 38 real wards, zero genuine mislabeling
+                          # on recheck. Uses the same shared "South & East
+                          # Lincolnshire Councils Partnership" Idox portal
+                          # as Boston, filtered by East Lindsey's own 38
+                          # confirmed wards. Replaces the old, unfiltered
+                          # entry previously in idox_councils.py, which
+                          # was confirmed saving Boston's applications
+                          # mislabeled as East Lindsey's own.
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
     - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
@@ -4369,7 +4380,9 @@ jobs:
     # parallel and undo this fix. Longer time budget than Boston given
     # 38 wards vs 15. DELIBERATELY manual-trigger only for now — never
     # run live yet.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'east_lindsey_scraper'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'east_lindsey_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '45 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 60
     steps:
