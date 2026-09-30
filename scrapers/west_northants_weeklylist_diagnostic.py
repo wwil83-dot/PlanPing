@@ -50,6 +50,39 @@ async def main():
         print(f"Real page title: {await page.title()}")
         print(f"Real page URL after load: {page.url}")
 
+        # REAL FIX — confirmed via the actual run: this redirected to a
+        # Disclaimer page first (same real pattern already proven for
+        # Vale of Glamorgan on this same planning-register.co.uk
+        # vendor), which is why zero period links were found — the
+        # weekly list content was never actually reached. Accepting it
+        # and re-navigating to the real target URL.
+        if "Disclaimer" in page.url:
+            print("\nReal Disclaimer page detected — looking for an accept/continue control")
+            accept_candidates = [
+                "button:has-text('Accept')",
+                "a:has-text('Accept')",
+                "button:has-text('Continue')",
+                "a:has-text('Continue')",
+                "input[type='submit']",
+            ]
+            clicked = False
+            for sel in accept_candidates:
+                loc = page.locator(sel)
+                if await loc.count() > 0:
+                    print(f"Real accept control found: {sel!r}")
+                    await loc.first.click(timeout=5_000)
+                    clicked = True
+                    break
+            if not clicked:
+                print("⚠ No real accept/continue control found on the Disclaimer page")
+            else:
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=15_000)
+                except PlaywrightTimeout:
+                    pass
+                print(f"Real page title after accepting: {await page.title()}")
+                print(f"Real page URL after accepting: {page.url}")
+
         body_text = await page.locator("body").inner_text()
         recaptcha_signatures = ["recaptcha", "i'm not a robot", "captcha"]
         found_recaptcha = [s for s in recaptcha_signatures if s in body_text.lower()]
