@@ -284,12 +284,25 @@
     var apps = {{ map_markers | tojson }};
     if (apps.length === 0) return;
 
-    // No single fixed search point here (unlike /search's searched
-    // postcode) — centers on the first real marker instead, same
-    // approach main.py's council_page route uses for the lat/lng it
-    // passes through.
+    // REAL BUG FIX — the separately-passed lat/lng come from
+    // council_page()'s apps[0] (the single MOST RECENT application),
+    // with no check that this specific application actually has a
+    // real coordinate. Confirmed in production: West Northamptonshire's
+    // most recent application had lat=null/lng=null (no postcode match
+    // and no centroid fallback), so setView([null, null]) crashed
+    // Leaflet immediately with "Cannot read properties of null
+    // (reading 'lat')" — before the marker loop below ever ran. Other
+    // councils worked only because their own most recent application
+    // happened to have a real coordinate — a lucky coincidence, not a
+    // guarantee. Falling back to the first REAL marker in `apps`
+    // instead, since that array is already guaranteed (filtered in
+    // Python) to contain only non-null coordinates.
     var centerLat = {{ lat if lat is not none else 'null' }};
     var centerLng = {{ lng if lng is not none else 'null' }};
+    if (centerLat === null || centerLng === null) {
+      centerLat = apps[0].lat;
+      centerLng = apps[0].lng;
+    }
 
     var map = L.map('council-map').setView([centerLat, centerLng], 12);
 
