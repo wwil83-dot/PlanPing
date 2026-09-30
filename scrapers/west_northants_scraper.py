@@ -133,24 +133,23 @@ def _parse_date(s: str) -> Optional[str]:
         return None
 
 
-def _build_search_url(start: date, end: date, page: int = 1) -> str:
-    """Real, confirmed direct-URL construction — a real diagnostic run
-    tonight confirmed this returns genuinely different result counts
-    for different ranges without needing to click through the weekly
-    list page each time. Date format is MM/DD/YYYY with a literal
-    ' 00:00:00' time suffix, confirmed from the real URL captured
-    tonight."""
+def _build_search_url(start: date, end: date) -> str:
+    """Real, confirmed direct-URL construction for the FIRST page only
+    — a real diagnostic run confirmed this returns genuinely different
+    result counts for different ranges. Pagination beyond page 1 is
+    AJAX-driven (confirmed via a real captured Next-link data-ajax-
+    target attribute) and handled separately by clicking the real Next
+    control, not by extending this URL. Date format is MM/DD/YYYY with
+    a literal ' 00:00:00' time suffix, confirmed from the real URL
+    captured tonight."""
     def fmt(d: date) -> str:
         return quote(f"{d.month:02d}/{d.day:02d}/{d.year} 00:00:00")
 
-    url = (
+    return (
         f"{BASE_URL}/Search/Standard"
         f"?AcknowledgeLetterDateFrom={fmt(start)}"
         f"&AcknowledgeLetterDateTo={fmt(end)}"
     )
-    if page > 1:
-        url += f"&page={page}"
-    return url
 
 
 _ROW_STRUCTURE_DIAGNOSED = False
@@ -354,6 +353,20 @@ async def scrape() -> list[dict]:
             return []
         print("    Disclaimer accepted")
 
+        # Page 1: confirmed working direct URL construction.
+        url = _build_search_url(start, today)
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=15_000)
+            except PlaywrightTimeout:
+                pass
+        except Exception as e:
+            print(f"    ⚠ Navigation failed on page 1: {type(e).__name__}: {e}")
+            await context.close()
+            await browser.close()
+            return []
+
         page_num = 1
         previous_refs: frozenset = frozenset()
         while page_num <= MAX_PAGES:
@@ -361,45 +374,13 @@ async def scrape() -> list[dict]:
                 print(f"    ⚠ Time budget reached at page {page_num}, stopping")
                 break
 
-            url = _build_search_url(start, today, page_num)
-            try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=15_000)
-                except PlaywrightTimeout:
-                    pass
-            except Exception as e:
-                print(f"    ⚠ Navigation failed at page {page_num}: {type(e).__name__}: {e}")
-                break
-
             html = await page.content()
             page_apps = _parse_results_page(html)
 
-            # REAL, CONFIRMED FIX — a production run showed every page
-            # from 2 through 30 parsing the exact same 10 applications:
-            # the guessed ?page= URL parameter is not honored by this
-            # platform, and clicking "Next" was reloading identical
-            # content. Same real safeguard already proven in
-            # idox_scraper.py for the same failure category (Newham/
-            # Brent) — comparing each page's own reference set to the
-            # previous page's catches this immediately, rather than
-            # burning the full MAX_PAGES budget on identical content.
             current_refs = frozenset(a["reference"] for a in page_apps)
             if page_num > 1 and current_refs and current_refs == previous_refs:
                 print(f"    Page {page_num} identical to page {page_num - 1} — "
                       f"pagination is not genuinely advancing, stopping")
-                # REAL DIAGNOSTIC — capture the real Next control's own
-                # attributes directly, so the correct pagination
-                # mechanism can be found without a separate round-trip.
-                next_link = page.locator("a:has-text('Next'):visible")
-                if await next_link.count() > 0:
-                    href = await next_link.first.get_attribute("href")
-                    onclick = await next_link.first.get_attribute("onclick")
-                    data_attrs = await next_link.first.evaluate(
-                        "el => Object.fromEntries([...el.attributes].map(a => [a.name, a.value]))"
-                    )
-                    print(f"    ⚠ PAGINATION DIAGNOSTIC: real Next link href={href!r}, "
-                          f"onclick={onclick!r}, all attributes={data_attrs!r}")
                 break
             previous_refs = current_refs
 
@@ -416,14 +397,29 @@ async def scrape() -> list[dict]:
                 print(f"    Page {page_num}: 0 real applications parsed at all — stopping")
                 break
 
-            # HONEST LIMITATION — pagination mechanism wasn't directly
-            # confirmed before writing this. Looking for a real "Next"
-            # control by text rather than assuming a URL parameter is
-            # honored; falls back to the ?page= parameter already built
-            # into _build_search_url if a Next control is found.
+            # REAL, CONFIRMED FIX — a production run captured the real
+            # Next control's own attributes directly: href
+            # '/Search/ResultsPage/{n}?module=PLA' with a matching
+            # data-ajax-target, meaning this platform's pagination is
+            # genuinely AJAX-driven, not a normal page navigation. A
+            # constructed ?page= URL (tried previously) silently
+            # returned page 1's content again every time. Clicking the
+            # real link directly and waiting for its own JS to update
+            # the DOM in place, rather than navigating to a guessed URL.
             next_link = page.locator("a:has-text('Next'):visible")
             if await next_link.count() == 0:
                 print(f"    No visible 'Next' link — stopping at page {page_num}")
+                break
+
+            try:
+                await next_link.first.click(timeout=10_000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=15_000)
+                except PlaywrightTimeout:
+                    pass
+                await asyncio.sleep(1.5)
+            except Exception as e:
+                print(f"    ⚠ Could not click Next at page {page_num}: {type(e).__name__}")
                 break
 
             page_num += 1
