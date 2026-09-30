@@ -1125,8 +1125,17 @@ IDOX_COUNCILS = [
     # (apps.northlincs.gov.uk). Boston, South Holland, North Kesteven, South
     # Kesteven, City of Lincoln not otherwise confirmed.
     # -------------------------------------------------------------------------
-    ("East Lindsey District Council",
-     "https://publicaccess.e-lindsey.gov.uk/online-applications"),
+    # DISABLED 2026-09-30 — replaced by a standalone, ward-based
+    # scraper (east_lindsey_scraper.py). This entry had no ward or
+    # local-authority filter at all on the shared "South & East
+    # Lincolnshire Councils Partnership" portal it uses with Boston and
+    # South Holland — confirmed this caused real, live mislabeling: 4
+    # applications genuinely belonging to Boston (confirmed via PE20/
+    # PE21 postcodes and the real "Kirton" ward) were found saved under
+    # East Lindsey, since removed. Kept here, commented out, rather
+    # than deleted, so the URL and history aren't lost.
+    # ("East Lindsey District Council",
+    #  "https://publicaccess.e-lindsey.gov.uk/online-applications"),
 
     # BROKEN — confirmed 2026-08-19: same real datacenter-ASN block as
     # Derby (zero network activity from every cloud IP tested, including
