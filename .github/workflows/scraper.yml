@@ -149,6 +149,23 @@ on:
                           # entry previously in idox_councils.py, which
                           # was confirmed saving Boston's applications
                           # mislabeled as East Lindsey's own.
+    - cron: '50 9 * * *'  # West Northamptonshire Council nightly scrape —
+                          # promoted after two confirmed clean production
+                          # runs (2026-09-30): 299-300 real applications
+                          # saved each time, pagination fully understood
+                          # and working correctly. Previously parked as
+                          # "reCAPTCHA blocked" — that block was real but
+                          # only affected a different part of the same
+                          # planning-register.co.uk vendor site; this
+                          # Weekly List page is genuinely clear. HONEST
+                          # LIMITATION: the platform itself caps search
+                          # results at 300 (30 pages of 10) — confirmed
+                          # across two separate runs stopping at the same
+                          # natural end point even after raising the
+                          # scraper's own page limit. If a 30-day window
+                          # ever has more than 300 genuine applications,
+                          # the excess isn't reachable through this
+                          # search interface at all.
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
     - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
@@ -4443,7 +4460,9 @@ jobs:
     # date format in the URL (a real, easy-to-miss detail on a UK
     # site). DELIBERATELY manual-trigger only for now — never run live
     # yet.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'west_northants_scraper'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'west_northants_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '50 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 20
     steps:
