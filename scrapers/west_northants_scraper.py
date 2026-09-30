@@ -34,10 +34,22 @@ result row's reference number linking to a real detail page
 date/decision issue date/decision status in clearly separated,
 labelled <td> cells.
 
-HONEST LIMITATION: pagination exists (253 results for one month won't
-fit on one page) but its exact mechanism wasn't directly confirmed
-before writing this — built defensively, looking for a real "Next"
-control by text rather than assuming a specific URL parameter.
+REAL, CONFIRMED PAGINATION: the platform's pagination is genuinely
+AJAX-driven, confirmed by capturing a real Next link's own attributes
+in production (href '/Search/ResultsPage/{n}?module=PLA' with a
+matching data-ajax-target) — a guessed ?page= URL parameter silently
+returned page 1's content every time instead of erroring, which is
+what caused an early production run to save only 10 of 300 real
+applications before this was caught and fixed. The scraper clicks the
+real Next control directly and re-reads the updated DOM, rather than
+navigating to a constructed URL.
+
+HONEST, CONFIRMED LIMITATION: two separate real production runs both
+stopped at exactly page 30 (300 results) with a genuine "no Next link"
+end state, even after raising MAX_PAGES to 50 — this is the
+platform's own real result cap, not a limitation of this scraper. If
+a 30-day window ever has more than 300 genuine applications, the
+excess won't be reachable through this search interface at all.
 """
 import asyncio
 import os
