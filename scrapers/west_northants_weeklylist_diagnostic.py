@@ -114,6 +114,42 @@ async def main():
                 print(f"Real reCAPTCHA signatures found after click: {new_recaptcha or 'NONE'}")
                 print(f"Real body text after click (first 1000 chars): {new_body[:1000]!r}")
 
+                # REAL, ADDITIONAL CHECKS — the real results page structure
+                # and whether pagination exists, plus whether this exact
+                # URL pattern can be constructed directly for an arbitrary
+                # date range without going through the Weekly List page
+                # each time.
+                print(f"\n{'=' * 60}")
+                print("Real results table structure")
+                print('=' * 60)
+                tables = page.locator("table")
+                table_count = await tables.count()
+                print(f"Real <table> elements found: {table_count}")
+                if table_count > 0:
+                    print("Real, exact HTML of the first table (first 3000 chars):")
+                    html = await tables.first.evaluate("el => el.outerHTML")
+                    print(html[:3000])
+
+                pagination = page.locator("a:has-text('Next'), a[aria-label*='next' i], .pagination")
+                print(f"\nReal pagination-like elements found: {await pagination.count()}")
+
+                print(f"\n{'=' * 60}")
+                print("Real direct-URL construction test")
+                print('=' * 60)
+                direct_url = (
+                    "https://wnc.planning-register.co.uk/Search/Standard"
+                    "?AcknowledgeLetterDateFrom=08%2F01%2F2026%2000%3A00%3A00"
+                    "&AcknowledgeLetterDateTo=08%2F31%2F2026%2000%3A00%3A00"
+                )
+                await page.goto(direct_url, wait_until="domcontentloaded", timeout=45_000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=15_000)
+                except PlaywrightTimeout:
+                    pass
+                print(f"Real URL after direct navigation: {page.url}")
+                direct_body = await page.locator("body").inner_text()
+                print(f"Real body text (first 500 chars): {direct_body[:500]!r}")
+
         await context.close()
         await browser.close()
 
