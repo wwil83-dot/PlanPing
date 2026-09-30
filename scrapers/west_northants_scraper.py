@@ -355,6 +355,7 @@ async def scrape() -> list[dict]:
         print("    Disclaimer accepted")
 
         page_num = 1
+        previous_refs: frozenset = frozenset()
         while page_num <= MAX_PAGES:
             if should_stop():
                 print(f"    ⚠ Time budget reached at page {page_num}, stopping")
@@ -373,6 +374,35 @@ async def scrape() -> list[dict]:
 
             html = await page.content()
             page_apps = _parse_results_page(html)
+
+            # REAL, CONFIRMED FIX — a production run showed every page
+            # from 2 through 30 parsing the exact same 10 applications:
+            # the guessed ?page= URL parameter is not honored by this
+            # platform, and clicking "Next" was reloading identical
+            # content. Same real safeguard already proven in
+            # idox_scraper.py for the same failure category (Newham/
+            # Brent) — comparing each page's own reference set to the
+            # previous page's catches this immediately, rather than
+            # burning the full MAX_PAGES budget on identical content.
+            current_refs = frozenset(a["reference"] for a in page_apps)
+            if page_num > 1 and current_refs and current_refs == previous_refs:
+                print(f"    Page {page_num} identical to page {page_num - 1} — "
+                      f"pagination is not genuinely advancing, stopping")
+                # REAL DIAGNOSTIC — capture the real Next control's own
+                # attributes directly, so the correct pagination
+                # mechanism can be found without a separate round-trip.
+                next_link = page.locator("a:has-text('Next'):visible")
+                if await next_link.count() > 0:
+                    href = await next_link.first.get_attribute("href")
+                    onclick = await next_link.first.get_attribute("onclick")
+                    data_attrs = await next_link.first.evaluate(
+                        "el => Object.fromEntries([...el.attributes].map(a => [a.name, a.value]))"
+                    )
+                    print(f"    ⚠ PAGINATION DIAGNOSTIC: real Next link href={href!r}, "
+                          f"onclick={onclick!r}, all attributes={data_attrs!r}")
+                break
+            previous_refs = current_refs
+
             new_count = 0
             for a in page_apps:
                 if a["reference"] not in seen_refs:
