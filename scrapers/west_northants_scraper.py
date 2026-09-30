@@ -72,7 +72,7 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "20"))
 DAYS_BACK    = int(os.environ.get("DAYS_BACK", "30"))
-MAX_PAGES    = int(os.environ.get("MAX_PAGES", "30"))
+MAX_PAGES    = int(os.environ.get("MAX_PAGES", "50"))
 WEST_NORTHANTS_COUNCIL_ID = int(os.environ.get("WEST_NORTHANTS_COUNCIL_ID", "0"))
 
 START_TIME = time.monotonic()
@@ -109,6 +109,10 @@ def _normalise_status(s: str) -> str:
     if any(x in key for x in ("appeal", "awaiting", "regist", "pending")):
         return "pending"
     if "decided" in key:
+        return "pending"
+    # Same category — a real, confirmed status that's a consultation
+    # response, not necessarily a final decision on the application.
+    if "no objection" in key:
         return "pending"
     if key not in _STATUS_DIAGNOSED:
         _STATUS_DIAGNOSED.add(key)
