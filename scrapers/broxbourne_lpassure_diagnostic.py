@@ -58,15 +58,39 @@ async def main():
                 break
 
         print("=" * 60)
-        print("STEP 1: find the real 'Weekly/Monthly' control")
+        print("STEP 0: dump every real element mentioning 'Weekly' or 'Monthly',")
+        print("        visible or not, so the real OUTER toggle can be told")
+        print("        apart from the inner (initially hidden) list links")
         print("=" * 60)
-        weekly_monthly_candidates = [
-            "a:has-text('Weekly')", "button:has-text('Weekly')",
-            "a:has-text('Monthly')", "button:has-text('Monthly')",
-            "*:has-text('Weekly/Monthly')",
+        all_candidates = page.locator("text=/Weekly|Monthly/i")
+        all_count = await all_candidates.count()
+        print(f"  Real elements mentioning Weekly/Monthly: {all_count}")
+        for i in range(all_count):
+            el = all_candidates.nth(i)
+            info = await el.evaluate(
+                "el => ({tag: el.tagName, id: el.id, cls: el.className, "
+                "text: el.textContent.trim().slice(0,60), "
+                "onclick: el.getAttribute('onclick'), "
+                "visible: el.offsetParent !== null})"
+            )
+            print(f"    [{i}] {info}")
+
+        print("\n" + "=" * 60)
+        print("STEP 1: find the real OUTER 'Weekly/Monthly' toggle "
+              "(left-hand side, per direct description)")
+        print("=" * 60)
+        # Real, more targeted candidates — looking specifically for a
+        # combined "Weekly/Monthly" label (the outer toggle, per the
+        # direct description), or a real, visible parent control,
+        # rather than matching "Weekly" or "Monthly" alone, which
+        # found the inner (hidden) list links instead last time.
+        toggle_candidates = [
+            "a:has-text('Weekly/Monthly')", "button:has-text('Weekly/Monthly')",
+            "a:has-text('Weekly / Monthly')", "button:has-text('Weekly / Monthly')",
+            "[onclick*='WeeklyMonthly' i]:visible",
         ]
         found_control = None
-        for sel in weekly_monthly_candidates:
+        for sel in toggle_candidates:
             loc = page.locator(sel)
             count = await loc.count()
             if count > 0:
@@ -75,15 +99,13 @@ async def main():
                     found_control = loc.first
 
         if found_control is None:
-            print("  ⚠ No real Weekly/Monthly control found by any candidate selector")
-            body_text = await page.locator("body").inner_text()
-            print(f"\n  Real body text (first 2000 chars) for manual inspection:")
-            print(repr(body_text[:2000]))
+            print("  ⚠ No real outer toggle found by any candidate selector — "
+                  "see STEP 0's full dump above to identify it manually")
         else:
             tag_info = await found_control.evaluate(
                 "el => ({tag: el.tagName, id: el.id, cls: el.className, text: el.textContent.trim()})"
             )
-            print(f"\n  Real control found: {tag_info}")
+            print(f"\n  Real outer toggle found: {tag_info}")
             await found_control.click(timeout=5_000)
             await asyncio.sleep(1)
 
