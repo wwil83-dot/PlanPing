@@ -171,6 +171,55 @@ async def main():
                     tag = await s.evaluate("el => el.tagName")
                     print(f"    [{i}] tag={tag} text={text!r}")
 
+                print("\n" + "=" * 60)
+                print("STEP 4: real search — September 2026, Validated this month")
+                print("=" * 60)
+                month_select = page.locator("select#SelectedMonth")
+                await month_select.select_option(label="September 2026", timeout=5_000)
+                print("  Real month selected: September 2026")
+
+                validated_radio = page.locator("input#ValidatedThisMonth")
+                await validated_radio.check(timeout=5_000, force=True)
+                print("  Real 'Validated this month' radio checked")
+
+                search_btn = page.locator("button:has-text('Search')").first
+                await search_btn.click(timeout=5_000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=15_000)
+                except PlaywrightTimeout:
+                    pass
+                await asyncio.sleep(2)
+
+                print(f"\n  Real results URL: {page.url}")
+                print(f"  Real results page title: {await page.title()}")
+
+                body_text = await page.locator("body").inner_text()
+                print(f"\n  Real results body text (first 2500 chars):")
+                print(repr(body_text[:2500]))
+
+                tables = page.locator("table")
+                table_count = await tables.count()
+                print(f"\n  Real <table> elements found: {table_count}")
+
+                # Real, common result-list containers to check for,
+                # since LPAssure's own markup isn't yet confirmed —
+                # trying several plausible candidates rather than
+                # assuming one.
+                list_candidates = [
+                    "ul.search-results", "div.search-results",
+                    "ul.results-list", "div.results-list",
+                    "[class*='result' i]",
+                ]
+                for sel in list_candidates:
+                    loc = page.locator(sel)
+                    count = await loc.count()
+                    if count > 0:
+                        print(f"\n  Real candidate result container {sel!r}: {count} match(es)")
+                        html = await loc.first.evaluate("el => el.outerHTML")
+                        print(f"  First match's real HTML (first 2000 chars):")
+                        print(html[:2000])
+                        break
+
         await context.close()
         await browser.close()
 
