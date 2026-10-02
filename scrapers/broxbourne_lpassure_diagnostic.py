@@ -254,6 +254,31 @@ async def main():
                 print("\n" + "=" * 60)
                 print("STEP 5: real second search — same month, Decided this month")
                 print("=" * 60)
+                # REAL FIX — confirmed via the actual run: submitting
+                # the first search replaced the page's content with
+                # results, hiding the original search panel entirely
+                # ("Element is not visible" when trying to check the
+                # Decided radio). Reopening the same Weekly/Monthly
+                # panel from scratch before the second search, exactly
+                # like the first time.
+                outer_toggle_2 = page.locator("button:has-text('Weekly / Monthly')")
+                await outer_toggle_2.click(timeout=5_000)
+                await asyncio.sleep(1)
+                monthly_link_2 = page.locator(
+                    "[onclick*='GetOnlinePlanningWeeklySearchView(false)']"
+                )
+                await monthly_link_2.click(timeout=5_000, force=True)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=10_000)
+                except PlaywrightTimeout:
+                    pass
+                await asyncio.sleep(2)
+                print("  Real Weekly/Monthly panel reopened")
+
+                month_select_2 = page.locator("select#SelectedMonth")
+                await month_select_2.select_option(label="September 2026", timeout=5_000)
+                print("  Real month re-selected: September 2026")
+
                 # Real, confirmed from the original description: these
                 # two radios are mutually exclusive (same name attribute,
                 # MonthlyListStatus) — checking Decided should
