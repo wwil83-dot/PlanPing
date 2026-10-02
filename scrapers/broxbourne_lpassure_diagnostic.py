@@ -116,12 +116,27 @@ async def main():
             print(f"  Real body text after click (first 2000 chars):")
             print(repr(body_text[:2000]))
 
-            monthly_option = page.locator("a:has-text('Monthly'), button:has-text('Monthly'), label:has-text('Monthly')")
+            # REAL FIX — confirmed via the actual run: a broad text
+            # match on "Monthly" accidentally matched the OUTER
+            # "Weekly / Monthly list" toggle button again (it also
+            # contains the word "Monthly"), likely re-closing the box
+            # rather than opening the month-specific view — explaining
+            # why Step 3 found the general search form's radios instead
+            # of a month dropdown. Targeting the confirmed, precise
+            # onclick handler instead, which can only match the real
+            # inner "Monthly list" link.
+            monthly_option = page.locator(
+                "[onclick*='GetOnlinePlanningWeeklySearchView(false)']"
+            )
             count = await monthly_option.count()
-            print(f"\n  Real 'Monthly' option candidates found: {count}")
+            print(f"\n  Real 'Monthly list' link (precise onclick match) found: {count}")
             if count > 0:
-                await monthly_option.first.click(timeout=5_000)
-                await asyncio.sleep(1)
+                await monthly_option.first.click(timeout=5_000, force=True)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=10_000)
+                except PlaywrightTimeout:
+                    pass
+                await asyncio.sleep(2)
 
                 print("\n" + "=" * 60)
                 print("STEP 3: real month dropdown + radio buttons")
