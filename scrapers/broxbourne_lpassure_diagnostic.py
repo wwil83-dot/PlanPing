@@ -182,7 +182,38 @@ async def main():
                 await validated_radio.check(timeout=5_000, force=True)
                 print("  Real 'Validated this month' radio checked")
 
-                search_btn = page.locator("button:has-text('Search')").first
+                # REAL FIX — confirmed via the actual run: the previous
+                # .first match against any "Search"-text button grabbed
+                # the wrong one (the general search form's own button),
+                # not the monthly-list panel's dedicated Search/Cancel
+                # pair confirmed in the real body text ("Search Cancel"
+                # at the very end, right after the ward/status fields).
+                # Dumping every EXACT "Search" button's real context
+                # directly, rather than guessing which one is right a
+                # second time.
+                exact_search_buttons = page.locator("button", has_text="Search")
+                count = await exact_search_buttons.count()
+                print(f"  Real buttons containing 'Search' text: {count}")
+                target_btn = None
+                for i in range(count):
+                    btn = exact_search_buttons.nth(i)
+                    text = (await btn.text_content() or "").strip()
+                    visible = await btn.is_visible()
+                    parent_id = await btn.evaluate(
+                        "el => el.closest('[id]') ? el.closest('[id]').id : null"
+                    )
+                    print(f"    [{i}] text={text!r} visible={visible} nearest_id_ancestor={parent_id!r}")
+                    if text == "Search" and visible and target_btn is None:
+                        target_btn = btn
+
+                if target_btn is None:
+                    print("  ⚠ No real exact-match, visible 'Search' button found — "
+                          "cannot submit, see the dump above to identify the right one")
+                    await context.close()
+                    await browser.close()
+                    return
+
+                search_btn = target_btn
                 await search_btn.click(timeout=5_000)
                 try:
                     await page.wait_for_load_state("networkidle", timeout=15_000)
