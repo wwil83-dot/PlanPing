@@ -380,6 +380,29 @@ async def scrape_month_status(page, month_label: str, status_id: str,
         print(f"    [{month_label}/{status_name}] ⚠ Search failed: {type(e).__name__}: {e!r}")
         return []
 
+    # REAL, CONFIRMED FIX — a production run showed every search
+    # returning exactly 20 applications regardless of the real total
+    # (September 2026 alone has 79 Validated / 97 Decided), because
+    # the real pagination is a Knockout.js-driven numbered page list
+    # (ul.pagination, "1 2 3..."), not a "Next" text link at all — the
+    # previous selector never matched anything. A real page-size
+    # dropdown (PagingParameters_PageSize, options 10/20/50) was also
+    # confirmed — setting it to 50 up front cuts the number of pages
+    # needed roughly in half or better, before falling back to
+    # clicking real numbered page links for whatever remains.
+    page_size_select = page.locator("select#PagingParameters_PageSize")
+    if await page_size_select.count() > 0:
+        try:
+            await page_size_select.select_option(value="50", timeout=5_000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10_000)
+            except PlaywrightTimeout:
+                pass
+            await asyncio.sleep(1.5)
+        except Exception as e:
+            print(f"    [{month_label}/{status_name}] ⚠ Could not set page size to 50: "
+                  f"{type(e).__name__} — continuing with whatever size is active")
+
     all_apps: list[dict] = []
     seen_refs: set[str] = set()
     previous_refs: frozenset = frozenset()
@@ -413,11 +436,17 @@ async def scrape_month_status(page, month_label: str, status_id: str,
         if not page_apps:
             break
 
-        next_link = page.locator("a:has-text('Next'):visible")
-        if await next_link.count() == 0:
+        # Real, confirmed numbered pagination — click the link for the
+        # specific next page number, inside the real ul.pagination
+        # container, rather than a generic "Next" text match.
+        next_page_link = page.locator(
+            f"ul.pagination a:text-is('{page_num + 1}'), "
+            f"ul.pagination span:text-is('{page_num + 1}')"
+        )
+        if await next_page_link.count() == 0:
             break
         try:
-            await next_link.first.click(timeout=10_000)
+            await next_page_link.first.click(timeout=10_000)
             try:
                 await page.wait_for_load_state("networkidle", timeout=10_000)
             except PlaywrightTimeout:
