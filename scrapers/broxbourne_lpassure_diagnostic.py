@@ -232,6 +232,79 @@ async def main():
                 table_count = await tables.count()
                 print(f"\n  Real <table> elements found: {table_count}")
 
+                # Real, direct identification of the actual results
+                # table among the 4 found — the one containing the
+                # confirmed real header text "Reference No." — rather
+                # than guessing which index it is.
+                for i in range(table_count):
+                    t = tables.nth(i)
+                    t_text = await t.inner_text()
+                    if "Reference No" in t_text:
+                        print(f"\n  Real results table identified at index {i}")
+                        row_count = await t.locator("tr").count()
+                        print(f"  Real <tr> rows in this table: {row_count}")
+                        html = await t.evaluate("el => el.outerHTML")
+                        print(f"\n  Real, exact HTML of this table (first 4000 chars):")
+                        print(html[:4000])
+                        break
+                else:
+                    print(f"  ⚠ None of the {table_count} real tables contained "
+                          f"'Reference No' — results may be in a different structure")
+
+                print("\n" + "=" * 60)
+                print("STEP 5: real second search — same month, Decided this month")
+                print("=" * 60)
+                # Real, confirmed from the original description: these
+                # two radios are mutually exclusive (same name attribute,
+                # MonthlyListStatus) — checking Decided should
+                # automatically uncheck Validated. Reusing the same
+                # confirmed-correct Search button location from Step 4.
+                decided_radio = page.locator("input#DecidedThisMonth")
+                await decided_radio.check(timeout=5_000, force=True)
+                print("  Real 'Decided this month' radio checked")
+
+                # Re-finding by the same confirmed ancestor id from
+                # Step 4, rather than reusing a stale element reference.
+                all_search_btns = page.locator("button", has_text="Search")
+                target_btn_2 = None
+                for i in range(await all_search_btns.count()):
+                    btn = all_search_btns.nth(i)
+                    text = (await btn.text_content() or "").strip()
+                    parent_id = await btn.evaluate(
+                        "el => el.closest('[id]') ? el.closest('[id]').id : null"
+                    )
+                    if text == "Search" and parent_id == "ancWeeklyMonthlySearch":
+                        target_btn_2 = btn
+                        break
+
+                if target_btn_2 is None:
+                    print("  ⚠ Could not re-find the confirmed Search button for this second search")
+                else:
+                    await target_btn_2.click(timeout=5_000)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=15_000)
+                    except PlaywrightTimeout:
+                        pass
+                    await asyncio.sleep(2)
+
+                    print(f"\n  Real results URL: {page.url}")
+                    body_text_2 = await page.locator("body").inner_text()
+
+                    import re as _re
+                    count_match = _re.search(r"(\d+)\s+Results", body_text_2)
+                    print(f"  Real result count found: {count_match.group(1) if count_match else 'not found'}")
+
+                    tables_2 = page.locator("table")
+                    for i in range(await tables_2.count()):
+                        t = tables_2.nth(i)
+                        t_text = await t.inner_text()
+                        if "Reference No" in t_text:
+                            print(f"\n  Real Decided-this-month results (first 1500 chars of body):")
+                            print(repr(body_text_2[body_text_2.find("Reference No"):body_text_2.find("Reference No") + 1500]))
+                            break
+                    else:
+                        print(f"  ⚠ No real results table with 'Reference No' found for Decided this month")
+
                 # Real, common result-list containers to check for,
                 # since LPAssure's own markup isn't yet confirmed —
                 # trying several plausible candidates rather than
