@@ -343,6 +343,23 @@ async def scrape_month_status(page, month_label: str, status_id: str,
         if await month_select.count() == 0:
             print(f"    [{month_label}/{status_name}] ⚠ No real month select found")
             return []
+
+        # REAL, CONFIRMED FIX — a production run showed the current
+        # calendar month ("October 2026") genuinely isn't offered as a
+        # selectable option yet (the council's system appears to only
+        # add it a few days into the month, or once its first real
+        # application exists) — select_option() threw a confusing
+        # 5-second timeout for what's actually an expected, calm case.
+        # Checking the real available options first and skipping
+        # gracefully with a clear message, rather than treating this
+        # as a genuine error each time it happens.
+        available_months = await month_select.locator("option").all_text_contents()
+        if month_label not in available_months:
+            print(f"    [{month_label}/{status_name}] month not yet offered by the "
+                  f"council's own system (real available months: {available_months}) "
+                  f"— skipping, not an error")
+            return []
+
         await month_select.select_option(label=month_label, timeout=5_000)
 
         status_radio = page.locator(f"input#{status_id}")
