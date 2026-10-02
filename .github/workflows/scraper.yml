@@ -166,6 +166,23 @@ on:
                           # ever has more than 300 genuine applications,
                           # the excess isn't reachable through this
                           # search interface at all.
+    - cron: '55 9 */3 * *'  # Broxbourne Borough Council — every 3 days,
+                            # not nightly, given this scraper runs 4
+                            # separate searches per month (Validated +
+                            # Decided, each with real pagination) —
+                            # genuinely more load than a typical single-
+                            # search scraper, and this data doesn't move
+                            # fast enough to need nightly checks. HONEST
+                            # NOTE: cron's day-of-month step resets at
+                            # each month boundary, so the gap between the
+                            # last run of one month and the first of the
+                            # next can be as short as 1 day rather than a
+                            # full 3 — a known, harmless cron quirk, not
+                            # a bug. MONTHS_BACK must be "2" here, not
+                            # the "7" used for the one-off historical
+                            # backfill — see broxbourne_scraper.py's own
+                            # module docstring for the full evidence
+                            # trail behind this scraper.
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
     - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
@@ -4522,7 +4539,9 @@ jobs:
     # See broxbourne_scraper.py's own module docstring for the full
     # evidence trail. DELIBERATELY manual-trigger only for now — never
     # run live yet.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'broxbourne_scraper'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'broxbourne_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '55 9 */3 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 30
     steps:
