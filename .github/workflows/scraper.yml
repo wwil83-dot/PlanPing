@@ -4644,7 +4644,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          MAX_MINUTES: "30"
-          MONTHS_BACK: "2"
+          MAX_MINUTES: "60"
+          MONTHS_BACK: "7"
           HYNDBURN_COUNCIL_ID: "564"
         run: cd scrapers && python hyndburn_scraper.py
