@@ -4541,8 +4541,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          MAX_MINUTES: "30"
-          MONTHS_BACK: "2"
+          MAX_MINUTES: "60"
+          MONTHS_BACK: "7"
           BROXBOURNE_COUNCIL_ID: "563"
         run: cd scrapers && python broxbourne_scraper.py
 
