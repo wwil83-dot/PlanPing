@@ -118,6 +118,9 @@ def _normalise_status(s: str) -> str:
     # search — reveals a decision exists without saying which outcome.
     if "final decision" in key or "decided" in key:
         return "pending"
+    # An appeal being lodged doesn't reveal its eventual outcome.
+    if "appeal lodged" in key:
+        return "pending"
     if key not in _STATUS_DIAGNOSED:
         _STATUS_DIAGNOSED.add(key)
         print(f"    ⚠ STATUS DIAGNOSTIC: unrecognised status {s!r} — filed as 'pending'")
