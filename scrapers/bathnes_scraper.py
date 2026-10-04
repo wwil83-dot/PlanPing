@@ -41,10 +41,9 @@ CONFIRMED FACTS THAT SHAPE THE CODE:
 NOT YET CONFIRMED:
   - No per-application URL appears in the data, so council_url is left
     empty rather than guessed. Needs a look at what a result card links to.
-  - Only two status values have been seen ("Pending Consideration",
-    "TP5/TC5 Exempt from consent"). The dropdown lists ~41 statuses, so
-    the mapping is keyword-based and every unrecognised one is logged
-    once and printed in an inventory at the end of the run.
+  - The status vocabulary beyond the 16 codes seen in the first 8-week
+    run (see STATUS_BY_CODE). The dropdown lists ~41 statuses, so a code
+    not yet seen falls back to keywords and is logged once.
   - Whether the API caps results: counts of 62-86 showed no cap, and a
     warning prints if a week ever returns a suspiciously round number.
   - Whether `proposal` is complete or truncated API-side (the diagnostic
@@ -139,13 +138,45 @@ def valid_coords(lat, lng) -> bool:
     return 49.5 <= lat <= 61.0 and -8.7 <= lng <= 2.0
 
 
+# Confirmed from a real 8-week run (1,208 raw records, 16 distinct codes).
+# Exact codes are used first because they are stable; keywords are only a
+# fallback for codes not yet seen (the dropdown lists ~41 statuses).
+#
+# JUDGEMENT CALLS (flip any of these if you disagree):
+#   approved  <- NOOBJ "No Objection", CON "Consent", DISCHG "Condition
+#                Discharged", APP "Approve", LAWFUL "Lawful", EXEMPT
+#                "Exempt from consent", AN "Prior Approval NOT Required":
+#                all mean the application got a positive outcome or the
+#                works may proceed. Not all are literally "planning
+#                permission granted", but showing them as Pending would
+#                wrongly suggest a decision is still awaited.
+#   pending   <- SPLIT (part granted, part refused), NOCOM "No Comment",
+#                NONDET "Non-determination", CLO (blank): genuinely
+#                unclear, so left as pending rather than guessed.
+STATUS_BY_CODE = {
+    "PERMIT": "approved", "APP": "approved", "CON": "approved",
+    "NOOBJ": "approved", "LAWFUL": "approved", "DISCHG": "approved",
+    "EXEMPT": "approved", "AN": "approved",
+    "RF": "refused",
+    "WD": "withdrawn",
+    "PCO": "pending", "PDE": "pending",
+    "SPLIT": "pending", "NOCOM": "pending", "NONDET": "pending", "CLO": "pending",
+}
+
+POSITIVE_KEYWORDS = ("permitted", "permission", "approve", "granted", "consent",
+                     "no objection", "discharged", "exempt", "not required", "agreed")
+
 _STATUS_DIAGNOSED: set[str] = set()
 
 
-def normalise_status(status_text, pending_flag) -> str:
-    """Keyword-based; unknowns are filed as 'pending' and logged once."""
+def normalise_status(code, status_text, pending_flag) -> str:
+    """Pending flag first, then the exact code, then keywords for codes
+    not yet seen (logged once so the table can be extended)."""
     if str(pending_flag) == "1":
         return "pending"
+    code_key = clean_text(code).upper()
+    if code_key in STATUS_BY_CODE:
+        return STATUS_BY_CODE[code_key]
     key = clean_text(status_text).lower()
     if not key:
         return "pending"
@@ -155,13 +186,15 @@ def normalise_status(status_text, pending_flag) -> str:
         return "refused"
     if "withdraw" in key:
         return "withdrawn"
-    if any(x in key for x in ("permitted", "permission", "approved", "granted")):
+    if any(x in key for x in POSITIVE_KEYWORDS) or re.search(r"\blawful\b", key):
         return "approved"
     if "pending" in key:
         return "pending"
-    if key not in _STATUS_DIAGNOSED:
-        _STATUS_DIAGNOSED.add(key)
-        print(f"    ⚠ STATUS DIAGNOSTIC: unrecognised status {status_text!r} — filed as 'pending'")
+    marker = f"{code_key}|{key}"
+    if marker not in _STATUS_DIAGNOSED:
+        _STATUS_DIAGNOSED.add(marker)
+        print(f"    ⚠ STATUS DIAGNOSTIC: unrecognised status code {code!r} "
+              f"({status_text!r}) — filed as 'pending'")
     return "pending"
 
 
@@ -178,7 +211,7 @@ def parse_record(rec: dict) -> Optional[dict]:
         "postcode": extract_postcode(address),
         "description": clean_text(rec.get("proposal")),
         "application_type": clean_text(rec.get("dcapptyp_text")) or clean_text(rec.get("dcapptyp")) or "Planning",
-        "status": normalise_status(rec.get("dcstat_text"), rec.get("pending")),
+        "status": normalise_status(rec.get("dcstat"), rec.get("dcstat_text"), rec.get("pending")),
         "submitted_date": parse_iso_date(rec.get("dateaprecv")) or parse_iso_date(rec.get("dateapval")),
         "council_url": None,   # no confirmed per-application URL — see docstring
         "lat": float(lat) if ok else None,
