@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 """
-Bath & North East Somerset weekly list diagnostic (2026-10-02, rev 2).
+Bath & North East Somerset weekly list diagnostic (2026-10-04, rev 3).
 
-Real, direct description from the person running this project: the
-page at app.bathnes.gov.uk/webforms/planning/search.html#weeklyList
-has a weekly dropdown; picking a week moves to another screen showing
-applications and a map. A SECOND dropdown, Validated vs Decided, also
-exists (mentioned after the first version of this script was written).
-The latest week returned nothing, the week before had plenty.
+CONFIRMED from rev 2's real output:
+  - the status dropdown is select#weeklyListOption (Validated, Decided)
+  - the week dropdown is select#weeklyListBetween; its FIRST option is
+    the coming week (05/10/2026 to 11/10/2026), which is why the
+    "latest week" had no applications — it hasn't happened yet
+  - rev 2's submit heuristic clicked the first visible "Search" button,
+    which is the council's site-wide header search; every combination
+    landed on bathnes.gov.uk/search-page — so rev 2's zero counts say
+    nothing about whether those weeks have data
+  - the page fetches JSON from api.bathnes.gov.uk (PlanningAPI v2),
+    whose robots.txt disallows automated access, so the scraper should
+    drive the public page, not call the API directly
 
-Because picking a week appears to navigate immediately, the status
-dropdown is set FIRST, then the week dropdown is re-located (its
-options could change with the status) and the week picked.
-
-Checks:
-  1. every select/button on the landing view with real ids and options
-  2. for the first four weeks x both statuses, how many application
-     references actually appear (a layout-agnostic count, so it works
-     before the real results markup is known)
-  3. the real results markup for the first combination that has data
-  4. any JSON responses fetched while loading results
+This revision:
+  1. clicks the Search button INSIDE the weekly list form (nearest
+     ancestor of the week dropdown that contains a Search control)
+  2. records refs both before and after the click, to show whether
+     picking a week auto-loads results
+  3. logs what the page's OWN api.bathnes.gov.uk planning calls return
+     (method, post data, body snippet) — observation only, nothing is
+     requested beyond what the page itself does
 """
 import asyncio
 import re
@@ -40,26 +43,10 @@ CONTEXT_OPTIONS = {
 
 URL = "https://app.bathnes.gov.uk/webforms/planning/search.html#weeklyList"
 REF_RE = re.compile(r"\b\d{2}/\d{4,5}/[A-Z]{2,6}\b")
-SUBMIT_TEXT_RE = re.compile(r"search|go|view|show|submit|find|list", re.I)
-PLACEHOLDER_RE = re.compile(r"select|choose|please", re.I)
-STATUS_RE = re.compile(r"validated|decided", re.I)
+SECTION_XPATH = ("xpath=ancestor::*[.//button[normalize-space()='Search'] "
+                 "or .//input[@value='Search']][1]")
 
-
-def real_options(opts):
-    return [(i, o.strip()) for i, o in enumerate(opts)
-            if o and o.strip() and not PLACEHOLDER_RE.search(o)]
-
-
-def looks_like_status(opts):
-    return any(STATUS_RE.search(o) for _, o in real_options(opts))
-
-
-def looks_like_week(opts):
-    real = real_options(opts)
-    if len(real) < 2 or looks_like_status(opts):
-        return False
-    with_digits = sum(bool(re.search(r"\d", o)) for _, o in real)
-    return with_digits >= max(2, len(real) // 2)
+api_calls: dict[str, dict] = {}
 
 
 async def settle(page, extra=1.5):
@@ -72,7 +59,7 @@ async def settle(page, extra=1.5):
 
 async def dismiss_banners(page):
     for sel in ["button:has-text('Accept')", "button:has-text('I agree')",
-                "button:has-text('OK')", "button:has-text('Allow')"]:
+                "button:has-text('Allow')"]:
         loc = page.locator(sel)
         if await loc.count() > 0:
             try:
@@ -83,72 +70,56 @@ async def dismiss_banners(page):
             break
 
 
-async def find_selects(page):
-    """Returns (week_select, week_opts, status_select, status_opts)."""
-    week = status = None
-    week_opts = status_opts = []
-    selects = page.locator("select")
-    for i in range(await selects.count()):
-        el = selects.nth(i)
-        if not await el.is_visible():
-            continue
-        opts = [o.strip() for o in await el.locator("option").all_text_contents()]
-        if status is None and looks_like_status(opts):
-            status, status_opts = el, opts
-        elif week is None and looks_like_week(opts):
-            week, week_opts = el, opts
-    return week, week_opts, status, status_opts
+async def refs_on_page(page):
+    body = await page.locator("body").inner_text()
+    return sorted(set(REF_RE.findall(body))), body
 
 
 async def run_combo(page, week_pos, status_word):
-    """Fresh load; set status first, then pick the Nth real week."""
     await page.goto(URL, wait_until="domcontentloaded", timeout=45_000)
     await settle(page)
     await dismiss_banners(page)
 
-    week, week_opts, status, status_opts = await find_selects(page)
     result = {"week_pos": week_pos, "status": status_word}
+    status = page.locator("select#weeklyListOption")
+    week = page.locator("select#weeklyListBetween")
+    if await status.count() == 0 or await week.count() == 0:
+        return {**result, "error": "weekly list selects not found"}
 
-    if status is not None:
-        match = next(((i, o) for i, o in real_options(status_opts)
-                      if status_word.lower() in o.lower()), None)
-        if match is None:
-            return {**result, "error": f"no status option matching {status_word!r}: {status_opts}"}
-        await status.select_option(index=match[0], timeout=5_000)
-        await settle(page, 2)
-        # The week dropdown may have been re-rendered by the status change.
-        week, week_opts, _, _ = await find_selects(page)
-    else:
-        result["note"] = "no status dropdown located — week only"
+    # Status first (picking a week may navigate immediately), then week.
+    await status.select_option(label=status_word, timeout=5_000)
+    await settle(page, 1.5)
 
-    if week is None:
-        return {**result, "error": "no week dropdown located"}
-    real = real_options(week_opts)
-    if week_pos >= len(real):
-        return {**result, "error": f"only {len(real)} real week options"}
-    idx, label = real[week_pos]
-    await week.select_option(index=idx, timeout=5_000)
+    options = [o.strip() for o in await week.locator("option").all_text_contents()]
+    if week_pos >= len(options):
+        return {**result, "error": f"only {len(options)} week options"}
+    await week.select_option(index=week_pos, timeout=5_000)
+    result["week_label"] = options[week_pos]
     await settle(page, 2)
 
-    clicked = None
-    btns = page.locator("button:visible, input[type='submit']:visible, input[type='button']:visible")
-    for i in range(await btns.count()):
-        b = btns.nth(i)
-        text = ((await b.text_content()) or (await b.get_attribute("value")) or "").strip()
-        if text and SUBMIT_TEXT_RE.search(text) and "cookie" not in text.lower():
-            try:
-                await b.click(timeout=4_000)
-                clicked = text
-                await settle(page, 2)
-                break
-            except Exception:
-                continue
+    pre_refs, _ = await refs_on_page(page)
+    result["refs_before_click"] = len(pre_refs)
 
-    body = await page.locator("body").inner_text()
-    refs = sorted(set(REF_RE.findall(body)))
-    return {**result, "week_label": label, "clicked_button": clicked,
-            "url": page.url, "unique_refs": len(refs), "sample_refs": refs[:4],
-            "table_rows": await page.locator("table tbody tr").count()}
+    section = week.locator(SECTION_XPATH)
+    if await section.count() == 0:
+        return {**result, "error": "no ancestor of the week dropdown contains a Search control"}
+    btn = section.locator("button:has-text('Search'), input[value='Search']").first
+    info = await btn.evaluate(
+        "el => ({tag: el.tagName, id: el.id, cls: el.className, visible: el.offsetParent !== null})")
+    result["search_button"] = info
+    try:
+        await btn.click(timeout=4_000)
+        result["click"] = "normal"
+    except Exception:
+        await btn.evaluate("el => el.click()")
+        result["click"] = "js-fallback"
+    await settle(page, 3)
+
+    refs, _ = await refs_on_page(page)
+    result.update({"url": page.url, "refs_after_click": len(refs),
+                   "sample_refs": refs[:4],
+                   "table_rows": await page.locator("table tbody tr").count()})
+    return result
 
 
 async def main():
@@ -158,51 +129,26 @@ async def main():
         context = await browser.new_context(**CONTEXT_OPTIONS)
         page = await context.new_page()
 
-        json_hits = []
-
         async def on_response(resp):
             try:
-                ctype = resp.headers.get("content-type", "")
-                if "json" in ctype.lower():
-                    json_hits.append((resp.status, resp.url[:200], ctype))
+                url = resp.url
+                if "api.bathnes.gov.uk" not in url or "json" not in resp.headers.get("content-type", "").lower():
+                    return
+                if "OSHubToken" in url:
+                    return  # map token — irrelevant and shouldn't be logged
+                if url in api_calls:
+                    return
+                body = (await resp.text())[:1800]
+                api_calls[url] = {
+                    "status": resp.status, "method": resp.request.method,
+                    "post_data": (resp.request.post_data or "")[:400], "body": body}
             except Exception:
                 pass
 
         page.on("response", on_response)
 
         print("=" * 60)
-        print("STEP 1: controls on the landing view")
-        print("=" * 60)
-        await page.goto(URL, wait_until="domcontentloaded", timeout=45_000)
-        await settle(page)
-        print(f"  title: {await page.title()!r}")
-        print(f"  url:   {page.url}")
-        await dismiss_banners(page)
-
-        selects = page.locator("select")
-        print(f"\n  <select> elements: {await selects.count()}")
-        for i in range(await selects.count()):
-            el = selects.nth(i)
-            info = await el.evaluate(
-                "el => ({id: el.id, name: el.name, cls: el.className, "
-                "onchange: el.getAttribute('onchange'), visible: el.offsetParent !== null})")
-            opts = [o.strip() for o in await el.locator("option").all_text_contents()]
-            kind = ("STATUS" if looks_like_status(opts)
-                    else "WEEK" if looks_like_week(opts) else "other")
-            print(f"    [{i}] ({kind}) {info}")
-            print(f"        options ({len(opts)}): {opts[:10]}")
-
-        btns = page.locator("button, input[type='submit'], input[type='button']")
-        print(f"\n  button-like controls: {await btns.count()}")
-        for i in range(min(await btns.count(), 12)):
-            info = await btns.nth(i).evaluate(
-                "el => ({tag: el.tagName, id: el.id, cls: el.className, "
-                "text: (el.textContent || el.value || '').trim().slice(0,40), "
-                "visible: el.offsetParent !== null})")
-            print(f"    [{i}] {info}")
-
-        print("\n" + "=" * 60)
-        print("STEP 2: first four weeks x Validated / Decided")
+        print("STEP 1: combinations (status set first, then week)")
         print("=" * 60)
         summaries = []
         for status_word in ("Validated", "Decided"):
@@ -216,14 +162,16 @@ async def main():
                 print(f"  {s}")
 
         print("\n" + "=" * 60)
-        print("STEP 3: real results markup for the first combination with data")
+        print("STEP 2: real results markup for the first combination with data")
         print("=" * 60)
-        winner = next((s for s in summaries if s.get("unique_refs", 0) > 0), None)
+        winner = next((s for s in summaries if s.get("refs_after_click", 0) > 0), None)
         if winner is None:
             print("  no combination produced application references")
+            refs, body = await refs_on_page(page)
+            print(f"  last page body text (first 1500 chars):\n{body[:1500]!r}")
         else:
             await run_combo(page, winner["week_pos"], winner["status"])
-            body = await page.locator("body").inner_text()
+            refs, body = await refs_on_page(page)
             print(f"  used: week {winner['week_label']!r}, status {winner['status']!r}")
             print(f"  body text (first 2500 chars):\n{body[:2500]!r}")
 
@@ -232,13 +180,12 @@ async def main():
             for i in range(await tables.count()):
                 t = tables.nth(i)
                 if REF_RE.search(await t.inner_text()):
-                    print(f"  table {i} holds references; first 3500 chars of its HTML:")
+                    print(f"  table {i} holds references; first 3500 chars of HTML:")
                     print((await t.evaluate("el => el.outerHTML"))[:3500])
                     break
             else:
                 print("  no <table> holds references — probing for a list/card layout")
-                first_ref = sorted(set(REF_RE.findall(body)))[0]
-                holder = page.locator(f"text={first_ref}").first
+                holder = page.locator(f"text={refs[0]}").first
                 chain = await holder.evaluate(
                     "el => { const out=[]; let n=el; for (let i=0;i<6&&n;i++){ "
                     "out.push(n.tagName+'.'+(n.className||'')+'#'+(n.id||'')); n=n.parentElement;} "
@@ -249,21 +196,25 @@ async def main():
                     "return n.outerHTML; }")
                 print(f"  surrounding block HTML (first 3000 chars):\n{block[:3000]}")
 
-            pag = page.locator("[class*='pag' i], [id*='pag' i], a:has-text('Next')")
+            pag = page.locator("[class*='pag' i], [id*='pag' i], a:has-text('Next'), "
+                               "button:has-text('Next'), button:has-text('Load more')")
             print(f"\n  pagination-like elements: {await pag.count()}")
             for i in range(min(await pag.count(), 6)):
                 info = await pag.nth(i).evaluate(
                     "el => ({tag: el.tagName, id: el.id, cls: el.className, "
-                    "text: el.textContent.trim().slice(0,50)})")
+                    "text: el.textContent.trim().slice(0,50), visible: el.offsetParent !== null})")
                 print(f"    [{i}] {info}")
 
         print("\n" + "=" * 60)
-        print("STEP 4: JSON responses the page fetched (possible data feed)")
+        print("STEP 3: the page's own api.bathnes.gov.uk JSON calls (observed only)")
         print("=" * 60)
-        if not json_hits:
+        if not api_calls:
             print("  none seen")
-        for status, url, ctype in json_hits[:15]:
-            print(f"  {status} {ctype} {url}")
+        for url, c in api_calls.items():
+            print(f"\n  {c['method']} {c['status']} {url[:220]}")
+            if c["post_data"]:
+                print(f"    request body: {c['post_data']}")
+            print(f"    response (first 600 chars): {c['body'][:600]!r}")
 
         await context.close()
         await browser.close()
