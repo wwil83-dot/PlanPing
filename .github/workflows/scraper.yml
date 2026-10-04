@@ -4694,8 +4694,8 @@ jobs:
     # Bath & North East Somerset — drives the Weekly List tab and reads
     # the JSON the page itself receives (complete per week, no paging).
     # See bathnes_scraper.py's module docstring for the evidence trail,
-    # the robots.txt note, and what is NOT yet confirmed (no per-
-    # application URL, partial status vocabulary).
+    # the robots.txt note, and what is NOT yet confirmed (the
+    # rest of the council's status vocabulary).
     # DELIBERATELY manual-trigger only for now — never run live yet.
     #
     # WEEKS_BACK: "9" is for the ONE-OFF backfill (the dropdown only
