@@ -38,9 +38,13 @@ CONFIRMED FACTS THAT SHAPE THE CODE:
     Magna", another "Midsomer Norton") so it is not used. `ward_text`
     looked right but isn't stored either.
 
+  - Each result row on the results screen links to
+    ./details.html?refval=<url-encoded reference> (target=_blank — i.e.
+    the site itself opens it as a fresh load in a new tab), so
+    council_url is built from the reference. Not independently opened
+    from outside the site; the evidence is the site's own link.
+
 NOT YET CONFIRMED:
-  - No per-application URL appears in the data, so council_url is left
-    empty rather than guessed. Needs a look at what a result card links to.
   - The status vocabulary beyond the 16 codes seen in the first 8-week
     run (see STATUS_BY_CODE). The dropdown lists ~41 statuses, so a code
     not yet seen falls back to keywords and is logged once.
@@ -58,6 +62,7 @@ import time
 from collections import Counter
 from datetime import date, datetime, timezone
 from typing import Optional
+from urllib.parse import quote
 
 import httpx
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
@@ -76,6 +81,9 @@ CONTEXT_OPTIONS = {
 
 URL = "https://app.bathnes.gov.uk/webforms/planning/search.html#weeklyList"
 COUNCIL_NAME = "Bath and North East Somerset Council"
+# Each result row links to ./details.html?refval=<url-encoded reference>
+# (target=_blank, so it is a normal fresh load in a new tab).
+DETAIL_URL = "https://app.bathnes.gov.uk/webforms/planning/details.html?refval={}"
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
@@ -213,7 +221,7 @@ def parse_record(rec: dict) -> Optional[dict]:
         "application_type": clean_text(rec.get("dcapptyp_text")) or clean_text(rec.get("dcapptyp")) or "Planning",
         "status": normalise_status(rec.get("dcstat"), rec.get("dcstat_text"), rec.get("pending")),
         "submitted_date": parse_iso_date(rec.get("dateaprecv")) or parse_iso_date(rec.get("dateapval")),
-        "council_url": None,   # no confirmed per-application URL — see docstring
+        "council_url": DETAIL_URL.format(quote(reference, safe="")),
         "lat": float(lat) if ok else None,
         "lng": float(lng) if ok else None,
     }
