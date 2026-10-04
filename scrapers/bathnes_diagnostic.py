@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 """
-Bath & North East Somerset weekly list diagnostic (2026-10-02).
+Bath & North East Somerset weekly list diagnostic (2026-10-02, rev 2).
 
 Real, direct description from the person running this project: the
 page at app.bathnes.gov.uk/webforms/planning/search.html#weeklyList
 has a weekly dropdown; picking a week moves to another screen showing
-applications and a map. The latest week returned nothing, the week
-before had plenty. The #weeklyList fragment suggests a single-page
-app, so this checks:
-  1. what controls exist (selects, buttons) and their real ids/options
-  2. whether picking a week auto-loads results or needs a button click
-  3. for the first four weeks in the dropdown, how many application
+applications and a map. A SECOND dropdown, Validated vs Decided, also
+exists (mentioned after the first version of this script was written).
+The latest week returned nothing, the week before had plenty.
+
+Because picking a week appears to navigate immediately, the status
+dropdown is set FIRST, then the week dropdown is re-located (its
+options could change with the status) and the week picked.
+
+Checks:
+  1. every select/button on the landing view with real ids and options
+  2. for the first four weeks x both statuses, how many application
      references actually appear (a layout-agnostic count, so it works
      before the real results markup is known)
-  4. the real results markup for the first week that has data
-  5. any JSON responses the page fetched while loading results, since
-     a map screen often means a cleaner data feed exists behind it
+  3. the real results markup for the first combination that has data
+  4. any JSON responses fetched while loading results
 """
 import asyncio
 import re
@@ -37,6 +41,25 @@ CONTEXT_OPTIONS = {
 URL = "https://app.bathnes.gov.uk/webforms/planning/search.html#weeklyList"
 REF_RE = re.compile(r"\b\d{2}/\d{4,5}/[A-Z]{2,6}\b")
 SUBMIT_TEXT_RE = re.compile(r"search|go|view|show|submit|find|list", re.I)
+PLACEHOLDER_RE = re.compile(r"select|choose|please", re.I)
+STATUS_RE = re.compile(r"validated|decided", re.I)
+
+
+def real_options(opts):
+    return [(i, o.strip()) for i, o in enumerate(opts)
+            if o and o.strip() and not PLACEHOLDER_RE.search(o)]
+
+
+def looks_like_status(opts):
+    return any(STATUS_RE.search(o) for _, o in real_options(opts))
+
+
+def looks_like_week(opts):
+    real = real_options(opts)
+    if len(real) < 2 or looks_like_status(opts):
+        return False
+    with_digits = sum(bool(re.search(r"\d", o)) for _, o in real)
+    return with_digits >= max(2, len(real) // 2)
 
 
 async def settle(page, extra=1.5):
@@ -60,36 +83,51 @@ async def dismiss_banners(page):
             break
 
 
-async def find_week_select(page):
-    """First visible <select> with at least 3 options."""
+async def find_selects(page):
+    """Returns (week_select, week_opts, status_select, status_opts)."""
+    week = status = None
+    week_opts = status_opts = []
     selects = page.locator("select")
     for i in range(await selects.count()):
         el = selects.nth(i)
         if not await el.is_visible():
             continue
-        opts = await el.locator("option").all_text_contents()
-        if len(opts) >= 3:
-            return el, [o.strip() for o in opts]
-    return None, []
+        opts = [o.strip() for o in await el.locator("option").all_text_contents()]
+        if status is None and looks_like_status(opts):
+            status, status_opts = el, opts
+        elif week is None and looks_like_week(opts):
+            week, week_opts = el, opts
+    return week, week_opts, status, status_opts
 
 
-async def run_week(page, position):
-    """Fresh page load, pick the Nth real option, return a summary."""
+async def run_combo(page, week_pos, status_word):
+    """Fresh load; set status first, then pick the Nth real week."""
     await page.goto(URL, wait_until="domcontentloaded", timeout=45_000)
     await settle(page)
     await dismiss_banners(page)
 
-    select, options = await find_week_select(page)
-    if select is None:
-        return {"position": position, "error": "no visible week select found"}
+    week, week_opts, status, status_opts = await find_selects(page)
+    result = {"week_pos": week_pos, "status": status_word}
 
-    # Treat a first option that looks like a placeholder as not a week.
-    real = [(i, o) for i, o in enumerate(options)
-            if o and not re.search(r"select|choose|please", o, re.I)]
-    if position >= len(real):
-        return {"position": position, "error": f"only {len(real)} real options"}
-    idx, label = real[position]
-    await select.select_option(index=idx, timeout=5_000)
+    if status is not None:
+        match = next(((i, o) for i, o in real_options(status_opts)
+                      if status_word.lower() in o.lower()), None)
+        if match is None:
+            return {**result, "error": f"no status option matching {status_word!r}: {status_opts}"}
+        await status.select_option(index=match[0], timeout=5_000)
+        await settle(page, 2)
+        # The week dropdown may have been re-rendered by the status change.
+        week, week_opts, _, _ = await find_selects(page)
+    else:
+        result["note"] = "no status dropdown located — week only"
+
+    if week is None:
+        return {**result, "error": "no week dropdown located"}
+    real = real_options(week_opts)
+    if week_pos >= len(real):
+        return {**result, "error": f"only {len(real)} real week options"}
+    idx, label = real[week_pos]
+    await week.select_option(index=idx, timeout=5_000)
     await settle(page, 2)
 
     clicked = None
@@ -108,12 +146,9 @@ async def run_week(page, position):
 
     body = await page.locator("body").inner_text()
     refs = sorted(set(REF_RE.findall(body)))
-    return {
-        "position": position, "label": label, "clicked_button": clicked,
-        "url": page.url, "body_chars": len(body), "unique_refs": len(refs),
-        "sample_refs": refs[:5],
-        "table_rows": await page.locator("table tbody tr").count(),
-    }
+    return {**result, "week_label": label, "clicked_button": clicked,
+            "url": page.url, "unique_refs": len(refs), "sample_refs": refs[:4],
+            "table_rows": await page.locator("table tbody tr").count()}
 
 
 async def main():
@@ -128,7 +163,7 @@ async def main():
         async def on_response(resp):
             try:
                 ctype = resp.headers.get("content-type", "")
-                if "json" in ctype.lower() or "geojson" in ctype.lower():
+                if "json" in ctype.lower():
                     json_hits.append((resp.status, resp.url[:200], ctype))
             except Exception:
                 pass
@@ -152,41 +187,44 @@ async def main():
                 "el => ({id: el.id, name: el.name, cls: el.className, "
                 "onchange: el.getAttribute('onchange'), visible: el.offsetParent !== null})")
             opts = [o.strip() for o in await el.locator("option").all_text_contents()]
-            print(f"    [{i}] {info}")
+            kind = ("STATUS" if looks_like_status(opts)
+                    else "WEEK" if looks_like_week(opts) else "other")
+            print(f"    [{i}] ({kind}) {info}")
             print(f"        options ({len(opts)}): {opts[:10]}")
 
         btns = page.locator("button, input[type='submit'], input[type='button']")
         print(f"\n  button-like controls: {await btns.count()}")
         for i in range(min(await btns.count(), 12)):
-            b = btns.nth(i)
-            info = await b.evaluate(
+            info = await btns.nth(i).evaluate(
                 "el => ({tag: el.tagName, id: el.id, cls: el.className, "
                 "text: (el.textContent || el.value || '').trim().slice(0,40), "
                 "visible: el.offsetParent !== null})")
             print(f"    [{i}] {info}")
 
         print("\n" + "=" * 60)
-        print("STEP 2: first four weeks in the dropdown")
+        print("STEP 2: first four weeks x Validated / Decided")
         print("=" * 60)
         summaries = []
-        for pos in range(4):
-            try:
-                s = await run_week(page, pos)
-            except Exception as e:
-                s = {"position": pos, "error": f"{type(e).__name__}: {e}"}
-            summaries.append(s)
-            print(f"  {s}")
+        for status_word in ("Validated", "Decided"):
+            for pos in range(4):
+                try:
+                    s = await run_combo(page, pos, status_word)
+                except Exception as e:
+                    s = {"week_pos": pos, "status": status_word,
+                         "error": f"{type(e).__name__}: {e}"}
+                summaries.append(s)
+                print(f"  {s}")
 
         print("\n" + "=" * 60)
-        print("STEP 3: real results markup for the first week with data")
+        print("STEP 3: real results markup for the first combination with data")
         print("=" * 60)
         winner = next((s for s in summaries if s.get("unique_refs", 0) > 0), None)
         if winner is None:
-            print("  no week among the first four produced application references")
+            print("  no combination produced application references")
         else:
-            await run_week(page, winner["position"])
+            await run_combo(page, winner["week_pos"], winner["status"])
             body = await page.locator("body").inner_text()
-            print(f"  week used: {winner['label']!r}")
+            print(f"  used: week {winner['week_label']!r}, status {winner['status']!r}")
             print(f"  body text (first 2500 chars):\n{body[:2500]!r}")
 
             tables = page.locator("table")
