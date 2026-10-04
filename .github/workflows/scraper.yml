@@ -195,6 +195,13 @@ on:
                             # "2" here, same reasoning as Broxbourne —
                             # see hyndburn_scraper.py's own module
                             # docstring for the full evidence trail.
+    - cron: '5 10 */3 * *'  # Bath & North East Somerset — every 3 days,
+                            # 10:05, after Broxbourne (9:55) and Hyndburn
+                            # (10:00). 3 weeks x Validated/Decided = 6
+                            # searches per run. WEEKS_BACK must be "3" here,
+                            # not the "9" used for the one-off backfill.
+                            # Cron's */3 resets each month, so the gap can
+                            # be 1 day across a month boundary — harmless.
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
     - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
@@ -4702,7 +4709,9 @@ jobs:
     # offers ~8 usable weeks, so this takes everything available).
     # Set it to "3" before putting this on a schedule — three
     # overlapping weeks every run is plenty and keeps the load tiny.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'bathnes_scraper'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'bathnes_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '5 10 */3 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 30
     steps:
@@ -4722,7 +4731,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MAX_MINUTES: "25"
-          WEEKS_BACK: "9"
+          WEEKS_BACK: "3"
           BATHNES_COUNCIL_ID: "565"
         run: cd scrapers && python bathnes_scraper.py
 
