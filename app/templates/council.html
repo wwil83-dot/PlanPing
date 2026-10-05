@@ -22,8 +22,18 @@
     <div>
       <h2 class="results-title">{{ council.name }}</h2>
       <p class="results-sub">
-        {% if council.coverage_source in ('data_gov_uk', 'gov_api', 'idox_scraper', 'northgate_scraper') %}
-          ✓ Fully covered — data updated nightly
+        {# Covered unless the source is a known "not scraping this council"
+           value. This used to be an allowlist of four scraper names, so
+           every newly added scraper (Boston, East Lindsey, West Northants,
+           Broxbourne, Hyndburn, Bath...) kept saying "coming soon" until
+           someone edited this line — and it had drifted out of step with
+           _coverage_message() in main.py, which also recognises Arcus and
+           Civica. Keep these two values in step with NOT_COVERED_SOURCES
+           in main.py. Wording is "regularly", not "nightly": several
+           councils run every few days, and the line below states the real
+           last-updated time anyway. #}
+        {% if council.coverage_source and council.coverage_source not in ('pending', 'manual_link') %}
+          ✓ Covered — data updated regularly
         {% else %}
           Coverage coming soon
         {% endif %}
