@@ -1670,6 +1670,14 @@ def _days_ago(submitted_date) -> str:
     return submitted_date.strftime("%-d %b %Y")
 
 
+# Sources that mean "we are NOT scraping this council". Anything else —
+# every scraper name, existing or added later — counts as covered, so a
+# new scraper no longer needs a code change to stop saying "coming soon".
+# (It used to be an allowlist, and every new scraper was missing from it.)
+# Keep these two values in step with the same check in council.html.
+NOT_COVERED_SOURCES = ("pending", "manual_link")
+
+
 def _coverage_message(council, council_name: str) -> dict:
     if not council:
         return {
@@ -1681,8 +1689,7 @@ def _coverage_message(council, council_name: str) -> dict:
     name = council["name"]
     portal = council["portal_url"] or ""
 
-    if source in ("idox_scraper", "arcus_scraper", "civica_scraper",
-                  "northgate_scraper", "gov_api", "data_gov_uk"):
+    if source and source not in NOT_COVERED_SOURCES:
         return {
             "type": "covered",
             "message": f"{name} is fully covered — results below are live.",
