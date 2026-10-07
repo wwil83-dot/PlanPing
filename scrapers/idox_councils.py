@@ -822,9 +822,20 @@ IDOX_COUNCILS = [
     ("Oxford City Council",
      "https://public.oxford.gov.uk/online-applications"),
 
-    # BROKEN — Medway moved to Open Digital Planning (planningregister.org/medway), not Idox.
-    # ("Medway Council",
-    #  "https://publicaccess.medway.gov.uk/online-applications"),
+    # CORRECTED 2026-10-05 — the earlier note here ("moved to Open Digital Planning,
+    # not Idox") was wrong. planningregister.org/medway is a deliberately partial
+    # pilot: its own front page says only a limited set of applications are
+    # published there (17 in total when checked). Medway's real register is an
+    # Idox portal on a DIFFERENT subdomain — publicaccess1, with a "1" — which
+    # is why the old publicaccess.medway.gov.uk entry looked dead. Confirmed by
+    # idox_url_probe.py run from the runner: monthly mode returned 283
+    # applications over 60 days (Aug 113, Sep 159, Oct 11), consistent with the
+    # 36-per-week the council's own weekly list shows. Weekly mode returns an
+    # Error page, so this stays on the standard monthly path. The old ODP scraper
+    # (medway_scraper.py, source "medway_scraper") should be switched off, since it
+    # writes the same council under a different reference format.
+    ("Medway Council",
+     "https://publicaccess1.medway.gov.uk/online-applications"),
 
     ("Isle of Wight Council",
      "https://publicaccess.iow.gov.uk/online-applications"),
