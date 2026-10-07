@@ -117,11 +117,16 @@ def outcome_from_decision(text):
         return None
     if "withdraw" in t:
         return "withdrawn"
-    if "refus" in t or "reject" in t or "unlawful" in t:
+    if "refus" in t or "reject" in t or "unlawful" in t or "not lawful" in t:
         return "refused"
     if "split" in t or "prior approval required" in t:
         return None                    # not a plain outcome
-    if any(k in t for k in ("approv", "grant", "permit", "no objection", "not required", "lawful")):
+    if "discharge" in t:
+        # "Discharge of Conditions" = the conditions were satisfied (same call as
+        # Bath's "Condition Discharged"); a negative or partial discharge is unclear.
+        return None if ("not" in t or "part" in t) else "approved"
+    if any(k in t for k in ("approv", "grant", "permit", "no objection", "not required",
+                            "lawful", "with conditions", "deemed")):
         return "approved"
     return None
 
