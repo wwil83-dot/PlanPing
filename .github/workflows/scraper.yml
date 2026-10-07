@@ -4948,7 +4948,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MONTHS_BACK: "7"
-          START_MONTH: "3"
+          START_MONTH: "0"
           MAX_DETAIL: "1200"
           MAX_MINUTES: "120"
           DRY_RUN: "0"
