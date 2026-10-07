@@ -15,7 +15,8 @@ applications 'pending'. Confirmed by medway_decided_probe.py:
 WHAT IT DOES, for the current and previous MONTHS_BACK months:
   1. runs the Decided list and collects every application on it
   2. reads Medway's rows from the database and keeps only applications that
-     are still 'pending' (already-decided ones are never fetched again)
+     are still 'pending' with no decision date (decided ones, and ones whose
+     unclear outcome was already looked at, are never fetched again)
   3. opens each one's page once, reads the outcome and date
   4. UPDATES that row's status and decision_date (a PATCH, never an insert,
      so it cannot create half-empty rows). Applications not in the database
@@ -121,8 +122,14 @@ def outcome_from_decision(text):
         return "withdrawn"
     if "refus" in t or "reject" in t or "unlawful" in t or "not lawful" in t:
         return "refused"
-    if "split" in t or "prior approval required" in t:
-        return None                    # not a plain outcome
+    if re.search(r"\beia\b", t):
+        return None                    # an EIA screening opinion, not a planning decision
+    if "split" in t:
+        return None                    # part granted, part refused: not a plain outcome
+    if "prior approval required" in t:
+        # "Prior Approval Required - Approved" is an outcome; a bare "Prior Approval
+        # Required" only says approval is needed, so it is not one.
+        return "approved" if ("approved" in t or "granted" in t) else None
     if "discharge" in t:
         # "Discharge of Conditions" = the conditions were satisfied (same call as
         # Bath's "Condition Discharged"); a negative or partial discharge is unclear.
@@ -141,16 +148,25 @@ def parse_issue_date(s):
 
 
 def plan_work(decided: list[dict], existing: dict) -> tuple[list[dict], dict]:
-    """Which decided applications need their page read. Only references we
-    already hold, and only while they are not yet in a decided state."""
-    stats = {"on_lists": len(decided), "already_decided": 0, "not_in_db": 0, "to_fetch": 0}
+    """Which decided applications need their page read. `existing` maps each
+    reference we hold to (status, decision_date). Only references we already
+    hold are considered. Already approved/refused/withdrawn rows are skipped,
+    and so are rows whose decision date is already recorded: those had a decision
+    that isn't a plain approve/refuse (e.g. a split decision), and were already
+    looked at once."""
+    stats = {"on_lists": len(decided), "already_decided": 0, "already_looked_at": 0,
+             "not_in_db": 0, "to_fetch": 0}
     todo = []
     for d in decided:
-        status = existing.get(d["reference"])
-        if status is None:
+        info = existing.get(d["reference"])
+        if info is None:
             stats["not_in_db"] += 1
-        elif status in DECIDED_STATES:
+            continue
+        status, decision_date = info
+        if status in DECIDED_STATES:
             stats["already_decided"] += 1
+        elif decision_date:
+            stats["already_looked_at"] += 1
         else:
             todo.append(d)
     stats["to_fetch"] = len(todo)
@@ -226,7 +242,8 @@ async def collect_decided(context, base, month_index) -> list[dict]:
                 break
             previous = refs
             items.extend(got)
-        print(f"    [month {month_index}] Decided list: {total} reported, {len(items)} collected over {pages} page(s)")
+        items = list({i["reference"]: i for i in items}.values())     # one entry per reference
+        print(f"    [month {month_index}] Decided list: {total} reported, {len(items)} distinct collected over {pages} page(s)")
     except Exception as e:
         print(f"    [month {month_index}] ⚠ {type(e).__name__}: {str(e)[:150]}")
     finally:
@@ -237,11 +254,11 @@ async def collect_decided(context, base, month_index) -> list[dict]:
 async def fetch_existing(cid) -> dict:
     existing, size = {}, 1000
     for page in range(10):
-        rows = await scraper._supa_get("planning_applications", select="reference,status",
+        rows = await scraper._supa_get("planning_applications", select="reference,status,decision_date",
                                        council_id=f"eq.{cid}", order="id.asc",
                                        limit=str(size), offset=str(page * size))
         for r in rows:
-            existing[r["reference"]] = r["status"]
+            existing[r["reference"]] = (r["status"], r.get("decision_date"))
         if len(rows) < size:
             break
     return existing
@@ -276,7 +293,7 @@ async def main():
           f"{'DRY RUN — nothing will be written' if DRY_RUN else 'LIVE'}\n")
 
     existing = await fetch_existing(cid)
-    pending_before = sum(1 for s in existing.values() if s == "pending")
+    pending_before = sum(1 for s, _ in existing.values() if s == "pending")
     print(f"Database holds {len(existing)} Medway applications, {pending_before} pending\n")
 
     stats_total = Counter()
@@ -327,6 +344,13 @@ async def main():
                 issued = parse_issue_date(fields.get("decision issued date"))
                 if status is None:
                     written["unmapped"] += 1
+                    if issued:
+                        # Not a plain approve/refuse (e.g. Split Decision): leave the status,
+                        # but record the date so this page is not read again every night.
+                        print(f"    {d['reference']:14} {decision!r:28} -> (outcome unclear; date {issued} recorded)")
+                        if DRY_RUN or await patch_application(client, cid, d["reference"],
+                                                              {"decision_date": issued}):
+                            written["dated_only"] += 1
                 else:
                     update = {"status": status}
                     if issued:
@@ -343,10 +367,12 @@ async def main():
     print(f"\n{'=' * 60}\nSUMMARY ({'dry run' if DRY_RUN else 'live'}, {minutes():.1f} min)\n{'=' * 60}")
     print(f"  Decided-list applications seen: {stats_total['on_lists']}")
     print(f"    already decided in the database: {stats_total['already_decided']}")
+    print(f"    already looked at (unclear outcome, date recorded): {stats_total['already_looked_at']}")
     print(f"    not in the database (skipped):   {stats_total['not_in_db']}")
     print(f"    needing their page read:         {stats_total['to_fetch']}  (read this run: {fetched})")
     print(f"  Updated: approved={written['approved']}  refused={written['refused']}  "
-          f"withdrawn={written['withdrawn']}   left alone (unclear outcome)={written['unmapped']}   "
+          f"withdrawn={written['withdrawn']}   unclear outcome={written['unmapped']} "
+          f"(of which date recorded: {written['dated_only']})   "
           f"page failures={written['page_failed']}")
     print("  Raw 'Decision' text seen on application pages:")
     for text, n in inventory.most_common():
