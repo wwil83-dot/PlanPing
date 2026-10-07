@@ -28,8 +28,9 @@ Medway applications from the list pages, which say 'Decided', and that
 overwrites a decision made here back to 'pending'. Run this job AFTER the
 Idox batch that contains Medway so the night ends with the right answer.
 
-Env: MONTHS_BACK (default 2), MAX_DETAIL (default 200 application pages per
-run), MAX_MINUTES (default 30), DETAIL_PACE_SECONDS (default 2.0),
+Env: MONTHS_BACK (default 2), START_MONTH (default 0 = this month; set it to
+skip months that are already fully done), MAX_DETAIL (default 200 application
+pages per run), MAX_MINUTES (default 30), DETAIL_PACE_SECONDS (default 2.0),
 DRY_RUN=1 to print what would be written without writing.
 """
 import asyncio
@@ -51,6 +52,7 @@ from idox_councils import IDOX_COUNCILS
 
 COUNCIL_NAME = "Medway Council"
 MONTHS_BACK = int(os.environ.get("MONTHS_BACK", "2"))
+START_MONTH = int(os.environ.get("START_MONTH", "0"))   # skip months already finished
 MAX_DETAIL = int(os.environ.get("MAX_DETAIL", "200"))
 MAX_MINUTES = int(os.environ.get("MAX_MINUTES", "30"))
 PACE = float(os.environ.get("DETAIL_PACE_SECONDS", "2.0"))
@@ -270,7 +272,7 @@ async def main():
         sys.exit(1)
     cid = rows[0]["id"]
     print(f"{COUNCIL_NAME}: council_id={cid}  portal={base}\n"
-          f"months={MONTHS_BACK}  max pages={MAX_DETAIL}  budget={MAX_MINUTES} min  "
+          f"months={START_MONTH}..{MONTHS_BACK - 1}  max pages={MAX_DETAIL}  budget={MAX_MINUTES} min  "
           f"{'DRY RUN — nothing will be written' if DRY_RUN else 'LIVE'}\n")
 
     existing = await fetch_existing(cid)
@@ -289,7 +291,7 @@ async def main():
         client = httpx.AsyncClient(timeout=30)
 
         fetched = 0
-        for month_index in range(MONTHS_BACK):
+        for month_index in range(START_MONTH, MONTHS_BACK):
             if minutes() >= MAX_MINUTES - 3 or fetched >= MAX_DETAIL:
                 print("Budget reached — stopping before month", month_index)
                 break
