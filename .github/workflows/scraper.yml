@@ -38,7 +38,6 @@ on:
     - cron: '32 8 * * *'  # Walsall (Swift/APAS) nightly scrape
     - cron: '35 8 * * *'  # Stratford-on-Avon (E-Planning v2.11) nightly scrape
     - cron: '40 8 * * *'  # Herefordshire nightly scrape
-    - cron: '44 8 * * *'  # Medway (Open Digital Planning) nightly scrape
     - cron: '48 8 * * *'  # Ipswich (plain-ASP, httpx-only) nightly scrape
     - cron: '52 8 * * *'  # Central Bedfordshire (AcolNet) nightly scrape
     - cron: '54 8 * * *'  # West Dunbartonshire nightly scrape
