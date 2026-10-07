@@ -51,10 +51,25 @@
     <h2>How do I object to a planning application?</h2>
     <p>Every application on PlanFind links directly to the council's planning portal where you can view the full documents and submit a formal comment or objection. Consultation windows typically run around 21 days from validation, though the exact period varies by council, application type, and nation — always check the specific dates shown on the council's own page for that application.</p>
   </div>
-  <div class="about-card">
+  <div class="about-card" id="contact">
     <h2>Contact</h2>
     <p>PlanFind is an independent service. We're not affiliated with any council or government body.</p>
-    <p>For data accuracy issues or general enquiries, the best way to reach us is via the feedback link on any search result page.</p>
+    <p>For data accuracy issues or general enquiries, you can email us at <span id="contact-email"><noscript>planfind [at] gmail [dot] com</noscript></span> or use the feedback link on any search result page.</p>
+    <p><strong>Councils and planning teams:</strong> if you'd like to talk about how PlanFind reads your public planning register, including whether you publish a data file or feed we could use instead, please write to the same address.</p>
   </div>
+  <script>
+    // Builds the mailto link in the browser, so the address isn't sitting in the page
+    // source as plain text for scrapers to harvest. Without JavaScript, the <noscript>
+    // text above is shown instead.
+    (function () {
+      var el = document.getElementById('contact-email');
+      if (!el) return;
+      var addr = 'planfind' + '@' + 'gmail.com';
+      var a = document.createElement('a');
+      a.href = 'mailto:' + addr;
+      a.textContent = addr;
+      el.appendChild(a);
+    })();
+  </script>
 </main>
 {% endblock %}
