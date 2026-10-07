@@ -4930,7 +4930,7 @@ jobs:
     #   rewrites recent Medway rows back to 'pending'.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'medway_decisions'
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 40
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -4948,6 +4948,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MONTHS_BACK: "7"
+          START_MONTH: "3"
           MAX_DETAIL: "1200"
           MAX_MINUTES: "120"
           DRY_RUN: "0"
