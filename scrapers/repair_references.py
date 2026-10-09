@@ -90,26 +90,41 @@ async def fetch_page(client, url):
         return None, "", f"{type(e).__name__}: {str(e)[:120]}"
 
 
+
+async def get_retry(table, **params):
+    """scraper._supa_get with retries, and the database's own error message when it fails
+    (the helper alone only says '500 Internal Server Error')."""
+    for attempt in range(4):
+        try:
+            return await scraper._supa_get(table, **params)
+        except httpx.HTTPStatusError as e:
+            body = e.response.text[:300].replace("\n", " ")
+            shown = {k: v for k, v in list(params.items())[:4]}
+            print(f"   ⚠ database returned HTTP {e.response.status_code} for {table} {shown}: {body}")
+            if e.response.status_code < 500 or attempt == 3:
+                raise
+            await asyncio.sleep(2 * (attempt + 1))
+
+
 async def scan_rows():
-    """Every Idox row, so we know both the junk rows and which real references are already held."""
-    rows, size = [], 1000
-    for page in range(200):                                    # safety cap: 200,000 rows
-        chunk = await scraper._supa_get(
-            "planning_applications", select="id,council_id,reference,council_url",
-            source="eq.idox_scraper", order="id.asc", limit=str(size), offset=str(page * size))
-        rows.extend(chunk)
-        if len(chunk) < size:
-            break
-    return rows
-
-
-async def council_names(ids):
-    out = {}
-    ids = sorted(ids)
-    for i in range(0, len(ids), 100):
-        for r in await scraper._supa_get("councils", select="id,name", id=f"in.({','.join(str(x) for x in ids[i:i + 100])})"):
-            out[r["id"]] = r["name"]
-    return out
+    """Every Idox row, council by council. A single query over the whole table timed out on the
+    database; one council at a time uses the council_id index and is quick."""
+    councils = await get_retry("councils", select="id,name", order="id.asc", limit="1000")
+    rows = []
+    for i, c in enumerate(councils, 1):
+        offset = 0
+        while True:
+            chunk = await get_retry(
+                "planning_applications", select="id,council_id,reference,council_url",
+                council_id=f"eq.{c['id']}", source="eq.idox_scraper", order="id.asc",
+                limit="1000", offset=str(offset))
+            rows.extend(chunk)
+            if len(chunk) < 1000:
+                break
+            offset += 1000
+        if i % 50 == 0:
+            print(f"   scanned {i}/{len(councils)} councils, {len(rows):,} Idox rows so far")
+    return rows, {c["id"]: c["name"] for c in councils}
 
 
 async def _write(sb, method, row_id, council_id, body=None):
@@ -194,12 +209,12 @@ async def main():
         sys.exit(1)
     print(f"{'APPLY — changes WILL be made' if APPLY else 'DRY RUN — nothing will be changed'}   "
           f"hosts at once={CONCURRENCY}  pause={PAUSE}s  budget={MAX_MINUTES} min\n")
-    allrows = await scan_rows()
+    allrows, all_names = await scan_rows()
     held = {(r["council_id"], r["reference"]) for r in allrows if not looks_bad(r["reference"])}
     junk = [r for r in allrows if looks_bad(r["reference"])]
     no_link = [r for r in junk if not r.get("council_url")]
     junk = [r for r in junk if r.get("council_url")]
-    names = await council_names({r["council_id"] for r in junk})
+    names = all_names
     by_host = defaultdict(list)
     for r in junk:
         by_host[urlparse(r["council_url"]).netloc].append(r)
