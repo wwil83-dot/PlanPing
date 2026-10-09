@@ -235,6 +235,7 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Monmouthshire County Council":                           327,
     "Merthyr Tydfil County Borough Council":                  540,
     "Rhondda Cynon Taf County Borough Council":                541,
+    "Mid Suffolk District Council":                         566,
 }
 
 IDOX_COUNCILS = [
