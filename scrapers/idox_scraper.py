@@ -2045,3 +2045,8 @@ async def main():
 if __name__ == "__main__":
     import shared_portals_hook   # noqa: F401 - filters shared-portal councils to their own postcodes
     asyncio.run(main())
+
+   if __name__ == "__main__":
+       import shared_portals_hook   # noqa: F401 - filters shared-portal councils to their own postcodes
+       import reference_fix_hook    # noqa: F401 - repairs references the parser can't find
+       asyncio.run(main())
