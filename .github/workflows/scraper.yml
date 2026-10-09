@@ -205,6 +205,7 @@ on:
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
     - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
     - cron: '40 10 */3 * *'  # Highland Council — weekly-list PDFs, checked every ~3 days (real data only changes weekly)
+    - cron: '0 17 * * *'  # Medway decisions
   workflow_dispatch:
     inputs:
       job:
@@ -4920,17 +4921,16 @@ jobs:
     # leaves every application 'pending'. This runs the Decided list, reads
     # each still-pending application's own page once for the outcome and
     # decision date, and UPDATES those rows. Never inserts. Safe to re-run.
-    # Needs idox_scraper.py and idox_councils.py (with Medway) in scrapers/.
+    # Needs idox_scraper.py, idox_councils.py (with Medway) and
+    # medway_decisions.py in scrapers/.
     #
-    # STAGE 1 (these settings): 1 month, 25 pages — a quick check.
-    # STAGE 2 (backfill): MONTHS_BACK "7", MAX_DETAIL "1200", MAX_MINUTES "120",
-    #   and raise timeout-minutes below to 150. Re-run until it reports 0 remaining.
-    # STAGE 3 (nightly): MONTHS_BACK "2", MAX_DETAIL "200", MAX_MINUTES "30".
-    #   Schedule it AFTER the Idox batch that contains Medway — the Idox scrape
-    #   rewrites recent Medway rows back to 'pending'.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'medway_decisions'
+    # NIGHTLY at 17:00 UTC (after the Idox batches: the Idox scrape re-saves
+    # the last 14 days of Medway applications as 'pending'). About 2-4 minutes.
+    # BACKFILL settings if ever needed again: MONTHS_BACK "7", MAX_DETAIL "1200",
+    # MAX_MINUTES "120", timeout-minutes 150 (re-run until 0 remain).
+    if: (github.event_name == 'schedule' && github.event.schedule == '0 17 * * *') || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'medway_decisions')
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 150
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
