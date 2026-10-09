@@ -161,25 +161,29 @@ async def list_councils() -> dict:
 
 
 async def fetch_candidates(today: date, council_ids) -> list[dict]:
-    """Pending applications old enough to read, council by council (one query over the whole
-    table is too slow for the database; per council it uses the council_id index)."""
+    """Pending Idox applications old enough to read, for the wanted councils. Read by walking the table's
+    primary key 1,000 rows at a time (id > the last id seen). Filtering by council_id as well made the
+    database walk the whole table for councils with few matching rows and hit its statement timeout
+    (error 57014), so the council and age filters are applied here instead."""
     lo = (today - timedelta(days=MAX_AGE if MODE != "ladder" else max(LADDER) + LADDER_SLACK)).isoformat()
     hi = (today - timedelta(days=HARD_MIN_AGE)).isoformat()
-    rows = []
-    for n, cid in enumerate(council_ids, 1):
-        offset = 0
-        while True:
-            chunk = await get_retry(
-                "planning_applications", select="council_id,reference,council_url,submitted_date",
-                council_id=f"eq.{cid}", source="eq.idox_scraper", status="eq.pending", decision_date="is.null",
-                council_url="not.is.null", order="submitted_date.desc,id.asc", limit="1000", offset=str(offset),
-                **{"and": f"(submitted_date.gte.{lo},submitted_date.lte.{hi})"})
-            rows.extend(chunk)
-            if len(chunk) < 1000:
-                break
-            offset += 1000
-        if n % 25 == 0:
-            print(f"   read candidates for {n}/{len(council_ids)} councils, {len(rows):,} so far")
+    wanted = set(council_ids)
+    rows, last_id, pages = [], 0, 0
+    while pages < 3000:
+        chunk = await get_retry(
+            "planning_applications", select="id,council_id,reference,council_url,submitted_date",
+            id=f"gt.{last_id}", source="eq.idox_scraper", status="eq.pending", decision_date="is.null",
+            council_url="not.is.null", order="id.asc", limit="1000")
+        if not chunk:
+            break
+        pages += 1
+        last_id = chunk[-1]["id"]
+        rows.extend({k: r[k] for k in ("council_id", "reference", "council_url", "submitted_date")}
+                    for r in chunk if r["council_id"] in wanted and r.get("submitted_date") and lo <= r["submitted_date"] <= hi)
+        if pages % 25 == 0:
+            print(f"   read {pages * 1000:,} pending Idox rows (up to id {last_id:,}); {len(rows):,} are candidates")
+        if len(chunk) < 1000:
+            break
     return rows
 
 

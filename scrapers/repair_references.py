@@ -107,23 +107,25 @@ async def get_retry(table, **params):
 
 
 async def scan_rows():
-    """Every Idox row, council by council. A single query over the whole table timed out on the
-    database; one council at a time uses the council_id index and is quick."""
+    """Every Idox row, read by walking the table's primary key 1,000 rows at a time ("keyset paging":
+    id > the last id seen, ordered by id). Each page is a plain primary-key read, which the database
+    always does quickly. Filtering by council_id/source as well made the database walk the whole
+    table for councils with few matching rows and hit its statement timeout (error 57014)."""
+    rows, last_id, pages = [], 0, 0
+    while pages < 3000:                                         # safety cap: 3 million rows
+        chunk = await get_retry("planning_applications", select="id,council_id,reference,council_url,source",
+                                id=f"gt.{last_id}", order="id.asc", limit="1000")
+        if not chunk:
+            break
+        pages += 1
+        last_id = chunk[-1]["id"]
+        rows.extend({k: r[k] for k in ("id", "council_id", "reference", "council_url")}
+                    for r in chunk if r.get("source") == "idox_scraper")
+        if pages % 50 == 0:
+            print(f"   read {pages * 1000:,} rows of the table (up to id {last_id:,}); {len(rows):,} are Idox")
+        if len(chunk) < 1000:
+            break
     councils = await get_retry("councils", select="id,name", order="id.asc", limit="1000")
-    rows = []
-    for i, c in enumerate(councils, 1):
-        offset = 0
-        while True:
-            chunk = await get_retry(
-                "planning_applications", select="id,council_id,reference,council_url",
-                council_id=f"eq.{c['id']}", source="eq.idox_scraper", order="id.asc",
-                limit="1000", offset=str(offset))
-            rows.extend(chunk)
-            if len(chunk) < 1000:
-                break
-            offset += 1000
-        if i % 50 == 0:
-            print(f"   scanned {i}/{len(councils)} councils, {len(rows):,} Idox rows so far")
     return rows, {c["id"]: c["name"] for c in councils}
 
 
