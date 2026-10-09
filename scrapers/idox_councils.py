@@ -2005,8 +2005,13 @@ IDOX_COUNCILS = [
     # (Braintree) hit a real, distinct Cloudflare "Just a moment..."
     # challenge — a different, separately-known category.
     # -------------------------------------------------------------------------
-    ("Bromsgrove and Redditch",
-     "https://publicaccess.bromsgroveandredditch.gov.uk/online-applications"),
+    # REMOVED 2026-10-08 — "Bromsgrove and Redditch" was a third entry for the
+    # same portal that Bromsgrove District Council and Redditch Borough Council
+    # already cover (see shared_portals.py). It saved the whole portal a third
+    # time under a council name that isn't a real council. Its rows were cleaned
+    # up by fix_shared_portals.py.
+    # ("Bromsgrove and Redditch",
+    #  "https://publicaccess.bromsgroveandredditch.gov.uk/online-applications"),
     ("Monmouthshire County Council",
      "https://planningonline.monmouthshire.gov.uk/online-applications"),
     ("Merthyr Tydfil County Borough Council",
