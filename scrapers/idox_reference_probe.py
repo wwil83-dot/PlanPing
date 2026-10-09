@@ -71,6 +71,11 @@ async def main():
     if entry is None:
         raise SystemExit(f"{COUNCIL!r} is not in IDOX_COUNCILS")
     url, extra = entry[1], (entry[3] if len(entry) == 4 else "")
+    try:                                   # if the fix is deployed, test THAT: it must be installed before the spy
+        import reference_fix_hook          # noqa: F401
+        print("reference_fix_hook found and installed — this run tests the FIXED parser\n")
+    except ImportError:
+        print("reference_fix_hook not found — this run shows the UNFIXED parser\n")
     install_spy()
     portal = scraper.IdoxPortal(COUNCIL, url, 0, extra_search_param=extra)
     async with async_playwright() as pw:
