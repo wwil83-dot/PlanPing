@@ -5031,5 +5031,5 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          APPLY: "0"
+          APPLY: "1"
         run: cd scrapers && python fix_shared_portals.py
