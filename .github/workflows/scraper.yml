@@ -4947,10 +4947,10 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          MONTHS_BACK: "7"
+          MONTHS_BACK: "2"
           START_MONTH: "0"
-          MAX_DETAIL: "1200"
-          MAX_MINUTES: "120"
+          MAX_DETAIL: "200"
+          MAX_MINUTES: "30"
           DRY_RUN: "0"
         run: cd scrapers && python medway_decisions.py
 
