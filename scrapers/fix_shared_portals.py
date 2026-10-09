@@ -82,31 +82,31 @@ def _in_list(refs):
     return "in.(" + ",".join('"' + r.replace('"', '""') + '"' for r in refs) + ")"
 
 
-async def delete_rows(client, council_id, refs):
-    done = 0
+async def _write(client, method, council_id, refs, json_body=None, what="changed"):
+    """Run a DELETE/PATCH in chunks. Returns how many rows the database says it
+    changed, and prints any references it did NOT change (so a short count is explained)."""
+    done, missing = 0, []
     for i in range(0, len(refs), CHUNK):
         part = refs[i:i + CHUNK]
-        r = await client.delete(f"{scraper.SUPABASE_URL}/rest/v1/planning_applications",
-                                params={"council_id": f"eq.{council_id}", "reference": _in_list(part), "select": "id"},
-                                headers={**scraper._h(), "Prefer": "return=representation"})
+        r = await client.request(method, f"{scraper.SUPABASE_URL}/rest/v1/planning_applications",
+                                 params={"council_id": f"eq.{council_id}", "reference": _in_list(part), "select": "reference"},
+                                 json=json_body, headers={**scraper._h(), "Prefer": "return=representation"})
         if r.status_code not in (200, 204):
-            raise RuntimeError(f"DELETE failed: HTTP {r.status_code} {r.text[:200]}")
-        done += len(r.json()) if r.status_code == 200 else 0
+            raise RuntimeError(f"{method} failed: HTTP {r.status_code} {r.text[:200]}")
+        got = {row["reference"] for row in r.json()} if r.status_code == 200 else set()
+        done += len(got)
+        missing += [x for x in part if x not in got]
+    if missing:
+        print(f"      ⚠ {len(missing)} of {len(refs)} NOT {what}: {missing[:8]}{' …' if len(missing) > 8 else ''}")
     return done
+
+
+async def delete_rows(client, council_id, refs):
+    return await _write(client, "DELETE", council_id, refs, what="deleted")
 
 
 async def move_rows(client, from_id, to_id, refs):
-    done = 0
-    for i in range(0, len(refs), CHUNK):
-        part = refs[i:i + CHUNK]
-        r = await client.patch(f"{scraper.SUPABASE_URL}/rest/v1/planning_applications",
-                               params={"council_id": f"eq.{from_id}", "reference": _in_list(part), "select": "id"},
-                               json={"council_id": to_id},
-                               headers={**scraper._h(), "Prefer": "return=representation"})
-        if r.status_code not in (200, 204):
-            raise RuntimeError(f"PATCH failed: HTTP {r.status_code} {r.text[:200]}")
-        done += len(r.json()) if r.status_code == 200 else 0
-    return done
+    return await _write(client, "PATCH", from_id, refs, json_body={"council_id": to_id}, what="moved")
 
 
 async def main():
@@ -132,7 +132,8 @@ async def main():
             rows = await read_rows(list(holders))
             districts = await lookup_districts([r["postcode"] for r in rows])
             mapping = {d: ids[n] for d, n in mapping_names.items()}
-            actions, stats = plan_portal(holders, rows, districts, mapping, {ids[n] for n in joint if n in ids})
+            joint_ids = {ids[n] for n in joint if n in ids}
+            actions, stats = plan_portal(holders, rows, districts, mapping, joint_ids)
             seen = Counter(districts.get(norm_postcode(r["postcode"])) or "(none)" for r in rows)
             print(f"\n{'=' * 60}\n{portal}\n{'=' * 60}")
             held_counts = Counter(r["council_id"] for r in rows)
@@ -141,10 +142,10 @@ async def main():
             print(f"   districts the postcodes resolve to: {dict(seen.most_common(8))}")
             for k, v in stats.most_common():
                 print(f"   {k:55} {v:6}")
-            plans.append((portal, holders, actions))
+            plans.append((portal, holders, actions, mapping, joint_ids))
         if APPLY:
             print("\nAPPLYING…")
-            for portal, holders, actions in plans:
+            for portal, holders, actions, mapping, joint_ids in plans:
                 by_del, by_move = defaultdict(list), defaultdict(list)
                 for kind, cid, ref, target in actions:
                     (by_del[cid] if kind == "delete" else by_move[(cid, target)]).append(ref)
@@ -154,6 +155,23 @@ async def main():
                 for cid, refs in by_del.items():
                     n = await delete_rows(sb, cid, refs)
                     print(f"   deleted {n} rows from {holders.get(cid)}")
+            print("\nVERIFYING — re-reading the database and re-planning…")
+            all_clean = True
+            for portal, holders, _actions, mapping, joint_ids in plans:
+                rows = await read_rows(list(holders))
+                districts = await lookup_districts([r["postcode"] for r in rows])
+                again, stats = plan_portal(holders, rows, districts, mapping, joint_ids)
+                left = Counter(a[0] for a in again)
+                clean = not left
+                all_clean &= clean
+                held = Counter(r["council_id"] for r in rows)
+                print(f"   {portal.split('//')[1].split('/')[0]:44} still to delete: {left['delete']}  still to move: {left['move']}  "
+                      f"{'✓ clean' if clean else '✗ NOT CLEAN'}   now holds: "
+                      + ", ".join(f"{holders[c].split(' ')[0]} {n}" for c, n in held.items()))
+                for kind, cid, ref, target in again[:10]:
+                    print(f"        {kind:6} {ref}  (held by {holders.get(cid)})")
+            print("\nRESULT:", "everything that can be decided from a postcode is now in the right place."
+                  if all_clean else "some rows are still wrong — see the lines above; re-run to retry.")
         else:
             print("\nDry run finished. Re-run with APPLY=1 to make these changes.")
 
