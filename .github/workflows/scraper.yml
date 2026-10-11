@@ -203,7 +203,7 @@ on:
                             # be 1 day across a month boundary — harmless.
     - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
-    - cron: '20 10 */5 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~5 days
+    - cron: '20 10 */3 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~3 days
     - cron: '40 10 */3 * *'  # Highland Council — weekly-list PDFs, checked every ~3 days (real data only changes weekly)
     - cron: '0 17 * * *'  # Medway decisions
   workflow_dispatch:
