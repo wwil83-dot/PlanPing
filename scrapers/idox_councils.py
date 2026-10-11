@@ -12,6 +12,7 @@ Format: (council_name_as_in_supabase_db, idox_base_url)
 # ---------------------------------------------------------------------------
 COUNCIL_DB_IDS: dict[str, int] = {
     "Babergh District Council":                  9,
+    "Mid Suffolk District Council":                566,
     "Bedford Borough Council":                   12,
     "Blackpool Council":                         15,
     "Brighton and Hove City Council":            20,
@@ -841,9 +842,11 @@ IDOX_COUNCILS = [
     # ("Oxford City Council",
     # "https://public.oxford.gov.uk/online-applications"),
 
-    # BROKEN — Medway moved to Open Digital Planning (planningregister.org/medway), not Idox.
-    # ("Medway Council",
-    #  "https://publicaccess.medway.gov.uk/online-applications"),
+    # Medway's real register is an Idox PublicAccess portal (publicaccess1.medway.gov.uk, note
+    # the "1"), confirmed by idox_url_probe.py. The ODP register (planningregister.org/medway)
+    # is a deliberately partial pilot. Monthly mode works; weekly mode returns an Error page.
+    ("Medway Council",
+     "https://publicaccess1.medway.gov.uk/online-applications"),
 
     ("Isle of Wight Council",
      "https://publicaccess.iow.gov.uk/online-applications"),
@@ -1547,6 +1550,11 @@ IDOX_COUNCILS = [
     ("Babergh District Council",
      "https://planning.baberghmidsuffolk.gov.uk/online-applications"),
 
+    # Mid Suffolk shares Babergh's portal; shared_portals_hook splits the two by
+    # postcode so each council keeps only its own applications.
+    ("Mid Suffolk District Council",
+     "https://planning.baberghmidsuffolk.gov.uk/online-applications"),
+
     # --- Suffolk seeded Jul 2026 — county now complete alongside Ipswich/Babergh ---
     ("East Suffolk Council",
      "https://publicaccess.eastsuffolk.gov.uk/online-applications"),
@@ -2075,8 +2083,10 @@ IDOX_COUNCILS = [
     # (Braintree) hit a real, distinct Cloudflare "Just a moment..."
     # challenge — a different, separately-known category.
     # -------------------------------------------------------------------------
-    ("Bromsgrove and Redditch",
-     "https://publicaccess.bromsgroveandredditch.gov.uk/online-applications"),
+    # Joint entry superseded: Bromsgrove District and Redditch Borough are scraped as
+    # separate entries above, split by postcode (shared_portals_hook).
+    # ("Bromsgrove and Redditch",
+    #  "https://publicaccess.bromsgroveandredditch.gov.uk/online-applications"),
     ("Monmouthshire County Council",
      "https://planningonline.monmouthshire.gov.uk/online-applications"),
     ("Merthyr Tydfil County Borough Council",
