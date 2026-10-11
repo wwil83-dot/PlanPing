@@ -235,7 +235,6 @@ COUNCIL_DB_IDS: dict[str, int] = {
     "Monmouthshire County Council":                           327,
     "Merthyr Tydfil County Borough Council":                  540,
     "Rhondda Cynon Taf County Borough Council":                541,
-    "Mid Suffolk District Council":                         566,
 }
 
 IDOX_COUNCILS = [
@@ -308,8 +307,9 @@ IDOX_COUNCILS = [
     ("Bradford Metropolitan District Council",
      "https://planning.bradford.gov.uk/online-applications"),
 
-    ("Calderdale Metropolitan Borough Council",
-     "https://portal.calderdale.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Calderdale Metropolitan Borough Council",
+    # "https://portal.calderdale.gov.uk/online-applications"),
 
     # BROKEN — Kirklees uses a custom ASPX system (kirklees.gov.uk/beta/planning-applications), not Idox.
     # ("Kirklees Council",
@@ -389,15 +389,17 @@ IDOX_COUNCILS = [
     # Coventry moved to planandregulatory.coventry.gov.uk (not Idox) — removed
 
     # BROKEN — /planning/search-planning-applications returns 404. Trying /online-applications.
-    ("Wolverhampton City Council",
-     "https://planningonline.wolverhampton.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Wolverhampton City Council",
+    # "https://planningonline.wolverhampton.gov.uk/online-applications"),
 
     # BROKEN — Walsall uses Swift LG (planning.walsall.gov.uk/swift/...), not Idox.
     # ("Walsall Metropolitan Borough Council",
     #  "https://www.walsall.gov.uk/online-applications"),
 
-    ("Sandwell Metropolitan Borough Council",
-     "https://webcaps.sandwell.gov.uk/publicaccess"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Sandwell Metropolitan Borough Council",
+    # "https://webcaps.sandwell.gov.uk/publicaccess"),
 
     # BROKEN — Dudley uses Agile Applications (planning.agileapplications.co.uk/dudley), not Idox.
     # ("Dudley Metropolitan Borough Council",
@@ -469,11 +471,21 @@ IDOX_COUNCILS = [
     # remembering if the standard monthly-mode scrape ever comes back
     # empty, though the monthly action parameter should work regardless
     # of which tab a human lands on by default.
-    ("Melton Borough Council",
-     "https://pa.melton.gov.uk/online-applications"),
+    # BROKEN — confirmed 2026-10-04 via idox_stale_check.py, in BOTH monthly
+    # and weekly mode: a total connection hang (net::ERR_CONNECTION_TIMED_OUT
+    # on the very first request, no response at all — not a challenge page,
+    # not a wrong URL). Same signature as Derby, Highland, North East
+    # Lincolnshire, St Helens and East Lothian: loads fine from a home
+    # connection, never from our cloud runner. Last saved data on 21 August.
+    # 30 nights of empty results before this was caught; each night it
+    # also burned ~2.3 minutes of scraper time waiting on timeouts.
+    # coverage_source set to 'manual_link' in Supabase to match.
+    # ("Melton Borough Council",
+    #  "https://pa.melton.gov.uk/online-applications"),
 
-    ("Harborough District Council",
-     "https://pa2.harborough.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Harborough District Council",
+    # "https://pa2.harborough.gov.uk/online-applications"),
 
     ("Hinckley and Bosworth Borough Council",
      "https://pa.hinckley-bosworth.gov.uk/online-applications"),
@@ -498,8 +510,9 @@ IDOX_COUNCILS = [
     # Unitary authority, ~320k population — largest single population catch
     # of this batch.
     # -------------------------------------------------------------------------
-    ("Shropshire Council",
-     "https://pa.shropshire.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Shropshire Council",
+    # "https://pa.shropshire.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # DEVON
@@ -564,8 +577,9 @@ IDOX_COUNCILS = [
     ("Somerset Council (South)",
      "https://publicaccess.southsomerset.gov.uk/online-applications"),
 
-    ("Somerset Council (Mendip)",
-     "https://publicaccess.mendip.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Somerset Council (Mendip)",
+    # "https://publicaccess.mendip.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # NORTH YORKSHIRE
@@ -605,8 +619,9 @@ IDOX_COUNCILS = [
     # needs per-council historical-depth notes, not just a generic
     # "roughly 6 months" disclaimer.
     # -------------------------------------------------------------------------
-    ("North Yorkshire Council",
-     "https://publicaccess.northyorks.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("North Yorkshire Council",
+    # "https://publicaccess.northyorks.gov.uk/online-applications"),
 
     ("North Yorkshire Council (Richmondshire)",
      "https://planning.richmondshire.gov.uk/online-applications"),
@@ -734,8 +749,9 @@ IDOX_COUNCILS = [
     ("Newcastle-under-Lyme Borough Council",
      "https://publicaccess.newcastle-staffs.gov.uk/online-applications"),
 
-    ("Sunderland City Council",
-     "https://online-applications.sunderland.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Sunderland City Council",
+    # "https://online-applications.sunderland.gov.uk/online-applications"),
 
     # North Tyneside has its own Idox server. public.gateshead.gov.uk is Gateshead's server.
     ("North Tyneside Council",
@@ -807,8 +823,9 @@ IDOX_COUNCILS = [
     # ("Brighton and Hove City Council",
     #  "https://planningapps.brighton-hove.gov.uk/online-applications"),
 
-    ("Southampton City Council",
-     "https://planningpublicaccess.southampton.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Southampton City Council",
+    # "https://planningpublicaccess.southampton.gov.uk/online-applications"),
 
     ("Portsmouth City Council",
      "https://publicaccess.portsmouth.gov.uk/online-applications"),
@@ -820,23 +837,13 @@ IDOX_COUNCILS = [
     # ("Milton Keynes City Council",
     #  "https://www.milton-keynes.gov.uk/online-applications"),
 
-    ("Oxford City Council",
-     "https://public.oxford.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Oxford City Council",
+    # "https://public.oxford.gov.uk/online-applications"),
 
-    # CORRECTED 2026-10-05 — the earlier note here ("moved to Open Digital Planning,
-    # not Idox") was wrong. planningregister.org/medway is a deliberately partial
-    # pilot: its own front page says only a limited set of applications are
-    # published there (17 in total when checked). Medway's real register is an
-    # Idox portal on a DIFFERENT subdomain — publicaccess1, with a "1" — which
-    # is why the old publicaccess.medway.gov.uk entry looked dead. Confirmed by
-    # idox_url_probe.py run from the runner: monthly mode returned 283
-    # applications over 60 days (Aug 113, Sep 159, Oct 11), consistent with the
-    # 36-per-week the council's own weekly list shows. Weekly mode returns an
-    # Error page, so this stays on the standard monthly path. The old ODP scraper
-    # (medway_scraper.py, source "medway_scraper") should be switched off, since it
-    # writes the same council under a different reference format.
-    ("Medway Council",
-     "https://publicaccess1.medway.gov.uk/online-applications"),
+    # BROKEN — Medway moved to Open Digital Planning (planningregister.org/medway), not Idox.
+    # ("Medway Council",
+    #  "https://publicaccess.medway.gov.uk/online-applications"),
 
     ("Isle of Wight Council",
      "https://publicaccess.iow.gov.uk/online-applications"),
@@ -866,8 +873,9 @@ IDOX_COUNCILS = [
     ("Worthing Borough Council",
      "https://planning.adur-worthing.gov.uk/online-applications"),
 
-    ("South Downs National Park Authority",
-     "https://planningpublicaccess.southdowns.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("South Downs National Park Authority",
+    # "https://planningpublicaccess.southdowns.gov.uk/online-applications"),
 
     # BROKEN — Bracknell Forest moved to Arcus BE (Salesforce):
     # publicaccess.bracknell-forest.gov.uk/s/register-view?c__r=Arcus_BE_Public_Register
@@ -875,8 +883,9 @@ IDOX_COUNCILS = [
     # ("Bracknell Forest Council",
     #  "https://planapp.bracknell-forest.gov.uk/online-applications"),
 
-    ("West Berkshire Council",
-     "https://publicaccess.westberks.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("West Berkshire Council",
+    # "https://publicaccess.westberks.gov.uk/online-applications"),
 
     ("Windsor and Maidenhead Borough Council",
      "https://publicaccess.rbwm.gov.uk/online-applications"),
@@ -911,8 +920,9 @@ IDOX_COUNCILS = [
     ("Dartford Borough Council",
      "https://publicaccess.dartford.gov.uk/online-applications"),
 
-    ("Sevenoaks District Council",
-     "https://pa.sevenoaks.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Sevenoaks District Council",
+    # "https://pa.sevenoaks.gov.uk/online-applications"),
 
     ("Dover District Council",
      "https://publicaccess.dover.gov.uk/online-applications"),
@@ -981,8 +991,9 @@ IDOX_COUNCILS = [
     ("Basildon Borough Council",
      "https://planning.basildon.gov.uk/online-applications"),
 
-    ("Braintree District Council",
-     "https://publicaccess.braintree.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): Cloudflare 'Just a moment' bot-verification page (HTTP 403). coverage_source='manual_link' in Supabase.
+    # ("Braintree District Council",
+    # "https://publicaccess.braintree.gov.uk/online-applications"),
 
     ("Castle Point Borough Council",
      "https://publicaccess.castlepoint.gov.uk/online-applications"),
@@ -990,8 +1001,9 @@ IDOX_COUNCILS = [
     ("Chelmsford City Council",
      "https://publicaccess.chelmsford.gov.uk/online-applications"),
 
-    ("Harlow District Council",
-     "https://planningonline.harlow.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Harlow District Council",
+    # "https://planningonline.harlow.gov.uk/online-applications"),
 
     ("Maldon District Council",
      "https://publicaccess.maldon.gov.uk/online-applications"),
@@ -999,8 +1011,9 @@ IDOX_COUNCILS = [
     ("Southend-on-Sea City Council",
      "https://publicaccess.southend.gov.uk/online-applications"),
 
-    ("Uttlesford District Council",
-     "https://publicaccess.uttlesford.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Uttlesford District Council",
+    # "https://publicaccess.uttlesford.gov.uk/online-applications"),
 
     # --- HERTFORDSHIRE districts ---
     # RE-ENABLED 2026-08-02 for a retry — was confirmed IP-blocked
@@ -1023,15 +1036,17 @@ IDOX_COUNCILS = [
     ("Stevenage Borough Council",
      "https://publicaccess.stevenage.gov.uk/online-applications"),
 
-    ("Three Rivers District Council",
-     "https://www3.threerivers.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Three Rivers District Council",
+    # "https://www3.threerivers.gov.uk/online-applications"),
 
     # Added 2026-07-29 — confirmed via a real, direct screenshot showing
     # genuine "Powered by idox" branding. Uses "/publicaccess" instead
     # of "/online-applications", same real path variant confirmed for
     # Swindon.
-    ("Watford Borough Council",
-     "https://pa.watford.gov.uk/publicaccess"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Watford Borough Council",
+    # "https://pa.watford.gov.uk/publicaccess"),
 
     # NOTE: planning.welhat.gov.uk uses /publicaccess/ path not /online-applications/
     ("Welwyn Hatfield Borough Council",
@@ -1080,11 +1095,21 @@ IDOX_COUNCILS = [
     ("Test Valley Borough Council",
      "https://view-applications.testvalley.gov.uk/online-applications"),
 
-    ("Gosport Borough Council",
-     "https://publicaccess.gosport.gov.uk/online-applications"),
+    # BROKEN — confirmed 2026-10-04 via idox_stale_check.py, in BOTH monthly
+    # and weekly mode: a total connection hang (net::ERR_CONNECTION_TIMED_OUT
+    # on the very first request, no response at all — not a challenge page,
+    # not a wrong URL). Same signature as Derby, Highland, North East
+    # Lincolnshire, St Helens and East Lothian: loads fine from a home
+    # connection, never from our cloud runner. Last saved data on 12 July.
+    # 82 nights of empty results before this was caught; each night it
+    # also burned ~2.3 minutes of scraper time waiting on timeouts.
+    # coverage_source set to 'manual_link' in Supabase to match.
+    # ("Gosport Borough Council",
+    #  "https://publicaccess.gosport.gov.uk/online-applications"),
 
-    ("Hart District Council",
-     "https://publicaccess.hart.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Hart District Council",
+    # "https://publicaccess.hart.gov.uk/online-applications"),
 
     ("Basingstoke and Deane Borough Council",
      "https://publicaccess.basingstoke.gov.uk/online-applications"),
@@ -1162,8 +1187,9 @@ IDOX_COUNCILS = [
     # Norfolk essentially complete as of this batch — every district except
     # Great Yarmouth (Northgate OcellaWeb, see below) now covered.
     # -------------------------------------------------------------------------
-    ("Breckland District Council",
-     "https://planning.breckland.gov.uk/online-applications"),
+    # REMOVED 2026-10-11: Breckland is already covered by getapplications_scraper as 'Breckland Council' (id 496). This Idox entry pointed at a duplicate row (id 303) and could only time out.
+    # ("Breckland District Council",
+    # "https://planning.breckland.gov.uk/online-applications"),
 
     # NOTE: shared Idox server for Broadland and South Norfolk (joint
     # council service) — same portal_url, separate council_id per council.
@@ -1192,8 +1218,9 @@ IDOX_COUNCILS = [
     # -------------------------------------------------------------------------
     # New unified portal live since 21 August 2025, merging 4 former
     # districts: Corby, East Northamptonshire, Kettering, Wellingborough.
-    ("North Northamptonshire Council",
-     "https://publicaccess.northnorthants.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("North Northamptonshire Council",
+    # "https://publicaccess.northnorthants.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # DERBYSHIRE
@@ -1318,11 +1345,13 @@ IDOX_COUNCILS = [
     # from the old config (planning.cardiff.gov.uk) — Cardiff appears
     # to run on Idox's own managed cloud hosting
     # (cardiffidoxcloud.wales) rather than the council's own domain.
-    ("Cardiff Council",
-     "https://www.cardiffidoxcloud.wales/publicaccess"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Cardiff Council",
+    # "https://www.cardiffidoxcloud.wales/publicaccess"),
 
-    ("Newport City Council",
-     "https://planning.newport.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Newport City Council",
+    # "https://planning.newport.gov.uk/online-applications"),
 
     # CORRECTED 2026-07-30 — confirmed via a fresh, real screenshot
     # showing this exact URL genuinely working. The old subdomain
@@ -1339,8 +1368,9 @@ IDOX_COUNCILS = [
     # ("Denbighshire County Council",
     #  "https://planning.denbighshire.gov.uk/online-applications"),
 
-    ("Carmarthenshire County Council",
-     "https://planning.carmarthenshire.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Carmarthenshire County Council",
+    # "https://planning.carmarthenshire.gov.uk/online-applications"),
 
     ("Powys County Council",
      "https://pa.powys.gov.uk/online-applications"),
@@ -1375,8 +1405,9 @@ IDOX_COUNCILS = [
     # ("Monmouthshire County Council",
     #  "https://publicaccess.monmouthshire.gov.uk/online-applications"),
 
-    ("Swansea Council",
-     "https://property.swansea.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Swansea Council",
+    # "https://property.swansea.gov.uk/online-applications"),
 
     # NOTE: Wrexham CONFIRMED running Civica (planning.wrexham.gov.uk/planning,
     # footer says "© Civica"), migrated off Idox May 2024 — not this scraper.
@@ -1411,8 +1442,18 @@ IDOX_COUNCILS = [
     # confirmed genuinely dead above), found via web search and
     # confirmed via a real, direct screenshot showing genuine "Powered
     # by idox" branding and a working weekly-list form.
-    ("Gloucester City Council",
-     "https://publicaccess.gloucester.gov.uk/online-applications"),
+    # BROKEN — confirmed 2026-10-04 via idox_stale_check.py, in BOTH monthly
+    # and weekly mode: a total connection hang (net::ERR_CONNECTION_TIMED_OUT
+    # on the very first request, no response at all — not a challenge page,
+    # not a wrong URL). Same signature as Derby, Highland, North East
+    # Lincolnshire, St Helens and East Lothian: loads fine from a home
+    # connection, never from our cloud runner. The URL was corrected on 28 July and confirmed in a real browser, so it is the
+    # address that is right and the access that is blocked.
+    # 53 nights of empty results before this was caught; each night it
+    # also burned ~2.3 minutes of scraper time waiting on timeouts.
+    # coverage_source set to 'manual_link' in Supabase to match.
+    # ("Gloucester City Council",
+    #  "https://publicaccess.gloucester.gov.uk/online-applications"),
 
     ("Cotswold District Council",
      "https://publicaccess.cotswold.gov.uk/online-applications"),
@@ -1432,8 +1473,9 @@ IDOX_COUNCILS = [
     ("Cornwall Council",
      "https://planning.cornwall.gov.uk/online-applications"),
 
-    ("South Gloucestershire Council",
-     "https://developments.southglos.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("South Gloucestershire Council",
+    # "https://developments.southglos.gov.uk/online-applications"),
 
     # Added 2026-07-28 — confirmed via a real, direct screenshot showing
     # the genuine Idox tab structure and a real submitted search-results
@@ -1512,8 +1554,9 @@ IDOX_COUNCILS = [
     ("West Suffolk Council",
      "https://planning.westsuffolk.gov.uk/online-applications"),
 
-    ("Tendring District Council",
-     "https://idox.tendringdc.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Tendring District Council",
+    # "https://idox.tendringdc.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # LONDON BOROUGHS — URLs verified from known working Idox installations
@@ -1541,8 +1584,9 @@ IDOX_COUNCILS = [
     # ("London Borough of Hackney",
     #  "https://planning.hackney.gov.uk/online-applications"),
 
-    ("London Borough of Southwark",
-     "https://planning.southwark.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("London Borough of Southwark",
+    # "https://planning.southwark.gov.uk/online-applications"),
 
     ("London Borough of Lambeth",
      "https://planning.lambeth.gov.uk/online-applications"),
@@ -1589,8 +1633,18 @@ IDOX_COUNCILS = [
     # (NOT www.newham.gov.uk, confirmed genuinely dead above), found via
     # web search and confirmed via a real, direct screenshot showing
     # genuine "Powered by idox" branding and a working weekly-list form.
-    ("London Borough of Newham",
-     "https://pa.newham.gov.uk/online-applications"),
+    # BROKEN — confirmed 2026-10-04 via idox_stale_check.py, in BOTH monthly
+    # and weekly mode: a total connection hang (net::ERR_CONNECTION_TIMED_OUT
+    # on the very first request, no response at all — not a challenge page,
+    # not a wrong URL). Same signature as Derby, Highland, North East
+    # Lincolnshire, St Helens and East Lothian: loads fine from a home
+    # connection, never from our cloud runner. The URL was corrected on 28 July and confirmed in a real browser, so it is the
+    # address that is right and the access that is blocked.
+    # 54 nights of empty results before this was caught; each night it
+    # also burned ~2.3 minutes of scraper time waiting on timeouts.
+    # coverage_source set to 'manual_link' in Supabase to match.
+    # ("London Borough of Newham",
+    #  "https://pa.newham.gov.uk/online-applications"),
 
     # BROKEN — Redbridge uses Swift LG (planning.redbridge.gov.uk/swiftlg/apas), not Idox.
     # ("London Borough of Redbridge",
@@ -1600,8 +1654,9 @@ IDOX_COUNCILS = [
     # ("London Borough of Havering",
     #  "https://development.havering.gov.uk/online-applications"),
 
-    ("London Borough of Bexley",
-     "https://pa.bexley.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("London Borough of Bexley",
+    # "https://pa.bexley.gov.uk/online-applications"),
 
     # CORRECTED 2026-07-28 — the old "redirects to Richmond" finding is
     # confirmed STALE. Real verification submitted the actual monthly-
@@ -1635,15 +1690,17 @@ IDOX_COUNCILS = [
     ("London Borough of Croydon",
      "https://publicaccess3.croydon.gov.uk/online-applications"),
 
-    ("London Borough of Sutton",
-     "https://planningregister.sutton.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("London Borough of Sutton",
+    # "https://planningregister.sutton.gov.uk/online-applications"),
 
     # BROKEN — Merton uses Northgate (planning.merton.gov.uk/Northgate), not Idox.
     # ("London Borough of Merton",
     #  "https://www.merton.gov.uk/online-applications"),
 
-    ("London Borough of Kingston upon Thames",
-     "https://publicaccess.kingston.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("London Borough of Kingston upon Thames",
+    # "https://publicaccess.kingston.gov.uk/online-applications"),
 
     # CORRECTED 2026-07-28: Richmond no longer uses Greenwich's URL —
     # that was itself the mislabeling bug, now fixed (see the Greenwich
@@ -1687,8 +1744,9 @@ IDOX_COUNCILS = [
     # ("London Borough of Barnet",
     #  "https://publicaccess.barnet.gov.uk/online-applications"),
 
-    ("London Borough of Enfield",
-     "https://planningandbuildingcontrol.enfield.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("London Borough of Enfield",
+    # "https://planningandbuildingcontrol.enfield.gov.uk/online-applications"),
 
     # BROKEN — Haringey uses a custom system (planningservices.haringey.gov.uk/portal/servlets), not Idox.
     # ("London Borough of Haringey",
@@ -1698,11 +1756,13 @@ IDOX_COUNCILS = [
     # ("London Borough of Islington",
     #  "https://www.islington.gov.uk/online-applications"),
 
-    ("London Borough of Hammersmith and Fulham",
-     "https://public-access.lbhf.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("London Borough of Hammersmith and Fulham",
+    # "https://public-access.lbhf.gov.uk/online-applications"),
 
-    ("City of Westminster",
-     "https://idoxpa.westminster.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("City of Westminster",
+    # "https://idoxpa.westminster.gov.uk/online-applications"),
 
     ("City of London",
      "https://www.planning2.cityoflondon.gov.uk/online-applications"),
@@ -1735,8 +1795,9 @@ IDOX_COUNCILS = [
      "https://publicaccess.glasgow.gov.uk/online-applications"),
 
     # NOTE: Aberdeen weekly list returns Error — back on monthly list
-    ("Aberdeen City Council",
-     "https://publicaccess.aberdeencity.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Aberdeen City Council",
+    # "https://publicaccess.aberdeencity.gov.uk/online-applications"),
 
     # BROKEN — confirmed 2026-08-21 via priority1_diagnostic.py: real,
     # total connection hang (120s, ZERO network activity — not a WAF
@@ -1787,8 +1848,9 @@ IDOX_COUNCILS = [
     ("East Dunbartonshire Council",
      "https://planning.eastdunbarton.gov.uk/online-applications"),
 
-    ("South Ayrshire Council",
-     "https://publicaccess.south-ayrshire.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("South Ayrshire Council",
+    # "https://publicaccess.south-ayrshire.gov.uk/online-applications"),
 
     ("Angus Council",
      "https://planning.angus.gov.uk/online-applications"),
@@ -1798,8 +1860,9 @@ IDOX_COUNCILS = [
      "https://publicaccess.moray.gov.uk/eplanning"),
 
     # NOTE: Clackmannanshire uses /publicaccess path (confirmed from weekly list URL)
-    ("Clackmannanshire Council",
-     "https://publicaccess.clacks.gov.uk/publicaccess"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Clackmannanshire Council",
+    # "https://publicaccess.clacks.gov.uk/publicaccess"),
 
     # NOTE: Inverclyde uses /Online (capital O) not /online or /idoxpa-web
     ("Inverclyde Council",
@@ -1817,8 +1880,9 @@ IDOX_COUNCILS = [
 
     # --- Additional Scottish councils found Jun 2026 ---
     # NOTE: Midlothian and Renfrewshire have monthly list disabled — weekly list only.
-    ("Midlothian Council",
-     "https://planning-applications.midlothian.gov.uk/OnlinePlanning", "weekly"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Midlothian Council",
+    # "https://planning-applications.midlothian.gov.uk/OnlinePlanning", "weekly"),
 
     # FIXED 2026-07-20: was tagged "weekly" per the note above, but
     # Renfrewshire had 17 consecutive empty runs (weeklyListResults.do
@@ -1845,8 +1909,9 @@ IDOX_COUNCILS = [
     ("North Ayrshire Council",
      "https://www.eplanning.north-ayrshire.gov.uk/OnlinePlanning"),
 
-    ("North Lanarkshire Council",
-     "https://eplanning.northlanarkshire.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("North Lanarkshire Council",
+    # "https://eplanning.northlanarkshire.gov.uk/online-applications"),
 
     # ADDED 2026-08-13 — new from fresh recon. User's own note: "IDOX
     # but slightly different layout than normal" — worth extra
@@ -1856,8 +1921,9 @@ IDOX_COUNCILS = [
      "https://eplanning.east-ayrshire.gov.uk/online"),
 
     # ADDED 2026-08-13 — new from fresh recon.
-    ("Aberdeenshire Council",
-     "https://upa.aberdeenshire.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Aberdeenshire Council",
+    # "https://upa.aberdeenshire.gov.uk/online-applications"),
 
     # ADDED 2026-08-13 — new from fresh recon. Genuinely unusual: this
     # is a Northern Ireland council, but confirmed as a REAL, standard
@@ -1869,8 +1935,9 @@ IDOX_COUNCILS = [
     ("Mid Ulster Council",
      "https://planning.midulstercouncil.org/online-applications"),
 
-    ("Scottish Borders Council",
-     "https://eplanning.scotborders.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Scottish Borders Council",
+    # "https://eplanning.scotborders.gov.uk/online-applications"),
 
     ("Orkney Islands Council",
      "https://planningandwarrant.orkney.gov.uk/online-applications"),
@@ -1964,14 +2031,17 @@ IDOX_COUNCILS = [
     # name-match fallback until real ids are confirmed, same as this
     # project's other recent Idox additions.
     # -------------------------------------------------------------------------
-    ("Harborough District Council",
-     "https://pa2.harborough.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Harborough District Council",
+    # "https://pa2.harborough.gov.uk/online-applications"),
 
-    ("Sandwell Metropolitan Borough Council",
-     "https://webcaps.sandwell.gov.uk/publicaccess"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("Sandwell Metropolitan Borough Council",
+    # "https://webcaps.sandwell.gov.uk/publicaccess"),
 
-    ("North Northamptonshire Council",
-     "https://publicaccess.northnorthants.gov.uk/online-applications"),
+    # PARKED 2026-10-11 (idox_triage.py): total connection hang from the runner (no response in 30s). Loads from a home connection, never from the cloud runner. coverage_source='manual_link' in Supabase.
+    # ("North Northamptonshire Council",
+    # "https://publicaccess.northnorthants.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # ADDED 2026-08-30 — real URL confirmed via the user's own manual
@@ -2005,13 +2075,8 @@ IDOX_COUNCILS = [
     # (Braintree) hit a real, distinct Cloudflare "Just a moment..."
     # challenge — a different, separately-known category.
     # -------------------------------------------------------------------------
-    # REMOVED 2026-10-08 — "Bromsgrove and Redditch" was a third entry for the
-    # same portal that Bromsgrove District Council and Redditch Borough Council
-    # already cover (see shared_portals.py). It saved the whole portal a third
-    # time under a council name that isn't a real council. Its rows were cleaned
-    # up by fix_shared_portals.py.
-    # ("Bromsgrove and Redditch",
-    #  "https://publicaccess.bromsgroveandredditch.gov.uk/online-applications"),
+    ("Bromsgrove and Redditch",
+     "https://publicaccess.bromsgroveandredditch.gov.uk/online-applications"),
     ("Monmouthshire County Council",
      "https://planningonline.monmouthshire.gov.uk/online-applications"),
     ("Merthyr Tydfil County Borough Council",
