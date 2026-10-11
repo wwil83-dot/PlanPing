@@ -1068,10 +1068,9 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          MAX_MINUTES: "10"
+          MAX_MINUTES: "30"
           CONCURRENCY: "1"
-          WEEKS_BACK: "1"
-          COUNCIL_DELAY_SECONDS: "5"
+          WEEKS_BACK: "2"    
         run: cd scrapers && python getapplications_scraper.py
 
   idox_waf_recheck:
