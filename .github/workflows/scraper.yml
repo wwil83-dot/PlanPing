@@ -5084,7 +5084,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          APPLY: "0"
+          SLOW_HOSTS: "planning.baberghmidsuffolk.gov.uk=20"
+          APPLY: "1"
           CONCURRENCY: "5"
           MAX_MINUTES: "240"
           PAUSE_SECONDS: "1.5"
