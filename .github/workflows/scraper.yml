@@ -5073,7 +5073,7 @@ jobs:
     # mostly the Babergh / Mid Suffolk portal).
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'repair_references'
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 150
+    timeout-minutes: 270
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -5086,6 +5086,6 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           APPLY: "0"
           CONCURRENCY: "5"
-          MAX_MINUTES: "120"
+          MAX_MINUTES: "240"
           PAUSE_SECONDS: "1.5"
         run: cd scrapers && python repair_references.py
