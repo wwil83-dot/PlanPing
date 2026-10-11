@@ -277,9 +277,25 @@ def _diagnose_empty_response(council_name: str, week_str: str, html: str):
     if council_name in _EMPTY_RESPONSE_DIAGNOSED:
         return
     _EMPTY_RESPONSE_DIAGNOSED.add(council_name)
+    low = html.lower()
     print(f"    [{council_name}] EMPTY RESPONSE DIAGNOSTIC (week {week_str}): "
           f"0 real application links found. Response length: {len(html)} chars. "
           f"First 500 chars: {html[:500]!r}")
+    # 2026-10-11: the 500-char head is always the same template boilerplate and
+    # tells nothing. These flags say WHY the list is empty.
+    print(f"    [{council_name}] EMPTY-PAGE FLAGS: "
+          f"captcha_container={'captcha-main-container' in low} "
+          f"captcha_word={'captcha' in low} "
+          f"aws_waf={'gokuprops' in low or 'awswafcookie' in low} "
+          f"tables={low.count('<table')} "
+          f"getApplication_mentions={low.count('getapplication')} "
+          f"no_results_text={'no applications' in low or 'no results' in low or 'no records' in low}")
+    try:
+        body = BeautifulSoup(html, "html.parser").find(id="main")
+        txt = body.get_text(" ", strip=True) if body else ""
+        print(f"    [{council_name}] EMPTY-PAGE MAIN TEXT (first 600 chars): {txt[:600]!r}")
+    except Exception:
+        pass
 
 
 def _parse_weekly_list(html: str, base_url: str, council_name: str,
@@ -287,7 +303,21 @@ def _parse_weekly_list(html: str, base_url: str, council_name: str,
     soup = BeautifulSoup(html, "html.parser")
     apps = []
 
-    detail_links = soup.find_all("a", href=re.compile(r"fa=getApplication&(?:amp;)?id="))
+    # 2026-10-11: widened. The old test only matched <a href="...fa=getApplication&id=">.
+    # A template change could move the link into onclick/data-* attributes or
+    # change the separator, and the scraper would silently find nothing.
+    _link_re = re.compile(r"fa=getApplication(?:&(?:amp;)?|&amp;|\?|;)?[^\"'\s>]*?\bid=\d+", re.I)
+    detail_links = []
+    for tag in soup.find_all(True):
+        for attr in ("href", "onclick", "data-href", "data-url", "data-link"):
+            v = tag.get(attr)
+            if v and "getApplication" in v and "getApplications" not in v.replace("getApplication&", "") \
+                    and _link_re.search(v):
+                m = _link_re.search(v)
+                # normalise so the rest of the function sees a normal href
+                tag["href"] = "index.html?" + m.group(0).replace("&amp;", "&")
+                detail_links.append(tag)
+                break
     if not detail_links:
         _diagnose_empty_response(council_name, week_str, html)
         return apps
@@ -532,6 +562,25 @@ class GetApplicationsPortal:
                 continue
 
             week_apps = _parse_weekly_list(html, self.base_url, self.council_name, week_str)
+            via = "POST"
+            if not week_apps:
+                # 2026-10-11: since ~10-02 the POST returns a page with no results
+                # for all 13 councils while a browser GET shows them. Try the way
+                # a person does it, quietly, before giving up on the week.
+                for via, getter in (("GET", self._fetch_get), ("FORM", self._fetch_form)):
+                    try:
+                        alt_html = await getter(page, week_str)
+                    except Exception as e:
+                        self._log(f"  {via} fallback error for {week_str}: {str(e)[:120]}")
+                        continue
+                    week_apps = _parse_weekly_list(alt_html, self.base_url,
+                                                   self.council_name, week_str)
+                    if week_apps:
+                        self._log(f"  fallback {via} worked for {week_str} "
+                                  f"(POST returned no results)")
+                        break
+                else:
+                    via = "none"
             for a in week_apps:
                 a["week_monday"] = monday.isoformat()
             new_apps = [a for a in week_apps if a["id"] not in seen_ids]
@@ -543,6 +592,32 @@ class GetApplicationsPortal:
 
         await context.close()
         return all_apps
+
+    async def _fetch_get(self, page, week_str: str) -> str:
+        """Same request a browser makes when the page is opened with a week."""
+        result = await page.evaluate(
+            """async (url) => {
+                const r = await fetch(url, {credentials: "same-origin"});
+                return await r.text();
+            }""",
+            f"{self.base_url}/planning/index.html?fa=getReceivedWeeklyList&week={week_str}",
+        )
+        return result or ""
+
+    async def _fetch_form(self, page, week_str: str) -> str:
+        """Open the list page, type the week into the form and press Search."""
+        await page.goto(f"{self.base_url}/planning/index.html?fa=getReceivedWeeklyList",
+                        wait_until="domcontentloaded", timeout=45_000)
+        box = page.locator('input[name="week"], input#week').first
+        if await box.count() == 0:
+            box = page.locator('input[type="text"]').first
+        await box.fill(week_str)
+        await page.get_by_role("button", name=re.compile("search", re.I)).first.click()
+        try:
+            await page.wait_for_load_state("networkidle", timeout=20_000)
+        except PlaywrightTimeout:
+            pass
+        return await page.content()
 
     async def recheck_pending(self, browser: Browser,
                                pending: list[dict]) -> list[dict]:
