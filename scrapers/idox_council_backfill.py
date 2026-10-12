@@ -26,6 +26,18 @@ from collections import Counter
 from playwright.async_api import async_playwright
 
 import idox_scraper as scraper                      # production code, unchanged
+
+# The two hooks install themselves on import, but idox_scraper.py only imports them inside its own
+# `if __name__ == "__main__"` block, so a script that merely imports idox_scraper runs WITHOUT them.
+# Without shared_portals_hook a shared portal's whole list is saved under one council; without
+# reference_fix_hook the newer Idox template saves descriptions as references. (Found 2026-10-11:
+# the first Suffolk backfill ran without them.) Load both here, and refuse to run if they didn't take.
+try:
+    import shared_portals_hook      # noqa: F401
+    import reference_fix_hook       # noqa: F401
+except ImportError as _e:
+    print(f"ERROR: could not load the scraper hooks ({_e}). Refusing to run without them.")
+    sys.exit(1)
 from idox_councils import IDOX_COUNCILS
 
 COUNCIL_NAME = os.environ.get("COUNCIL_NAME", "Medway Council")
@@ -96,6 +108,13 @@ async def main():
     print(f"{COUNCIL_NAME}: council_id={cid}\nPortal: {url}\n"
           f"Look-back: {DAYS} days, time budget {BUDGET} minutes\n")
 
+    from shared_portals import COUNCIL_DISTRICT
+    if COUNCIL_NAME in COUNCIL_DISTRICT:
+        if not getattr(scraper.IdoxPortal.scrape, "_shared_portal_filter", False):
+            print(f"ERROR: {COUNCIL_NAME} is on a shared portal but the postcode filter is not installed. "
+                  f"Refusing to save the whole portal under one council.")
+            sys.exit(1)
+        print("Shared-portal postcode filter: ON (only this council's own applications will be saved)")
     portal = scraper.IdoxPortal(COUNCIL_NAME, url, cid, extra_search_param=extra)
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True, args=scraper.BROWSER_ARGS)
@@ -111,7 +130,7 @@ async def main():
     print(f"\nprocess_council reported: {result} application(s) saved")
 
     summary = summarise(await fetch_saved_rows(cid))
-    print(f"\n{'=' * 60}\nWhat Medway now has in the database\n{'=' * 60}")
+    print(f"\n{'=' * 60}\nWhat {COUNCIL_NAME} now has in the database\n{'=' * 60}")
     print(f"  total:     {summary['total']}")
     print(f"  by source: {summary['by_source']}")
     print(f"  by month:  {summary['by_month']}")
