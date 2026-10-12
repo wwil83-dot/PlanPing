@@ -35,7 +35,7 @@ import re
 import sys
 import time
 from collections import Counter, defaultdict
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
@@ -183,6 +183,37 @@ async def apply_real_reference(sb, row, real, held):
     return action
 
 
+def key_of(url):
+    """The portal's own id for an application (keyVal=...) from its page link."""
+    try:
+        v = parse_qs(urlparse(url or "").query).get("keyVal")
+        return v[0] if v else None
+    except Exception:
+        return None
+
+
+def split_twins(allrows, remote):
+    """Split description-reference rows into (twins, rest). A twin is a bad row whose application (same
+    council, same portal keyVal) is ALSO held by a row with a proper reference, e.g. one saved by the
+    nightly run after the reference fix. It needs no page read: the good row already says what it is."""
+    good = {(r["council_id"], key_of(r.get("council_url"))) for r in allrows
+            if not looks_bad(r["reference"]) and key_of(r.get("council_url"))}
+    twins, rest = [], []
+    for r in remote:
+        k = key_of(r.get("council_url"))
+        (twins if k and (r["council_id"], k) in good else rest).append(r)
+    return twins, rest
+
+
+async def delete_twins(sb, twins, names, stats, examples):
+    for row in twins:
+        council = names.get(row["council_id"], row["council_id"])
+        result = "ok" if not APPLY else await _write(sb, "DELETE", row["id"], row["council_id"])
+        stats[council]["deleted_twin" if result == "ok" else "write_failed"] += 1
+        if len(examples[council]) < 2 and result == "ok":
+            examples[council].append((row["reference"][:40].replace("\n", " "), "(already held under its real reference)", "delete"))
+
+
 async def repair_local(sb, rows, held, names, stats, examples):
     """Rows whose reference is 'real·Received: ...': the real reference is already in the row."""
     for row in rows:
@@ -257,14 +288,17 @@ async def main():
     local = [r for r in junk if derive_reference(r["reference"])]
     remote = [r for r in junk if not derive_reference(r["reference"]) and r.get("council_url")]
     no_link = [r for r in junk if not derive_reference(r["reference"]) and not r.get("council_url")]
+    twins, remote = split_twins(allrows, remote)
     by_host = defaultdict(list)
     for r in remote:
         by_host[urlparse(r["council_url"]).netloc].append(r)
     print(f"{len(allrows):,} Idox rows scanned: {len(junk):,} have a bad reference\n"
           f"   {len(local):,} are 'reference·Received: …' — repaired from the row's own text, no web request\n"
+          f"   {len(twins):,} are descriptions whose application is already saved under its real reference — "
+          f"duplicates, removed without a web request\n"
           f"   {len(remote):,} are descriptions — need their page read, across {len(by_host)} portals\n"
           f"   {len(no_link):,} can't be repaired (no page link)\n")
-    for label, rows in (("from the text", local), ("from the page", remote)):
+    for label, rows in (("from the text", local), ("duplicates", twins), ("from the page", remote)):
         per = Counter(names.get(r["council_id"], r["council_id"]) for r in rows)
         print(f"   {label}: " + ", ".join(f"{n} {c}" for n, c in per.most_common(8)))
     print()
@@ -274,13 +308,14 @@ async def main():
     deadline = t0 + MAX_MINUTES * 60
     async with httpx.AsyncClient(timeout=30) as sb:
         await repair_local(sb, local, held, names, local_stats, examples)
+        await delete_twins(sb, twins, names, local_stats, examples)
         sem = asyncio.Semaphore(CONCURRENCY)
         await asyncio.gather(*[repair_host(sem, sb, h, rows, held, names, deadline, stats, notes, examples)
                                for h, rows in sorted(by_host.items(), key=lambda kv: -len(kv[1]))])
 
     verb = ("repaired", "deleted as twins") if APPLY else ("would repair", "would delete as twins")
     print(f"{'=' * 60}\nSUMMARY ({'applied' if APPLY else 'dry run'}, {(time.monotonic() - t0) / 60:.1f} min)\n{'=' * 60}")
-    print("\nA. repaired from the row's own text (no web requests):")
+    print("\nA. fixed from data already in the database (no web requests):")
     print(f"   {'council':44} {'repair':>7} {'twin':>6}")
     lt = Counter()
     for council in sorted(local_stats, key=lambda c: -sum(local_stats[c].values())):
