@@ -5031,7 +5031,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          APPLY: "1"
+          APPLY: "0"
         run: cd scrapers && python fix_shared_portals.py
 
   idox_reference_probe:
