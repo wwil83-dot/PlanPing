@@ -417,7 +417,7 @@ _LABEL_PATTERNS = {
     "reference": r"Application Reference|Reference|Name",
     "address":   r"Site Address|Site address|Address",
     "proposal":  r"Proposal|Description(?:\s+of\s+works)?",
-    "date":      r"Date Valid|Valid Date|Received Date|Date Received|Application Validated Date",
+    "date":      r"Date Valid|Valid Date|Validated Date|Received Date|Date Received|Application Validated Date",
     "type":      r"Application [Tt]ype|Record [Tt]ype",
     "status":    r"Application Status|Status",
     "decision":  r"Decision",
@@ -1642,6 +1642,8 @@ async def main():
         # sets the council_url saved on each application, so links go to
         # the real register page instead of an "Invalid Page" suffix URL.
         "Eastleigh Borough Council": "https://planning.eastleigh.gov.uk/s/public-register",
+        # 2026-10-16: Anglesey's working instance is its branded domain.
+        "Isle of Anglesey County Council": "https://planning-public-register.anglesey.gov.wales/prIoA/s/register-view?language=en_GB&c__r=Arcus_BE_Public_Register",
     }
 
     to_scrape: list[ArcusPortal] = []

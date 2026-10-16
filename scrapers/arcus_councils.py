@@ -351,9 +351,16 @@ ARCUS_COUNCILS = [
     # either way (this one IS confirmed working, per its active
     # coverage_source) — worth checking directly on the next real Arcus
     # run before deciding whether to change it.
+    # SWITCHED 2026-10-16: the old ioacc.my.site.com instance returns "no
+    # records" for every weekly search (live run + diagnostic dump), while
+    # the council's branded domain below shows real results — confirmed by
+    # the user in a browser ("Planning applications valid this week", a
+    # "Search by date" box, results labelled Reference / Application type /
+    # Site address / Description / Status / Decision / Validated date /
+    # Decision Date). That is the quick-link style, so weekly_list mode.
     ("Isle of Anglesey County Council",
-     "https://ioacc.my.site.com/s/pr-english",
-     "tabbed_weekly_list", "Planning applications valid this week"),
+     "https://planning-public-register.anglesey.gov.wales/prIoA/s",
+     "weekly_list", ["Planning applications valid this week"]),
 ]
 
 # ---------------------------------------------------------------------------
@@ -367,7 +374,7 @@ VALUES
   ('Bracknell Forest Council','bracknell-forest-council','arcus','england','https://publicaccess.bracknell-forest.gov.uk/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
   ('Milton Keynes City Council','milton-keynes-city-council','arcus','england','https://www.be.milton-keynes.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
   ('Eastleigh Borough Council','eastleigh-borough-council','arcus','england','https://planning.eastleigh.gov.uk/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
-  ('Isle of Anglesey County Council','isle-of-anglesey-county-council','arcus','wales','https://ioacc.my.site.com/s/pr-english/register-view?c__r=Arcus_BE_Public_Register','pending',true),
+  ('Isle of Anglesey County Council','isle-of-anglesey-county-council','arcus','wales','https://planning-public-register.anglesey.gov.wales/prIoA/s/register-view?language=en_GB&c__r=Arcus_BE_Public_Register','pending',true),
   ('Wiltshire Council','wiltshire-council','arcus','england','https://development.wiltshire.gov.uk/pr3/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
   ('Erewash Borough Council','erewash-borough-council','arcus','england','https://planning.erewash.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
   ('Wrexham County Borough Council','wrexham-county-borough-council','arcus','wales','https://register.wrexham.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true)
