@@ -410,7 +410,11 @@ _DECISION_DATE_DIAGNOSED: set[str] = set()
 _SUBMITTED_DATE_DIAGNOSED: set[str] = set()
 
 _LABEL_PATTERNS = {
-    "reference": r"Application Reference|Reference",
+    # "Name" added 2026-10-16: Wiltshire's /pr3 results view labels each
+    # record's reference as "Name" (e.g. "Name" / "PL/2026/06655"). Only
+    # honoured when the following line really looks like a reference —
+    # see the guard in _parse_results_html_fallback.
+    "reference": r"Application Reference|Reference|Name",
     "address":   r"Site Address|Site address|Address",
     "proposal":  r"Proposal|Description(?:\s+of\s+works)?",
     "date":      r"Date Valid|Valid Date|Received Date|Date Received|Application Validated Date",
@@ -482,6 +486,16 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
     i = 0
     while i < len(lines):
         m = _ALL_LABELS_RE.match(lines[i])
+        # A bare "Name" line is only a reference label when the next line
+        # looks like a real reference (digit plus slash or hyphen); anywhere
+        # else (form chrome, applicant name, etc.) it is just text.
+        if m and m.group(1).strip().lower() == "name" and not (
+            i + 1 < len(lines)
+            and re.search(r"\d", lines[i + 1]) and re.search(r"[/-]", lines[i + 1])
+            and len(lines[i + 1]) < 40
+        ):
+            i += 1
+            continue
         if m and i + 1 < len(lines):
             field = _field_for_label(m.group(1))
             # FIX (2026-07-28): the DEEPER real cause, found via a test
@@ -1063,9 +1077,16 @@ class ArcusPortal:
         # tab click alone for that council. ---
         if category_hint:
             try:
+                # "Type of Planning Application" added 2026-10-16: Eastleigh's
+                # Weekly List dropdown (options: "Applications Registered
+                # This Week" / "Applications Decided This Week" / "Appeals
+                # Decided This Week") sits next to a pre-filled "Week
+                # Commencing" date and a Search button.
                 category_field = page.get_by_label("Application Category", exact=False)
                 if await category_field.count() == 0:
                     category_field = page.get_by_label("Category", exact=False)
+                if await category_field.count() == 0:
+                    category_field = page.get_by_label("Type of Planning Application", exact=False)
                 if await category_field.count() > 0:
                     selected = False
                     # Try native <select> first — confirmed this is what
@@ -1112,7 +1133,40 @@ class ArcusPortal:
             print(f"    ✓ [{self.council_name}] Weekly List tab: {len(apps)} via HTML fallback (CSV unavailable)")
         else:
             print(f"    ⚠ [{self.council_name}] Weekly List tab: no results found via CSV or HTML fallback")
+            await self._dump_form_controls(page)
         return apps
+
+    async def _dump_form_controls(self, page: Page):
+        """DIAGNOSTIC (2026-10-16): when a tabbed Weekly List view yields
+        nothing, print every dropdown (with its options), input label,
+        button and tab on the page. Eastleigh's Weekly List tab now has
+        dropdowns (application type, Registered/Decided/Appeals, week
+        commencing) that must be chosen before results appear; this log
+        gives the exact labels so the scraper can be taught to select
+        them instead of guessing."""
+        try:
+            info = await page.evaluate("""() => {
+              const lab = (el) => (el.labels && el.labels[0] ? el.labels[0].innerText
+                   : (el.getAttribute('aria-label') || el.placeholder || el.name || el.id || '')).trim();
+              const out = {selects: [], inputs: [], buttons: [], tabs: []};
+              document.querySelectorAll('select').forEach(s => out.selects.push(
+                {label: lab(s), options: [...s.options].map(o => o.text.trim()).slice(0, 30)}));
+              document.querySelectorAll('input').forEach(i => {
+                if (i.type !== 'hidden') out.inputs.push({type: i.type, label: lab(i)});});
+              document.querySelectorAll('button, [role=button]').forEach(b => {
+                const t = (b.innerText || b.getAttribute('aria-label') || '').trim();
+                if (t) out.buttons.push(t.slice(0, 60));});
+              document.querySelectorAll('[role=tab], [role=combobox]').forEach(t =>
+                out.tabs.push((t.innerText || t.getAttribute('aria-label') || '').trim().slice(0, 60)));
+              return out;
+            }""")
+            print(f"    ⚠ FORM CONTROLS [{self.council_name}] url={page.url}")
+            print(f"       selects: {info.get('selects')}")
+            print(f"       inputs:  {info.get('inputs')}")
+            print(f"       buttons: {info.get('buttons')}")
+            print(f"       tabs/comboboxes: {info.get('tabs')}")
+        except Exception as e:
+            print(f"    ⚠ Form-control dump failed: {e}")
 
     async def _try_csv_download(self, page: Page) -> list[dict]:
         try:
@@ -1344,7 +1398,15 @@ async def main():
     # ArcusPortal.__init__ for the real evidence behind Wiltshire's entry.
     # Bare base_url (no suffix) confirmed working via manual browser test.
     REGISTER_URL_OVERRIDES: dict[str, str] = {
-        "Wiltshire Council": "https://development.wiltshire.gov.uk/pr/s",
+        # 2026-10-16: Wiltshire moved to its /pr3 register, which has NO
+        # Weekly List tab (just Quick/Advanced search) — now scraped in
+        # advanced_search mode. This full register-view URL is the one
+        # arcus_recon.py confirmed returns real Advanced Search results.
+        "Wiltshire Council": "https://development.wiltshire.gov.uk/pr3/s/register-view?c__r=Arcus_BE_Public_Register",
+        # Eastleigh's tabbed mode navigates to base_url itself; this only
+        # sets the council_url saved on each application, so links go to
+        # the real register page instead of an "Invalid Page" suffix URL.
+        "Eastleigh Borough Council": "https://planning.eastleigh.gov.uk/s/public-register",
     }
 
     to_scrape: list[ArcusPortal] = []
