@@ -958,8 +958,11 @@ IDOX_COUNCILS = [
     ("Lewes District Council",
      "https://planningpa.lewes-eastbourne.gov.uk/online-applications"),
 
-    ("Rother District Council",
-     "https://planweb01.rother.gov.uk/online-applications"),
+    # MOVED 2026-10-16: Rother is on the getApplications platform
+    # (online.rother.gov.uk/planning) — see getapplications_councils.py.
+    # The planweb01 Idox URL never saved anything (coverage_source stayed 'pending').
+    # ("Rother District Council",
+    #  "https://planweb01.rother.gov.uk/online-applications"),
 
     ("Wealden District Council",
      "https://planning.wealden.gov.uk/online-applications"),
