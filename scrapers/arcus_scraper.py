@@ -844,6 +844,7 @@ class ArcusPortal:
             print(f"    ✓ [{self.council_name}] '{link_text}': {len(apps)} via HTML fallback (CSV unavailable)")
         else:
             print(f"    ⚠ [{self.council_name}] '{link_text}': no results found via CSV or HTML fallback")
+            await self._dump_form_controls(page)
         return apps
 
     async def _scrape_advanced_search(self, page: Page) -> list[dict]:
@@ -877,6 +878,7 @@ class ArcusPortal:
             if await loc.count() == 0:
                 print(f"    ⚠ 'Advanced search' link not found — council may have "
                       f"changed its homepage, re-run arcus_recon.py to confirm")
+                await self._dump_form_controls(page)
                 return []
             await loc.first.click(timeout=5_000)
         except Exception as e:
@@ -978,6 +980,7 @@ class ArcusPortal:
             print(f"    ✓ [{self.council_name}] Advanced Search: {len(apps)} via HTML fallback (CSV unavailable)")
         else:
             print(f"    ⚠ [{self.council_name}] Advanced Search: no results found via CSV or HTML fallback")
+            await self._dump_form_controls(page)
         return apps
 
     async def _scrape_tabbed_weekly_list(self, page: Page, category_hint: Optional[str]) -> list[dict]:
@@ -1049,20 +1052,64 @@ class ArcusPortal:
                 continue
 
         # --- Click the "Weekly List" tab ---
-        try:
-            tab = page.get_by_text("Weekly List", exact=False)
-            if await tab.count() == 0:
-                print("    ⚠ 'Weekly List' tab not found — council may have "
-                      "changed its layout, re-run arcus_recon.py to confirm")
-                return []
-            # force=True bypasses Playwright's "receives pointer events"
-            # actionability check — safe here specifically because the
-            # error log confirmed the element itself is visible, enabled
-            # and stable, just visually covered by a cookie banner.
-            await tab.first.click(timeout=5_000, force=True)
-        except Exception as e:
-            print(f"    ⚠ Failed to click 'Weekly List' tab: {e}")
+        # FIX (2026-10-16): the old code clicked get_by_text("Weekly List")
+        # .first with force=True. On Eastleigh that silently hit the wrong
+        # (hidden) match — the page stayed on the Quick Search tab (its
+        # "Category of Application" select showed up in the diagnostic
+        # dump) and nothing was ever searched. Now: try the proper tab
+        # role first, then every VISIBLE text match, and after each
+        # attempt check the Weekly List form really appeared.
+        if await page.get_by_text("Weekly List", exact=False).count() == 0:
+            print("    ⚠ 'Weekly List' tab not found — council may have "
+                  "changed its layout, re-run arcus_recon.py to confirm")
             return []
+
+        async def _weekly_form_visible() -> bool:
+            for lbl in ("Type of Planning Application", "Week Commencing"):
+                try:
+                    f = page.get_by_label(lbl, exact=False)
+                    if await f.count() > 0 and await f.first.is_visible():
+                        return True
+                except Exception:
+                    pass
+            return False
+
+        clicked_ok = False
+        candidates = [
+            page.get_by_role("tab", name="Weekly List", exact=False),
+            page.locator("a:has-text('Weekly List')"),
+            page.locator("li:has-text('Weekly List')"),
+            page.locator("[role=tab]:has-text('Weekly List')"),
+            page.get_by_text("Weekly List", exact=False),
+        ]
+        for cand in candidates:
+            try:
+                n = await cand.count()
+            except Exception:
+                continue
+            for k in range(min(n, 6)):
+                el = cand.nth(k)
+                try:
+                    if not await el.is_visible():
+                        continue
+                    await el.click(timeout=5_000, force=True)
+                except Exception:
+                    continue
+                await asyncio.sleep(3)
+                if await _weekly_form_visible():
+                    clicked_ok = True
+                    break
+            if clicked_ok:
+                break
+        if not clicked_ok:
+            # Councils whose Weekly List view has no such form labels
+            # (Anglesey navigates straight to a results page) fall through
+            # to the old behaviour: one plain click and carry on.
+            try:
+                await page.get_by_text("Weekly List", exact=False).first.click(timeout=5_000, force=True)
+            except Exception as e:
+                print(f"    ⚠ Failed to click 'Weekly List' tab: {e}")
+                return []
 
         await asyncio.sleep(3)
         try:
@@ -1082,11 +1129,15 @@ class ArcusPortal:
                 # This Week" / "Applications Decided This Week" / "Appeals
                 # Decided This Week") sits next to a pre-filled "Week
                 # Commencing" date and a Search button.
-                category_field = page.get_by_label("Application Category", exact=False)
+                # "Type of Planning Application" must be tried FIRST: on
+                # Eastleigh the Quick Search tab's "Category of Application"
+                # select also matches the loose "Category" label and was
+                # being picked instead.
+                category_field = page.get_by_label("Type of Planning Application", exact=False)
+                if await category_field.count() == 0:
+                    category_field = page.get_by_label("Application Category", exact=False)
                 if await category_field.count() == 0:
                     category_field = page.get_by_label("Category", exact=False)
-                if await category_field.count() == 0:
-                    category_field = page.get_by_label("Type of Planning Application", exact=False)
                 if await category_field.count() > 0:
                     selected = False
                     # Try native <select> first — confirmed this is what
@@ -1110,7 +1161,14 @@ class ArcusPortal:
                             pass
                     await asyncio.sleep(1)
 
-                search_buttons = page.get_by_role("button", name="Search", exact=False)
+                # Prefer the Search button inside the same form panel as
+                # the dropdown (the page also has a header Search button);
+                # fall back to the last Search button on the page.
+                search_buttons = category_field.first.locator(
+                    "xpath=ancestor::*[.//button[normalize-space()='Search']][1]"
+                ).get_by_role("button", name="Search", exact=False)
+                if await search_buttons.count() == 0:
+                    search_buttons = page.get_by_role("button", name="Search", exact=False)
                 if await search_buttons.count() > 0:
                     await search_buttons.last.click(timeout=5_000, force=True)
                     await asyncio.sleep(5)
@@ -1165,6 +1223,12 @@ class ArcusPortal:
             print(f"       inputs:  {info.get('inputs')}")
             print(f"       buttons: {info.get('buttons')}")
             print(f"       tabs/comboboxes: {info.get('tabs')}")
+            try:
+                body = await page.inner_text("body")
+                sample = [l.strip()[:120] for l in body.split("\n") if l.strip()][:45]
+                print(f"       visible text (first {len(sample)} lines): {sample}")
+            except Exception:
+                pass
         except Exception as e:
             print(f"    ⚠ Form-control dump failed: {e}")
 
