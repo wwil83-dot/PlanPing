@@ -5134,6 +5134,7 @@ jobs:
           echo "IPv4:"; curl -4 -s --max-time 15 https://api.ipify.org; echo
           echo "IPv6:"; curl -6 -s --max-time 15 https://api64.ipify.org || echo "none"
 
+
   scottish_council_lists:
     # Aberdeenshire and East Lothian: reads the weekly lists those councils publish
     # themselves (PDF / RTF / Word). Does NOT use the Idox Public Access portals.
@@ -5150,7 +5151,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install httpx beautifulsoup4 pdfplumber striprtf python-docx pyproj
+      - run: pip install httpx beautifulsoup4 pdfplumber striprtf python-docx pyproj olefile
       - name: Aberdeenshire weekly lists
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
