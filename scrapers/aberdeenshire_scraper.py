@@ -48,7 +48,7 @@ WARD_EXP_X = 520
 PAGE_STRIDE = 10000.0
 
 GRID_RE = re.compile(r"E\.\s*(\d{5,7})\s+N\.\s*(\d{5,7})")
-REF_RE = re.compile(r"^APP/\d{4}/\d+$")
+REF_RE = re.compile(r"^[A-Z]{2,6}/\d{4}/\d+\S*$")
 POSTCODE_RE = re.compile(r"\b([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2})\b")
 
 
@@ -77,12 +77,78 @@ def _clean(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def parse_pdf(path: str) -> tuple[list[dict], int]:
-    """Returns (applications, header_count). header_count is the number of
-    'Ref Number' blocks found — compare with len(applications) to detect parse gaps."""
-    words = []
+def _looks_like_ref(text: str) -> bool:
+    return bool(re.match(r"^[A-Z]{2,}[/\-]\d", (text or "").strip()))
+
+
+def _parse_block(body: list) -> dict:
+    ward_hdr = [w for w in body if w["text"] == "Ward" and w["x0"] < 100]
+    if ward_hdr:
+        wy = ward_hdr[0]["top"]
+        top_part = [w for w in body if w["top"] < wy - 1]
+        ward_vals = [w for w in body if w["top"] > wy + 3]
+    else:
+        top_part, ward_vals = body, []
+
+    col_a = [w for w in top_part if w["x0"] < COL_B_X]
+    col_b = [w for w in top_part if COL_B_X <= w["x0"] < COL_C_X]
+    col_c = [w for w in top_part if COL_C_X <= w["x0"] < COL_D_X]
+    col_d = [w for w in top_part if w["x0"] >= COL_D_X]
+
+    a_lines = _lines(col_a)
+    ref = a_lines[0].strip() if a_lines else ""
+    validated = None
+    for j, ln in enumerate(a_lines):
+        if ln.startswith("Date Validated") and j + 1 < len(a_lines):
+            validated = _date(a_lines[j + 1])
+
+    b_text = _clean(" ".join(_lines(col_b)))
+    m = re.match(r"Site Address:\s*(.*?)\s*Applicant:\s*(.*)$", b_text)
+    if m:
+        address, applicant = m.group(1), m.group(2)
+    else:
+        address, applicant = re.sub(r"^Site Address:\s*", "", b_text), ""
+
+    c_text = _clean(" ".join(_lines(col_c)))
+    grid = GRID_RE.search(c_text)
+    proposal = _clean(GRID_RE.sub("", c_text))
+
+    ward = community = expiry = ""
+    if ward_vals:
+        ward = _clean(" ".join(_lines([w for w in ward_vals if w["x0"] < WARD_CC_X])))
+        community = _clean(" ".join(_lines([w for w in ward_vals if WARD_CC_X <= w["x0"] < WARD_EXP_X])))
+        expiry = _clean(" ".join(_lines([w for w in ward_vals if w["x0"] >= WARD_EXP_X])))
+
+    pm = POSTCODE_RE.findall(address.upper())
+    return {
+        "reference": ref,
+        "address": address,
+        "postcode": pm[-1] if pm else None,
+        "applicant": applicant,
+        "description": proposal,
+        "case_officer": _clean(" ".join(_lines(col_d))),
+        "submitted_date": validated,
+        "comment_expiry": _date(expiry) if expiry else None,
+        "ward": ward,
+        "community_council": community,
+        "easting": int(grid.group(1)) if grid else None,
+        "northing": int(grid.group(2)) if grid else None,
+    }
+
+
+def parse_pdf(path: str) -> tuple[list[dict], int, dict]:
+    """Returns (applications, header_count, info).
+
+    A table that runs over a page break repeats its 'Ref Number' header row on the next
+    page, so the rest of an application can sit under a second header with no reference.
+    Those continuation blocks are merged back into the application above them.
+    info = {"pages", "continuations", "text_sample"} for diagnostics."""
+    words, text_sample, pages = [], "", 0
     with pdfplumber.open(path) as pdf:
+        pages = len(pdf.pages)
         for i, page in enumerate(pdf.pages):
+            if i == 0:
+                text_sample = " ".join((page.extract_text() or "").split())[:300]
             for w in page.extract_words():
                 w = dict(w)
                 w["top"] = w["top"] + i * PAGE_STRIDE
@@ -91,75 +157,26 @@ def parse_pdf(path: str) -> tuple[list[dict], int]:
     headers = []
     for w in words:
         if w["text"] == "Ref" and w["x0"] < 100:
-            nxt = [x for x in words if abs(x["top"] - w["top"]) < 3 and x["text"] == "Number"]
-            if nxt:
+            if any(abs(x["top"] - w["top"]) < 3 and x["text"] == "Number" for x in words):
                 headers.append(w["top"])
     headers.sort()
 
-    apps = []
+    blocks, continuations = [], 0
     for idx, y0 in enumerate(headers):
         y1 = headers[idx + 1] if idx + 1 < len(headers) else float("inf")
-        block = [w for w in words if y0 - 1 <= w["top"] < y1 and w["top"] - y0 < PAGE_STRIDE]
-        # drop the header rows themselves (first two text rows: "Ref Number ..." and "Location Grid Reference")
-        body = [w for w in block if w["top"] > y0 + 20]
-
-        ward_hdr = [w for w in body if w["text"] == "Ward" and w["x0"] < 100]
-        if ward_hdr:
-            wy = ward_hdr[0]["top"]
-            top_part = [w for w in body if w["top"] < wy - 1]
-            ward_vals = [w for w in body if w["top"] > wy + 3]
+        body = [w for w in words if y0 - 1 <= w["top"] < y1 and w["top"] - y0 < PAGE_STRIDE
+                and w["top"] > y0 + 20]   # skip the two header rows
+        first = _lines([w for w in body if w["x0"] < COL_B_X])
+        first_line = first[0] if first else ""
+        if blocks and not _looks_like_ref(first_line):
+            blocks[-1].extend(body)        # continuation of the application above
+            continuations += 1
         else:
-            top_part, ward_vals = body, []
+            blocks.append(list(body))
 
-        col_a = [w for w in top_part if w["x0"] < COL_B_X]
-        col_b = [w for w in top_part if COL_B_X <= w["x0"] < COL_C_X]
-        col_c = [w for w in top_part if COL_C_X <= w["x0"] < COL_D_X]
-        col_d = [w for w in top_part if w["x0"] >= COL_D_X]
-
-        a_lines = _lines(col_a)
-        ref = a_lines[0].strip() if a_lines else ""
-        validated = None
-        for j, ln in enumerate(a_lines):
-            if ln.startswith("Date Validated") and j + 1 < len(a_lines):
-                validated = _date(a_lines[j + 1])
-
-        b_text = _clean(" ".join(_lines(col_b)))
-        m = re.match(r"Site Address:\s*(.*?)\s*Applicant:\s*(.*)$", b_text)
-        if m:
-            address, applicant = m.group(1), m.group(2)
-        else:
-            address, applicant = re.sub(r"^Site Address:\s*", "", b_text), ""
-
-        c_text = _clean(" ".join(_lines(col_c)))
-        grid = GRID_RE.search(c_text)
-        proposal = _clean(GRID_RE.sub("", c_text))
-        easting = int(grid.group(1)) if grid else None
-        northing = int(grid.group(2)) if grid else None
-
-        officer = _clean(" ".join(_lines(col_d)))
-
-        ward = community = expiry = ""
-        if ward_vals:
-            ward = _clean(" ".join(_lines([w for w in ward_vals if w["x0"] < WARD_CC_X])))
-            community = _clean(" ".join(_lines([w for w in ward_vals if WARD_CC_X <= w["x0"] < WARD_EXP_X])))
-            expiry = _clean(" ".join(_lines([w for w in ward_vals if w["x0"] >= WARD_EXP_X])))
-
-        pm = POSTCODE_RE.findall(address.upper())
-        apps.append({
-            "reference": ref,
-            "address": address,
-            "postcode": pm[-1] if pm else None,
-            "applicant": applicant,
-            "description": proposal,
-            "case_officer": officer,
-            "submitted_date": validated,
-            "comment_expiry": _date(expiry) if expiry else None,
-            "ward": ward,
-            "community_council": community,
-            "easting": easting,
-            "northing": northing,
-        })
-    return apps, len(headers)
+    apps = [_parse_block(b) for b in blocks]
+    return apps, len(headers), {"pages": pages, "continuations": continuations,
+                                "text_sample": text_sample}
 
 
 def application_type_from_proposal(proposal: str) -> str:
@@ -252,8 +269,9 @@ def parse_bytes(content: bytes):
 def main():
     if "--test-file" in sys.argv:
         path = sys.argv[sys.argv.index("--test-file") + 1]
-        apps, headers = parse_pdf(path)
-        sc.log(f"{len(apps)} application(s) parsed from {headers} block(s)")
+        apps, headers, info = parse_pdf(path)
+        sc.log(f"{len(apps)} application(s) parsed from {headers} header(s), "
+               f"{info['continuations']} continuation(s) merged, {info['pages']} page(s)")
         for a in apps:
             sc.log(f"  {a['reference']} | {a['submitted_date']} | {a['address']} | "
                    f"{application_type_from_proposal(a['description'])} | grid {a['easting']},{a['northing']}")
@@ -279,16 +297,24 @@ def main():
         for url, d, area in links:
             try:
                 content = sc.polite_get(client, url).content
-                apps, headers = parse_bytes(content)
+                apps, headers, info = parse_bytes(content)
             except Exception as e:  # noqa: BLE001
                 problems += 1
                 sc.log(f"  x {area} {d}: {e}")
                 continue
             good = [a for a in apps if valid(a)]
-            flag = "" if (len(good) == headers == len(apps)) else "  <-- MISMATCH, check this PDF"
+            bad = [a for a in apps if not valid(a)]
+            flag = "" if not bad else "  <-- CHECK: some blocks were not read as applications"
             if flag:
                 problems += 1
-            sc.log(f"  {area} {d}: {len(good)} application(s) ({headers} block(s)){flag}")
+            extra = f", {info['continuations']} page-break merge(s)" if info["continuations"] else ""
+            sc.log(f"  {area} {d}: {len(good)} application(s) from {headers} header(s){extra}{flag}")
+            for a in bad[:3]:
+                sc.log(f"      ? unread block: ref={a['reference']!r} address={a['address'][:60]!r} "
+                       f"proposal={a['description'][:60]!r}")
+            if headers == 0:
+                sc.log(f"      ? no application blocks found; {info['pages']} page(s); "
+                       f"page 1 text starts: {info['text_sample']!r}")
             all_apps.extend(to_record(a, portal_url) for a in good)
 
     sc.log(f"Total {len(all_apps)} application(s) from {len(links)} PDF(s); {problems} problem(s)")

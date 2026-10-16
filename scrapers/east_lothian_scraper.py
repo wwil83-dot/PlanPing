@@ -78,8 +78,75 @@ def docx_to_text(path: str) -> str:
     return "\n".join(lines)
 
 
+def _u16(b, o):
+    return int.from_bytes(b[o:o + 2], "little")
+
+
+def _u32(b, o):
+    return int.from_bytes(b[o:o + 4], "little")
+
+
+def doc_to_text_ole(path: str) -> Optional[str]:
+    """Pure-Python reader for old Word (.doc) files (needs the 'olefile' package).
+    Follows the standard Word 97-2003 layout: file header -> piece table -> text pieces.
+    Table cell/row end marks (0x07) become '|' so rows read 'Label|Value|' like the RTF."""
+    import olefile
+    ole = olefile.OleFileIO(path)
+    try:
+        wd = ole.openstream("WordDocument").read()
+        if _u16(wd, 0) != 0xA5EC:
+            return None
+        table = "1Table" if _u16(wd, 0x0A) & 0x0200 else "0Table"
+        tbl = ole.openstream(table).read()
+        pos = 32
+        pos += 2 + _u16(wd, pos) * 2                     # csw + fibRgW
+        cslw = _u16(wd, pos)
+        lw = pos + 2                                      # fibRgLw
+        ccp_text = _u32(wd, lw + 3 * 4)
+        pos = lw + cslw * 4
+        fc_lcb = pos + 2                                  # fibRgFcLcb
+        fc_clx, lcb_clx = _u32(wd, fc_lcb + 33 * 8), _u32(wd, fc_lcb + 33 * 8 + 4)
+        clx = tbl[fc_clx:fc_clx + lcb_clx]
+        i = 0
+        while clx[i] == 1:                                # skip any property-modifier blocks
+            i += 3 + _u16(clx, i + 1)
+        if clx[i] != 2:
+            return None
+        lcb = _u32(clx, i + 1)
+        plc = clx[i + 5:i + 5 + lcb]
+        n = (lcb - 4) // 12
+        cps = [_u32(plc, 4 * k) for k in range(n + 1)]
+        out, total = [], 0
+        for k in range(n):
+            fc = _u32(plc, 4 * (n + 1) + 8 * k + 2)
+            chars = cps[k + 1] - cps[k]
+            if fc & 0x40000000:                           # 8-bit text
+                start = (fc & 0x3FFFFFFF) // 2
+                piece = wd[start:start + chars].decode("cp1252", errors="replace")
+            else:                                         # UTF-16 text
+                start = fc & 0x3FFFFFFF
+                piece = wd[start:start + 2 * chars].decode("utf-16le", errors="replace")
+            out.append(piece)
+            total += chars
+            if total >= ccp_text:
+                break
+        text = "".join(out)[:ccp_text]
+    finally:
+        ole.close()
+    # a run of cell marks: the LAST one ends the table row, the others end cells
+    text = re.sub(r"\x07+", lambda m: ("|" * (len(m.group()) - 1) + "\n") if len(m.group()) > 1 else "|", text)
+    text = text.replace("\r", "\n")
+    return re.sub(r"[\x00-\x06\x08\x0b\x0c\x0e-\x1f]", "", text)
+
+
 def doc_to_text(path: str) -> Optional[str]:
-    """Old .doc via LibreOffice if it is installed; otherwise None."""
+    """Old .doc: built-in reader first, then LibreOffice if installed."""
+    try:
+        t = doc_to_text_ole(path)
+        if t and "App No" in t:
+            return t
+    except Exception as e:  # noqa: BLE001
+        sc.log(f"    (built-in .doc reader failed: {e})")
     outdir = tempfile.mkdtemp()
     try:
         subprocess.run(["soffice", "--headless", "--convert-to", "txt:Text", "--outdir", outdir, path],
@@ -242,7 +309,7 @@ def main():
                 text = file_to_text(name, content)
                 if text is None:
                     problems += 1
-                    sc.log(f"  x {name}: cannot convert this file type here (needs LibreOffice for .doc)")
+                    sc.log(f"  x {name}: cannot convert this file type here (old .doc: needs the olefile package)")
                     continue
                 apps, footer = parse_records(text)
             except Exception as e:  # noqa: BLE001
