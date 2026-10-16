@@ -77,7 +77,7 @@ BULK_DAYS_BACK = int(os.environ.get("BULK_DAYS_BACK", "180"))
 # Maximum result pages followed per search (added 2026-10-16). Arcus result
 # lists are paginated — most councils show 10 per page (Eastleigh 5,
 # Wiltshire 100) — and until now only page 1 was ever read.
-MAX_RESULT_PAGES = int(os.environ.get("MAX_RESULT_PAGES", "15"))
+MAX_RESULT_PAGES = int(os.environ.get("MAX_RESULT_PAGES", "30"))
 
 START_TIME = time.monotonic()
 
@@ -381,6 +381,7 @@ def _parse_csv(csv_text: str, council_name: str) -> list[dict]:
 # means an unrecognised label wording for a given council, worth
 # investigating with real evidence rather than assumed benign.
 _DECISION_DATE_DIAGNOSED: set[str] = set()
+_CATEGORY_DIAG_COUNCILS = {"Milton Keynes City Council", "Burnley Borough Council"}
 
 # 2026-07-26/28: real evidence found via a SQL audit and 3 rounds of
 # direct diagnostic evidence. Three GENUINELY DIFFERENT root causes were
@@ -718,7 +719,7 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
         })
     if not apps and re.search(r"Planning Applications \(\d+\)|Valid date:", html):
         # No label/value records found — try Eastleigh-style cards.
-        apps = _parse_card_results(html, council_name)
+        apps = _parse_card_results(html, council_name, quiet=True)
     return apps
 
 
@@ -1000,11 +1001,11 @@ class ArcusPortal:
                     if cur and cur.isdigit():
                         link = n0.locator(f"a.pr-pagination__link[data-id='{int(cur) + 1}']")
                         if await link.count() > 0:
-                            await link.first.click(timeout=5_000)
+                            await link.first.click(timeout=15_000, no_wait_after=True)
                             return True
                 nxt = n0.locator("li.pr-pagination__item__next a")
                 if await nxt.count() > 0:
-                    await nxt.first.click(timeout=5_000)
+                    await nxt.first.click(timeout=15_000, no_wait_after=True)
                     return True
                 return False
             candidates = [
@@ -1020,10 +1021,15 @@ class ArcusPortal:
                             continue
                         if (await el.get_attribute("aria-disabled")) == "true" or await el.is_disabled():
                             continue
-                        await el.click(timeout=5_000)
+                        await el.click(timeout=15_000, no_wait_after=True)
                         return True
                     except Exception:
                         continue
+            # "Load more" / "Show more" style controls
+            more = page.get_by_role("button", name=re.compile(r"^\s*(load|show|view)\s+more", re.I))
+            if await more.count() > 0 and await more.first.is_visible():
+                await more.first.click(timeout=15_000, no_wait_after=True)
+                return True
         except Exception as e:
             print(f"    ⚠ [{self.council_name}] pagination click failed: {e}")
         return False
@@ -1060,14 +1066,29 @@ class ArcusPortal:
                 seen.add(a["reference"])
                 all_apps.append(a)
             pages += 1
+        total_txt = ""
+        try:
+            m = re.search(r"of\s+([\d,]+)\s+results", await page.inner_text("body"), re.I)
+            if m:
+                total_txt = f" (site says {m.group(1)} results)"
+        except Exception:
+            pass
         if pages > 1:
-            print(f"    ℹ [{self.council_name}] followed pagination: {pages} pages, {len(all_apps)} applications")
+            capped = " — STOPPED AT PAGE CAP" if pages >= MAX_RESULT_PAGES else ""
+            print(f"    ℹ [{self.council_name}] followed pagination: {pages} pages, "
+                  f"{len(all_apps)} applications{total_txt}{capped}")
         elif len(first_apps) >= 5 and len(first_apps) in (5, 10):
             # Exactly one full page and no next page found: worth knowing.
             try:
                 info = await page.evaluate("""() => {
-                  const els = [...document.querySelectorAll('nav, [class*=pagination], [class*=pager], [aria-label*=agination]')];
-                  return els.slice(0, 3).map(e => e.outerHTML.slice(0, 500));
+                  const re = /^(next|prev|previous|more|load|show|view|first|last|\\d{1,3}|»|›|>|<)/i;
+                  const out = [];
+                  document.querySelectorAll('button, a, li, [role=button], [role=tab], lightning-button').forEach(e => {
+                    const t = (e.innerText || e.getAttribute('aria-label') || e.title || '').trim();
+                    if (t && t.length < 25 && re.test(t) && e.offsetParent !== null)
+                      out.push((e.tagName + '.' + (e.className || '').toString().slice(0, 45) + ' "' + t + '"'));
+                  });
+                  return out.slice(-14);
                 }""")
                 print(f"    ⚠ [{self.council_name}] {len(first_apps)} applications on page 1 and no next page "
                       f"found — pagination markup: {info}")
@@ -1124,6 +1145,18 @@ class ArcusPortal:
         except Exception as e:
             print(f"    ⚠ [{self.council_name}] week-start-date retry failed: {e}")
             return []
+
+    async def _category_snapshot(self, page: Page, when: str):
+        """Diagnostic (2026-10-16): print which Category the form shows at
+        this moment. Milton Keynes and Burnley end up on Building Control
+        and it is not yet clear at which step that happens."""
+        try:
+            lines = [l.strip() for l in (await page.inner_text("body")).split("\n") if l.strip()]
+            if self.council_name in _CATEGORY_DIAG_COUNCILS or "Building Control Applications" in lines:
+                cat = lines[lines.index("Category") + 1] if "Category" in lines else "?"
+                print(f"    ℹ [{self.council_name}] category {when}: {cat!r}")
+        except Exception:
+            pass
 
     async def _ensure_planning_category(self, page: Page):
         """Milton Keynes and Burnley (2026-10-16): the Advanced Search form
@@ -1288,7 +1321,9 @@ class ArcusPortal:
             print("    ⚠ Category selection not confirmed — continuing anyway, "
                   "some councils' Advanced Search may not require it")
 
+        await self._category_snapshot(page, "after category step")
         await self._ensure_planning_category(page)
+        await self._category_snapshot(page, "after category check")
 
         # --- Fill the date range: normally 14 days back, widened to
         # reach the oldest pending-recheck date when present (bounded to
@@ -1320,6 +1355,7 @@ class ArcusPortal:
                 continue
 
         await asyncio.sleep(1)
+        await self._category_snapshot(page, "before Search click")
 
         # --- Click the LAST "Search" button — the round-12 fix ---
         try:
@@ -1623,8 +1659,11 @@ class ArcusPortal:
             print(f"       tabs/comboboxes: {info.get('tabs')}")
             try:
                 body = await page.inner_text("body")
-                sample = [l.strip()[:120] for l in body.split("\n") if l.strip()][:45]
-                print(f"       visible text (first {len(sample)} lines): {sample}")
+                all_lines = [l.strip()[:120] for l in body.split("\n") if l.strip()]
+                print(f"       visible text (first {min(len(all_lines), 45)} lines): {all_lines[:45]}")
+                hints = [l for l in all_lines if re.search(
+                    r"result|error|invalid|required|no records|not found|please", l, re.I)][:10]
+                print(f"       result/error-ish lines: {hints}")
             except Exception:
                 pass
         except Exception as e:
