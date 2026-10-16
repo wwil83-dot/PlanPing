@@ -452,6 +452,78 @@ def _field_for_label(label_text: str) -> Optional[str]:
     return None
 
 
+# Eastleigh-style result cards (added 2026-10-16). Eastleigh's weekly-list
+# results are not label/value pairs; each application is a block like:
+#   "DC/26/101910 - SOUTH HOUSE, SCHOOL LANE, ..., SO31 4JD"
+#   "Valid date: 12/10/2026"
+#   "<description>"
+#   "Type of Application: Approval of conditions"
+#   "Status: Valid"
+#   "Decision: Not yet determined"
+#   "Decision Date:" / "08/06/2026"        (decided applications only)
+_CARD_HEAD_RE = re.compile(r"^([A-Z]{1,6}/\d{2,4}/[A-Z0-9]+(?:/[A-Z0-9]+)?)\s+-\s+(.+)$")
+
+
+def _parse_card_results(html: str, council_name: str) -> list[dict]:
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style"]):
+        tag.decompose()
+    lines = [l.strip() for l in soup.get_text("\n", strip=True).split("\n") if l.strip()]
+    total_m = None
+    for l in lines:
+        total_m = re.match(r"^Planning Applications \((\d+)\)$", l)
+        if total_m:
+            break
+    records: list[dict] = []
+    cur: Optional[dict] = None
+    for idx, l in enumerate(lines):
+        h = _CARD_HEAD_RE.match(l)
+        if h:
+            cur = {"reference": h.group(1), "address": h.group(2).strip(),
+                   "proposal": "", "date": "", "type": "", "status": "",
+                   "decision": "", "decision_date": ""}
+            records.append(cur)
+            continue
+        if cur is None:
+            continue
+        low = l.lower()
+        if low.startswith("valid date:"):
+            cur["date"] = l.split(":", 1)[1].strip()
+        elif low.startswith("type of application:"):
+            cur["type"] = l.split(":", 1)[1].strip()
+        elif low.startswith("status:"):
+            cur["status"] = l.split(":", 1)[1].strip()
+        elif low.startswith("decision date:"):
+            val = l.split(":", 1)[1].strip()
+            if not val and idx + 1 < len(lines):
+                val = lines[idx + 1].strip()
+            cur["decision_date"] = val
+        elif low.startswith("decision:"):
+            cur["decision"] = l.split(":", 1)[1].strip()
+        elif not cur["proposal"] and not re.match(r"^\d{1,2}/\d{1,2}/\d{4}$", l):
+            cur["proposal"] = l
+    apps = []
+    for r in records:
+        decision_raw = r["decision"] if "not yet" not in r["decision"].lower() else ""
+        apps.append({
+            "reference":        r["reference"],
+            "address":          r["address"],
+            "postcode":         _extract_postcode(r["address"]),
+            "description":      r["proposal"],
+            "application_type": r["type"],
+            "status":           _normalise_status(r["status"], decision_raw),
+            "submitted_date":   _parse_date(r["date"]),
+            "decision_date":    _parse_date(r["decision_date"]),
+            "council_name":     council_name,
+            "council_url":      None,
+            "source":           "arcus_scraper",
+        })
+    if total_m and int(total_m.group(1)) != len(apps):
+        print(f"    ⚠ [{council_name}] page header says {total_m.group(1)} applications "
+              f"but {len(apps)} parsed — results may be paginated or truncated")
+    return apps
+
+
 def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
     """BEST-EFFORT fallback for councils where CSV export isn't offered.
     This is a genuinely weaker code path than CSV parsing — flagged
@@ -593,6 +665,9 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
             "council_url":      None,
             "source":           "arcus_scraper",
         })
+    if not apps:
+        # No label/value records found — try Eastleigh-style cards.
+        apps = _parse_card_results(html, council_name)
     return apps
 
 
@@ -840,12 +915,106 @@ class ArcusPortal:
         # --- Step 4: fall back to HTML text parsing ---
         html = await page.content()
         apps = _parse_results_html_fallback(html, self.council_name)
+        if not apps:
+            apps = await self._retry_with_week_start_date(page, link_text)
         if apps:
             print(f"    ✓ [{self.council_name}] '{link_text}': {len(apps)} via HTML fallback (CSV unavailable)")
         else:
             print(f"    ⚠ [{self.council_name}] '{link_text}': no results found via CSV or HTML fallback")
             await self._dump_form_controls(page)
         return apps
+
+    async def _retry_with_week_start_date(self, page: Page, link_text: str) -> list[dict]:
+        """Cumberland (2026-10-16): its quick links open a "Search by date —
+        Including records for 7 days from the chosen date" page whose date
+        is pre-filled with TODAY, so the 7 days FROM that date are all in
+        the future and the result is always "No results found". If that
+        date box is on the page, put a date 6 days ago in it and search
+        again so the 7-day window ends today. Only runs when the first
+        attempt found nothing, so councils that already work are
+        untouched."""
+        try:
+            if await page.get_by_text("Search by date", exact=False).count() == 0:
+                return []
+            field = page.get_by_label("Select a date for", exact=False)
+            if await field.count() == 0:
+                return []
+            start = date.today() - timedelta(days=6)
+            await field.first.fill(start.strftime("%d/%m/%Y"), timeout=5_000)
+            await field.first.press("Tab")
+            await asyncio.sleep(1)
+            btn = page.get_by_role("button", name="Search", exact=True)
+            if await btn.count() == 0:
+                btn = page.get_by_role("button", name="Search", exact=False)
+            await btn.last.click(timeout=5_000, force=True)
+            await asyncio.sleep(5)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=15_000)
+            except PlaywrightTimeout:
+                pass
+            apps = await self._try_csv_download(page)
+            if not apps:
+                apps = _parse_results_html_fallback(await page.content(), self.council_name)
+            if apps:
+                print(f"    ℹ [{self.council_name}] '{link_text}': found results only after "
+                      f"setting the week-start date to {start.isoformat()}")
+            return apps
+        except Exception as e:
+            print(f"    ⚠ [{self.council_name}] week-start-date retry failed: {e}")
+            return []
+
+    async def _ensure_planning_category(self, page: Page):
+        """Milton Keynes and Burnley (2026-10-16): the Advanced Search form
+        stayed on "Building Control Applications" (the dump showed its
+        Completion/Commenced date fields), so searches ran against the
+        wrong register and returned nothing. If that is still the selected
+        category after the normal selection step, open the dropdown, list
+        what is really offered, and pick the planning one."""
+        try:
+            bc = page.get_by_text("Building Control Applications", exact=True)
+            if await bc.count() == 0 or not await bc.first.is_visible():
+                return
+            seen = []
+            for fc in (page.get_by_role("combobox", name="Category", exact=False),
+                       page.get_by_label("Category", exact=False),
+                       page.get_by_role("button", name="Category", exact=False)):
+                try:
+                    if await fc.count() == 0:
+                        continue
+                    f = fc.first
+                    try:
+                        await f.select_option(label="Planning Applications", timeout=2_000)
+                        await asyncio.sleep(3)
+                        return
+                    except Exception:
+                        pass
+                    await f.click(timeout=5_000, force=True)
+                    await asyncio.sleep(1)
+                    opts = page.get_by_role("option")
+                    n = await opts.count()
+                    texts = []
+                    for i in range(min(n, 15)):
+                        try:
+                            texts.append((await opts.nth(i).inner_text()).strip())
+                        except Exception:
+                            texts.append("?")
+                    seen.append(texts)
+                    for i, tx in enumerate(texts):
+                        if re.search(r"planning", tx, re.I) and not re.search(
+                                r"building|enforce|appeal|obligation|tree", tx, re.I):
+                            await opts.nth(i).click(timeout=5_000, force=True)
+                            try:
+                                await page.wait_for_load_state("networkidle", timeout=10_000)
+                            except PlaywrightTimeout:
+                                pass
+                            await asyncio.sleep(3)
+                            return
+                except Exception as e:
+                    seen.append(f"err: {str(e)[:80]}")
+            print(f"    ⚠ [{self.council_name}] still on Building Control category; "
+                  f"could not switch to Planning. Options seen: {seen}")
+        except Exception as e:
+            print(f"    ⚠ [{self.council_name}] category check failed: {e}")
 
     async def _scrape_advanced_search(self, page: Page) -> list[dict]:
         """For councils with NO homepage weekly-list quick-link (Bromley,
@@ -918,6 +1087,8 @@ class ArcusPortal:
         except Exception:
             print("    ⚠ Category selection not confirmed — continuing anyway, "
                   "some councils' Advanced Search may not require it")
+
+        await self._ensure_planning_category(page)
 
         # --- Fill the date range: normally 14 days back, widened to
         # reach the oldest pending-recheck date when present (bounded to
