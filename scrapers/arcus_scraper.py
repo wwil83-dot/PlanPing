@@ -464,15 +464,38 @@ def _field_for_label(label_text: str) -> Optional[str]:
 _CARD_HEAD_RE = re.compile(r"^([A-Z]{1,6}/\d{2,4}/[A-Z0-9]+(?:/[A-Z0-9]+)?)\s+-\s+(.+)$")
 
 
-def _parse_card_results(html: str, council_name: str) -> list[dict]:
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["script", "style"]):
-        tag.decompose()
-    lines = [l.strip() for l in soup.get_text("\n", strip=True).split("\n") if l.strip()]
-    total_m = None
+def _card_lines(text_lines: list[str]) -> list[str]:
+    """Normalise lines and re-join a reference that was split from its
+    address ("DC/26/101910" / "- SOUTH HOUSE, ...") by separate HTML
+    elements."""
+    lines = [re.sub(r"\s+", " ", l.replace("\xa0", " ")).strip() for l in text_lines]
+    lines = [l for l in lines if l]
+    bare_ref = re.compile(r"^[A-Z]{1,6}/\d{2,4}/[A-Z0-9]+(?:/[A-Z0-9]+)?$")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        l = lines[i]
+        if bare_ref.match(l) and i + 1 < len(lines) and lines[i + 1].startswith("-"):
+            rest = lines[i + 1].lstrip("-").strip()
+            if rest:
+                out.append(f"{l} - {rest}")
+                i += 2
+                continue
+            if i + 2 < len(lines):
+                out.append(f"{l} - {lines[i + 2]}")
+                i += 3
+                continue
+        out.append(l)
+        i += 1
+    return out
+
+
+def _parse_card_lines(lines: list[str], council_name: str) -> tuple[list[dict], Optional[int]]:
+    total = None
     for l in lines:
-        total_m = re.match(r"^Planning Applications \((\d+)\)$", l)
-        if total_m:
+        m = re.match(r"^Planning Applications \((\d+)\)$", l)
+        if m:
+            total = int(m.group(1))
             break
     records: list[dict] = []
     cur: Optional[dict] = None
@@ -518,10 +541,33 @@ def _parse_card_results(html: str, council_name: str) -> list[dict]:
             "council_url":      None,
             "source":           "arcus_scraper",
         })
-    if total_m and int(total_m.group(1)) != len(apps):
-        print(f"    ⚠ [{council_name}] page header says {total_m.group(1)} applications "
-              f"but {len(apps)} parsed — results may be paginated or truncated")
-    return apps
+    return apps, total
+
+
+def _parse_card_results(html: str, council_name: str, body_text: Optional[str] = None) -> list[dict]:
+    """Try the browser's rendered text first (body_text, from
+    page.inner_text) and the HTML text second; keep whichever finds more.
+    The first live run (2026-10-16) parsed 0 of 19 from HTML text alone —
+    the reference and " - ADDRESS" sit in separate elements there."""
+    candidates = []
+    if body_text:
+        candidates.append(_card_lines(body_text.split("\n")))
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style"]):
+        tag.decompose()
+    candidates.append(_card_lines(soup.get_text("\n", strip=True).split("\n")))
+    best: list[dict] = []
+    best_total = None
+    for lines in candidates:
+        apps, total = _parse_card_lines(lines, council_name)
+        if total is not None:
+            best_total = total
+        if len(apps) > len(best):
+            best = apps
+    if best_total is not None and best_total != len(best):
+        print(f"    ⚠ [{council_name}] page header says {best_total} applications "
+              f"but {len(best)} parsed — results may be paginated or truncated")
+    return best
 
 
 def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
@@ -665,7 +711,7 @@ def _parse_results_html_fallback(html: str, council_name: str) -> list[dict]:
             "council_url":      None,
             "source":           "arcus_scraper",
         })
-    if not apps:
+    if not apps and re.search(r"Planning Applications \(\d+\)|Valid date:", html):
         # No label/value records found — try Eastleigh-style cards.
         apps = _parse_card_results(html, council_name)
     return apps
@@ -937,7 +983,18 @@ class ArcusPortal:
             if await page.get_by_text("Search by date", exact=False).count() == 0:
                 return []
             field = page.get_by_label("Select a date for", exact=False)
+            is_input = False
+            try:
+                if await field.count() > 0:
+                    is_input = (await field.first.evaluate("e => e.tagName")).upper() == "INPUT"
+            except Exception:
+                pass
+            if not is_input or not await field.first.is_visible():
+                # The label text may belong to the calendar button, not the
+                # box; fall back to the first visible text/date input.
+                field = page.locator("input[type='text']:visible, input[type='date']:visible, input:not([type]):visible")
             if await field.count() == 0:
+                print(f"    ⚠ [{self.council_name}] 'Search by date' page has no findable date box")
                 return []
             start = date.today() - timedelta(days=6)
             await field.first.fill(start.strftime("%d/%m/%Y"), timeout=5_000)
@@ -972,8 +1029,17 @@ class ArcusPortal:
         what is really offered, and pick the planning one."""
         try:
             bc = page.get_by_text("Building Control Applications", exact=True)
-            if await bc.count() == 0 or not await bc.first.is_visible():
+            shown = False
+            for i in range(min(await bc.count(), 6)):
+                try:
+                    if await bc.nth(i).is_visible():
+                        shown = True
+                        break
+                except Exception:
+                    continue
+            if not shown:
                 return
+            print(f"    ℹ [{self.council_name}] form is on Building Control; switching to Planning")
             seen = []
             for fc in (page.get_by_role("combobox", name="Category", exact=False),
                        page.get_by_label("Category", exact=False),
@@ -1358,6 +1424,12 @@ class ArcusPortal:
 
         html = await page.content()
         apps = _parse_results_html_fallback(html, self.council_name)
+        if not apps:
+            try:
+                body_text = await page.inner_text("body")
+            except Exception:
+                body_text = None
+            apps = _parse_card_results(html, self.council_name, body_text=body_text)
         if apps:
             print(f"    ✓ [{self.council_name}] Weekly List tab: {len(apps)} via HTML fallback (CSV unavailable)")
         else:
