@@ -1016,17 +1016,27 @@ async def coverage_map_data():
     async with get_db() as db:
         councils = await _get_cached_councils_with_counts(db)
 
+    # Map boundary shapes use the official ONS spelling; a few council
+    # names in our DB differ. Send both so the map can match either.
+    MAP_NAME_ALIASES = {
+        "Comhairle nan Eilean Siar": "Na h-Eileanan Siar",
+    }
+
     result = []
     for c in councils:
         if c["coverage_source"] in ("pending", "none", "manual_link") or c["app_count"] == 0:
             continue
         days_since_save = _effective_days_since_save(c["last_saved_at"], c["latest_date"])
         status = _coverage_status(c["coverage_source"], days_since_save)
-        result.append({
+        entry = {
             "name": c["name"],
             "status": status["key"],
             "app_count": c["app_count"],
-        })
+        }
+        result.append(entry)
+        alias = MAP_NAME_ALIASES.get(c["name"])
+        if alias:
+            result.append({**entry, "name": alias})
 
     return JSONResponse(result)
 
