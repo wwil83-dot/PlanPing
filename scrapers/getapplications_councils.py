@@ -82,6 +82,13 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     # (P/2026/0178 etc.) matching this platform's exact known column
     # structure. Genuinely new — no existing DB row found.
     "Blaenau Gwent County Borough Council":       544,
+    # ADDED 2026-10-16 — real URLs supplied by the user; reuse existing
+    # active DB rows (Hackney 218, Barking 226, Rother 276). Hackney's old
+    # Idox entry was parked for a UK-only block; the runner is UK-based so
+    # this needs a real first run to confirm.
+    "London Borough of Hackney":                  218,
+    "London Borough of Barking and Dagenham":     226,
+    "Rother District Council":                    276,
 }
 
 # (council_name_as_in_supabase_db, base_url — host only, no path)
@@ -99,6 +106,9 @@ GETAPPLICATIONS_COUNCILS = [
     ("Coventry City Council",                "https://planandregulatory.coventry.gov.uk"),
     ("Breckland Council",                    "https://publicportal.breckland.gov.uk"),
     ("Blaenau Gwent County Borough Council",  "https://developmentservices.blaenau-gwent.gov.uk"),
+    ("London Borough of Hackney",            "https://developmentandhousing.hackney.gov.uk"),
+    ("London Borough of Barking and Dagenham", "https://online-befirst.lbbd.gov.uk"),
+    ("Rother District Council",              "https://online.rother.gov.uk"),
 ]
 
 
@@ -125,7 +135,10 @@ VALUES
   ('Nuneaton and Bedworth Borough Council','nuneaton-and-bedworth-borough-council','getapplications','england','https://idoxcloud.nuneatonandbedworth.gov.uk/planning/index.html','pending',true),
   ('Coventry City Council','coventry-city-council','getapplications','england','https://planandregulatory.coventry.gov.uk/planning/index.html','pending',true),
   ('Breckland Council','breckland-council','getapplications','england','https://publicportal.breckland.gov.uk/planning/index.html','pending',true),
-  ('Blaenau Gwent County Borough Council','blaenau-gwent-county-borough-council','getapplications','wales','https://developmentservices.blaenau-gwent.gov.uk/planning/index.html','pending',true)
+  ('Blaenau Gwent County Borough Council','blaenau-gwent-county-borough-council','getapplications','wales','https://developmentservices.blaenau-gwent.gov.uk/planning/index.html','pending',true),
+  ('London Borough of Hackney','london-borough-of-hackney','getapplications','england','https://developmentandhousing.hackney.gov.uk/planning/index.html','pending',true),
+  ('London Borough of Barking and Dagenham','london-borough-of-barking-and-dagenham','getapplications','england','https://online-befirst.lbbd.gov.uk/planning/index.html','pending',true),
+  ('Rother District Council','rother-district-council','getapplications','england','https://online.rother.gov.uk/planning/index.html','pending',true)
 ON CONFLICT (name) DO UPDATE SET
   system = 'getapplications',
   active = true,
