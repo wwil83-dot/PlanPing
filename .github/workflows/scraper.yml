@@ -1050,7 +1050,7 @@ jobs:
     # "time-budget-skipped councils" instead.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_getapplications') ||
-      (github.event_name == 'schedule' && github.event.schedule == '20 10 */5 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '20 10 */3 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 35
     steps:
