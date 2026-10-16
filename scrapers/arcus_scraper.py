@@ -74,6 +74,10 @@ CONCURRENCY  = int(os.environ.get("CONCURRENCY", "2"))  # lower than Idox —
 # other 11 councils (weekly_list/tabbed_weekly_list modes) are
 # unaffected either way.
 BULK_DAYS_BACK = int(os.environ.get("BULK_DAYS_BACK", "180"))
+# Maximum result pages followed per search (added 2026-10-16). Arcus result
+# lists are paginated — most councils show 10 per page (Eastleigh 5,
+# Wiltshire 100) — and until now only page 1 was ever read.
+MAX_RESULT_PAGES = int(os.environ.get("MAX_RESULT_PAGES", "15"))
 
 START_TIME = time.monotonic()
 
@@ -544,7 +548,8 @@ def _parse_card_lines(lines: list[str], council_name: str) -> tuple[list[dict], 
     return apps, total
 
 
-def _parse_card_results(html: str, council_name: str, body_text: Optional[str] = None) -> list[dict]:
+def _parse_card_results(html: str, council_name: str, body_text: Optional[str] = None,
+                        quiet: bool = False) -> list[dict]:
     """Try the browser's rendered text first (body_text, from
     page.inner_text) and the HTML text second; keep whichever finds more.
     The first live run (2026-10-16) parsed 0 of 19 from HTML text alone —
@@ -564,7 +569,7 @@ def _parse_card_results(html: str, council_name: str, body_text: Optional[str] =
             best_total = total
         if len(apps) > len(best):
             best = apps
-    if best_total is not None and best_total != len(best):
+    if not quiet and best_total is not None and best_total != len(best):
         print(f"    ⚠ [{council_name}] page header says {best_total} applications "
               f"but {len(best)} parsed — results may be paginated or truncated")
     return best
@@ -964,11 +969,111 @@ class ArcusPortal:
         if not apps:
             apps = await self._retry_with_week_start_date(page, link_text)
         if apps:
+            async def _parse_here(pg):
+                return _parse_results_html_fallback(await pg.content(), self.council_name)
+            apps = await self._collect_further_pages(page, apps, _parse_here)
             print(f"    ✓ [{self.council_name}] '{link_text}': {len(apps)} via HTML fallback (CSV unavailable)")
         else:
             print(f"    ⚠ [{self.council_name}] '{link_text}': no results found via CSV or HTML fallback")
             await self._dump_form_controls(page)
         return apps
+
+    async def _go_next_page(self, page: Page) -> bool:
+        """Click to the next page of results. Returns False if there is no
+        next page. Arcus's own pagination (confirmed from Wiltshire's saved
+        results HTML) is:
+          <nav class="pr-pagination"> <ul class="pr-pagination__list">
+            <li aria-current="true" data-id="1">1</li>
+            <li data-id="2"><a class="pr-pagination__link" data-id="2">2</a></li> ...
+            <li class="pr-pagination__item__next"><a>Next<span>set of pages</span></a></li>
+          </ul><p>Showing 1 to 100 of 250 results</p></nav>
+        so: click the numbered link after the active page; if there isn't
+        one, click "Next" (next set of page numbers). Other templates
+        (Eastleigh's cards) fall back to a generic Next control."""
+        try:
+            nav = page.locator("nav.pr-pagination")
+            if await nav.count() > 0:
+                n0 = nav.first
+                active = n0.locator("li[aria-current='true']")
+                if await active.count() > 0:
+                    cur = await active.first.get_attribute("data-id")
+                    if cur and cur.isdigit():
+                        link = n0.locator(f"a.pr-pagination__link[data-id='{int(cur) + 1}']")
+                        if await link.count() > 0:
+                            await link.first.click(timeout=5_000)
+                            return True
+                nxt = n0.locator("li.pr-pagination__item__next a")
+                if await nxt.count() > 0:
+                    await nxt.first.click(timeout=5_000)
+                    return True
+                return False
+            candidates = [
+                page.get_by_role("link", name=re.compile(r"^\s*next\b", re.I)),
+                page.get_by_role("button", name=re.compile(r"^\s*next\b", re.I)),
+                page.locator("a[aria-label*='next' i], button[aria-label*='next' i], [title='Next']"),
+            ]
+            for cand in candidates:
+                for k in range(min(await cand.count(), 4)):
+                    el = cand.nth(k)
+                    try:
+                        if not await el.is_visible():
+                            continue
+                        if (await el.get_attribute("aria-disabled")) == "true" or await el.is_disabled():
+                            continue
+                        await el.click(timeout=5_000)
+                        return True
+                    except Exception:
+                        continue
+        except Exception as e:
+            print(f"    ⚠ [{self.council_name}] pagination click failed: {e}")
+        return False
+
+    async def _collect_further_pages(self, page: Page, first_apps: list[dict], parse_page) -> list[dict]:
+        """Follow the results pagination (see _go_next_page) and merge every
+        page's applications, de-duplicated by reference. parse_page is an
+        async callable(page) -> list of applications for the page as it is
+        now. Stops at MAX_RESULT_PAGES, when a page adds nothing new, when
+        there is no next control, or when the time budget is nearly used."""
+        all_apps = list(first_apps)
+        seen = {a["reference"] for a in all_apps}
+        pages = 1
+        for _ in range(MAX_RESULT_PAGES - 1):
+            if should_stop():
+                print(f"    ⚠ [{self.council_name}] stopping pagination: time budget nearly used")
+                break
+            if not await self._go_next_page(page):
+                break
+            await asyncio.sleep(3)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10_000)
+            except PlaywrightTimeout:
+                pass
+            try:
+                new = await parse_page(page)
+            except Exception as e:
+                print(f"    ⚠ [{self.council_name}] could not read page {pages + 1}: {e}")
+                break
+            fresh = [a for a in new if a["reference"] not in seen]
+            if not fresh:
+                break
+            for a in fresh:
+                seen.add(a["reference"])
+                all_apps.append(a)
+            pages += 1
+        if pages > 1:
+            print(f"    ℹ [{self.council_name}] followed pagination: {pages} pages, {len(all_apps)} applications")
+        elif len(first_apps) >= 5 and len(first_apps) in (5, 10):
+            # Exactly one full page and no next page found: worth knowing.
+            try:
+                info = await page.evaluate("""() => {
+                  const els = [...document.querySelectorAll('nav, [class*=pagination], [class*=pager], [aria-label*=agination]')];
+                  return els.slice(0, 3).map(e => e.outerHTML.slice(0, 500));
+                }""")
+                print(f"    ⚠ [{self.council_name}] {len(first_apps)} applications on page 1 and no next page "
+                      f"found — pagination markup: {info}")
+            except Exception:
+                pass
+        return all_apps
 
     async def _retry_with_week_start_date(self, page: Page, link_text: str) -> list[dict]:
         """Cumberland (2026-10-16): its quick links open a "Search by date —
@@ -1022,63 +1127,92 @@ class ArcusPortal:
 
     async def _ensure_planning_category(self, page: Page):
         """Milton Keynes and Burnley (2026-10-16): the Advanced Search form
-        stayed on "Building Control Applications" (the dump showed its
-        Completion/Commenced date fields), so searches ran against the
-        wrong register and returned nothing. If that is still the selected
-        category after the normal selection step, open the dropdown, list
-        what is really offered, and pick the planning one."""
+        stays on "Building Control Applications" (its Completion/Commenced
+        date fields show in the diagnostic dump), so searches ran against
+        the wrong register and returned nothing. The first attempts
+        looked for the Category control by its label, which probably
+        matched the label rather than the dropdown. Now: if the VISIBLE
+        page text shows "Building Control Applications" as a line, click
+        that displayed value (the real dropdown trigger), read what
+        options appear, and pick the planning one."""
         try:
-            bc = page.get_by_text("Building Control Applications", exact=True)
-            shown = False
-            for i in range(min(await bc.count(), 6)):
-                try:
-                    if await bc.nth(i).is_visible():
-                        shown = True
-                        break
-                except Exception:
-                    continue
-            if not shown:
+            async def _lines() -> list[str]:
+                return [l.strip() for l in (await page.inner_text("body")).split("\n")]
+
+            if "Building Control Applications" not in await _lines():
                 return
             print(f"    ℹ [{self.council_name}] form is on Building Control; switching to Planning")
-            seen = []
-            for fc in (page.get_by_role("combobox", name="Category", exact=False),
-                       page.get_by_label("Category", exact=False),
-                       page.get_by_role("button", name="Category", exact=False)):
-                try:
-                    if await fc.count() == 0:
-                        continue
-                    f = fc.first
-                    try:
-                        await f.select_option(label="Planning Applications", timeout=2_000)
-                        await asyncio.sleep(3)
-                        return
-                    except Exception:
-                        pass
-                    await f.click(timeout=5_000, force=True)
-                    await asyncio.sleep(1)
-                    opts = page.get_by_role("option")
+
+            async def _pick() -> Optional[list[str]]:
+                for sel in ("[role=option]", "lightning-base-combobox-item", "[role=listbox] li"):
+                    opts = page.locator(sel)
                     n = await opts.count()
+                    if n == 0:
+                        continue
                     texts = []
                     for i in range(min(n, 15)):
                         try:
                             texts.append((await opts.nth(i).inner_text()).strip())
                         except Exception:
                             texts.append("?")
-                    seen.append(texts)
                     for i, tx in enumerate(texts):
                         if re.search(r"planning", tx, re.I) and not re.search(
                                 r"building|enforce|appeal|obligation|tree", tx, re.I):
                             await opts.nth(i).click(timeout=5_000, force=True)
-                            try:
-                                await page.wait_for_load_state("networkidle", timeout=10_000)
-                            except PlaywrightTimeout:
-                                pass
-                            await asyncio.sleep(3)
-                            return
-                except Exception as e:
-                    seen.append(f"err: {str(e)[:80]}")
-            print(f"    ⚠ [{self.council_name}] still on Building Control category; "
-                  f"could not switch to Planning. Options seen: {seen}")
+                            return None
+                    return texts
+                return []
+
+            seen_options: list = []
+            # Attempt 1: click the displayed current value.
+            shown = page.get_by_text("Building Control Applications", exact=False)
+            for i in range(min(await shown.count(), 6)):
+                el = shown.nth(i)
+                try:
+                    if not await el.is_visible():
+                        continue
+                    await el.click(timeout=3_000, force=True)
+                except Exception:
+                    continue
+                await asyncio.sleep(1)
+                res = await _pick()
+                if res is None:
+                    break
+                seen_options.append(res)
+            else:
+                res = "no-pick"
+            # Attempt 2: the label/combobox route.
+            if "Building Control Applications" in await _lines():
+                for fc in (page.get_by_role("combobox", name="Category", exact=False),
+                           page.get_by_label("Category", exact=False),
+                           page.get_by_role("button", name="Category", exact=False)):
+                    try:
+                        if await fc.count() == 0:
+                            continue
+                        f = fc.first
+                        try:
+                            await f.select_option(label="Planning Applications", timeout=2_000)
+                            break
+                        except Exception:
+                            pass
+                        await f.click(timeout=5_000, force=True)
+                        await asyncio.sleep(1)
+                        res = await _pick()
+                        if res is None:
+                            break
+                        seen_options.append(res)
+                    except Exception as e:
+                        seen_options.append(f"err: {str(e)[:80]}")
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10_000)
+            except PlaywrightTimeout:
+                pass
+            await asyncio.sleep(3)
+            if "Building Control Applications" in await _lines():
+                print(f"    ⚠ [{self.council_name}] still on Building Control; could not switch to "
+                      f"Planning. Options seen: {seen_options}")
+            else:
+                print(f"    ℹ [{self.council_name}] category switched to Planning")
         except Exception as e:
             print(f"    ⚠ [{self.council_name}] category check failed: {e}")
 
@@ -1214,6 +1348,9 @@ class ArcusPortal:
         html = await page.content()
         apps = _parse_results_html_fallback(html, self.council_name)
         if apps:
+            async def _parse_here(pg):
+                return _parse_results_html_fallback(await pg.content(), self.council_name)
+            apps = await self._collect_further_pages(page, apps, _parse_here)
             print(f"    ✓ [{self.council_name}] Advanced Search: {len(apps)} via HTML fallback (CSV unavailable)")
         else:
             print(f"    ⚠ [{self.council_name}] Advanced Search: no results found via CSV or HTML fallback")
@@ -1429,8 +1566,26 @@ class ArcusPortal:
                 body_text = await page.inner_text("body")
             except Exception:
                 body_text = None
-            apps = _parse_card_results(html, self.council_name, body_text=body_text)
+            apps = _parse_card_results(html, self.council_name, body_text=body_text, quiet=True)
         if apps:
+            async def _parse_here(pg):
+                h = await pg.content()
+                got = _parse_results_html_fallback(h, self.council_name)
+                if not got:
+                    try:
+                        bt = await pg.inner_text("body")
+                    except Exception:
+                        bt = None
+                    got = _parse_card_results(h, self.council_name, body_text=bt, quiet=True)
+                return got
+            apps = await self._collect_further_pages(page, apps, _parse_here)
+            try:
+                m = re.search(r"Planning Applications \((\d+)\)", await page.inner_text("body"))
+                if m and int(m.group(1)) > len(apps):
+                    print(f"    ⚠ [{self.council_name}] page header says {m.group(1)} applications "
+                          f"but only {len(apps)} were read")
+            except Exception:
+                pass
             print(f"    ✓ [{self.council_name}] Weekly List tab: {len(apps)} via HTML fallback (CSV unavailable)")
         else:
             print(f"    ⚠ [{self.council_name}] Weekly List tab: no results found via CSV or HTML fallback")
