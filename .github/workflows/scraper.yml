@@ -205,6 +205,7 @@ on:
     - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
     - cron: '20 10 */3 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~3 days
     - cron: '40 10 */3 * *'  # Highland Council — weekly-list PDFs, checked every ~3 days (real data only changes weekly)
+    - cron: '50 10 * * *'  # Aberdeenshire + East Lothian weekly lists — daily (lists are weekly, but a daily run keeps "updated within 3 days" honest)
     - cron: '0 17 * * *'  # Medway decisions
   workflow_dispatch:
     inputs:
@@ -5134,16 +5135,14 @@ jobs:
           echo "IPv4:"; curl -4 -s --max-time 15 https://api.ipify.org; echo
           echo "IPv6:"; curl -6 -s --max-time 15 https://api64.ipify.org || echo "none"
 
-
   scottish_council_lists:
     # Aberdeenshire and East Lothian: reads the weekly lists those councils publish
     # themselves (PDF / RTF / Word). Does NOT use the Idox Public Access portals.
-    # Add "scottish_council_lists" to the workflow_dispatch job options.
-    #
-    # FIRST RUN: leave DRY_RUN "1" (reads and parses, writes nothing) and check the log.
-    # SECOND RUN: set DRY_RUN "0" and DAYS_BACK "120" once to backfill.
-    # THEN: DAYS_BACK "9" for the normal daily run (cron to be added after a clean backfill).
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scottish_council_lists'
+    # Daily at 10:50 UTC; DAYS_BACK "9" re-reads the last ~9 days of lists each run
+    # (re-saving is harmless). One-off backfill: run manually with DAYS_BACK "120".
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scottish_council_lists') ||
+      (github.event_name == 'schedule' && github.event.schedule == '50 10 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 20
     steps:
@@ -5157,7 +5156,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           DAYS_BACK: "9"
-          DRY_RUN: "0"
         run: cd scrapers && python aberdeenshire_scraper.py
       - name: East Lothian weekly lists
         if: always()
@@ -5165,5 +5163,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           DAYS_BACK: "9"
-          DRY_RUN: "0"
         run: cd scrapers && python east_lothian_scraper.py
+
