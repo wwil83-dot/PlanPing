@@ -5156,7 +5156,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          DAYS_BACK: "120"
+          DAYS_BACK: "9"
           DRY_RUN: "0"
         run: cd scrapers && python aberdeenshire_scraper.py
       - name: East Lothian weekly lists
@@ -5164,6 +5164,6 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          DAYS_BACK: "120"
+          DAYS_BACK: "9"
           DRY_RUN: "0"
         run: cd scrapers && python east_lothian_scraper.py
