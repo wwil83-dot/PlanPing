@@ -1136,8 +1136,13 @@ class ArcusPortal:
                   });
                   return out.slice(-14);
                 }""")
+                try:
+                    cnt = [l.strip()[:80] for l in (await page.inner_text("body")).split("\n")
+                           if re.search(r"showing|of \d+ result|\d+ result", l, re.I)][:4]
+                except Exception:
+                    cnt = []
                 print(f"    ⚠ [{self.council_name}] {len(first_apps)} applications on page 1 and no next page "
-                      f"found — pagination markup: {info}")
+                      f"found — pagination markup: {info}; count text: {cnt}")
             except Exception:
                 pass
         return all_apps
@@ -1152,7 +1157,8 @@ class ArcusPortal:
         attempt found nothing, so councils that already work are
         untouched."""
         try:
-            if await page.get_by_text("Search by date", exact=False).count() == 0:
+            if (await page.get_by_text("Search by date", exact=False).count() == 0
+                    and await page.get_by_text("Including records for 7 days", exact=False).count() == 0):
                 return []
             field = page.get_by_label("Select a date for", exact=False)
             is_input = False
@@ -1169,7 +1175,9 @@ class ArcusPortal:
                 print(f"    ⚠ [{self.council_name}] 'Search by date' page has no findable date box")
                 return []
             start = date.today() - timedelta(days=6)
-            await field.first.fill(start.strftime("%d/%m/%Y"), timeout=5_000)
+            # Epping (2026-10-17): its date box is mm/dd/yyyy ("Format:
+            # 12/31/2024"), so typing dd/mm/yyyy gave a wrong week.
+            await field.first.fill(start.strftime(await self._detect_date_format(page)), timeout=5_000)
             await field.first.press("Tab")
             await asyncio.sleep(1)
             btn = page.get_by_role("button", name="Search", exact=True)
@@ -1191,6 +1199,59 @@ class ArcusPortal:
         except Exception as e:
             print(f"    ⚠ [{self.council_name}] week-start-date retry failed: {e}")
             return []
+
+    async def _open_advanced_search(self, page: Page) -> bool:
+        """Click the real "Advanced search" tab/link. 2026-10-17 log: on
+        Milton Keynes and Burnley the old get_by_text("Advanced search",
+        exact=False).first matched the intro PARAGRAPH ("Use Advanced
+        search to refine searches…"), so the click did nothing and the
+        form never opened. Prefer a tab/link/button whose whole name is
+        "Advanced search", then an exact-text match; the loose match is
+        only the last resort."""
+        name = re.compile(r"^\s*advanced search\s*$", re.I)
+        for loc in (page.get_by_role("tab", name=name),
+                    page.get_by_role("link", name=name),
+                    page.get_by_role("button", name=name),
+                    page.get_by_text(name)):
+            try:
+                for i in range(min(await loc.count(), 4)):
+                    el = loc.nth(i)
+                    if await el.is_visible():
+                        await el.click(timeout=5_000)
+                        return True
+            except Exception:
+                continue
+        try:
+            loose = page.get_by_text("Advanced search", exact=False)
+            if await loose.count() > 0:
+                await loose.last.click(timeout=5_000)
+                return True
+        except Exception:
+            pass
+        return False
+
+    async def _detect_date_format(self, page: Page) -> str:
+        """Which way round does THIS site want typed dates? Epping's date
+        box says "Format: 12/31/2024" (mm/dd/yyyy); others show a
+        dd/mm/yyyy placeholder. Read it from the page; default dd/mm."""
+        try:
+            m = re.search(r"Format:\s*(\d{1,2})/(\d{1,2})/(\d{4})", await page.inner_text("body"))
+            if m:
+                a, b = int(m.group(1)), int(m.group(2))
+                if b > 12 >= a:
+                    return "%m/%d/%Y"
+                if a > 12 >= b:
+                    return "%d/%m/%Y"
+            ph = page.locator("input[placeholder]")
+            for i in range(min(await ph.count(), 12)):
+                p = ((await ph.nth(i).get_attribute("placeholder")) or "").lower()
+                if "mm/dd" in p:
+                    return "%m/%d/%Y"
+                if "dd/mm" in p:
+                    return "%d/%m/%Y"
+        except Exception:
+            pass
+        return "%d/%m/%Y"
 
     async def _wait_for_advanced_form(self, page: Page):
         """Milton Keynes/Burnley (2026-10-16 log): at the Category and date
@@ -1214,18 +1275,15 @@ class ArcusPortal:
                 pass
             if not clicked_again and asyncio.get_event_loop().time() - start > 20:
                 clicked_again = True
-                try:
-                    loc = page.get_by_text("Advanced search", exact=False)
-                    if await loc.count() > 0:
-                        await loc.first.click(timeout=5_000)
-                except Exception:
-                    pass
+                await self._open_advanced_search(page)
             await asyncio.sleep(2)
         print(f"    ⚠ [{self.council_name}] advanced form not visible after 45s")
 
-    async def _fill_valid_dates(self, page: Page, date_from: date, date_to: date, fmt: str):
+    async def _fill_valid_dates(self, page: Page, date_from: date, date_to: date, fmt: Optional[str] = None):
         """Type the from/to dates into whichever Valid/Received date boxes
-        exist (Milton Keynes has no 'to' box)."""
+        exist (Milton Keynes has no 'to' box). fmt=None → detect from the page."""
+        if fmt is None:
+            fmt = await self._detect_date_format(page)
         for label in ["Valid date from", "Date Valid From", "Date from", "Received date from"]:
             try:
                 field = page.get_by_label(label, exact=False)
@@ -1422,16 +1480,10 @@ class ArcusPortal:
         await asyncio.sleep(5)
 
         # --- Click "Advanced search" ---
-        try:
-            loc = page.get_by_text("Advanced search", exact=False)
-            if await loc.count() == 0:
-                print(f"    ⚠ 'Advanced search' link not found — council may have "
-                      f"changed its homepage, re-run arcus_recon.py to confirm")
-                await self._dump_form_controls(page)
-                return []
-            await loc.first.click(timeout=5_000)
-        except Exception as e:
-            print(f"    ⚠ Failed to click 'Advanced search': {e}")
+        if not await self._open_advanced_search(page):
+            print(f"    ⚠ 'Advanced search' link not found — council may have "
+                  f"changed its homepage, re-run arcus_recon.py to confirm")
+            await self._dump_form_controls(page)
             return []
 
         await asyncio.sleep(5)
@@ -1483,7 +1535,8 @@ class ArcusPortal:
             self.pending_recheck, today,
             normal_days_back=self.bulk_days_back or 14,
         )
-        await self._fill_valid_dates(page, date_from, today, "%d/%m/%Y")
+        first_fmt = await self._detect_date_format(page)
+        await self._fill_valid_dates(page, date_from, today, first_fmt)
 
         await asyncio.sleep(1)
         await self._category_snapshot(page, "before Search click")
@@ -1496,10 +1549,13 @@ class ArcusPortal:
         # once more. One retry at most. ---
         want_from, want_to = date_from.isoformat(), today.isoformat()
         got = _valid_dates_in_url(page.url)
+        print(f"    ℹ [{self.council_name}] dates sent {date_from.isoformat()} → {today.isoformat()} "
+              f"(typed {first_fmt}); site read: {got if got is not None else 'not shown in URL'}")
         if got is not None and (got[0] != want_from or got[1] not in (None, "", want_to)):
             print(f"    ⚠ [{self.council_name}] site read the dates as from={got[0]} to={got[1]} "
-                  f"(wanted {want_from} / {want_to}); retrying as mm/dd/yyyy")
-            await self._fill_valid_dates(page, date_from, today, "%m/%d/%Y")
+                  f"(wanted {want_from} / {want_to}); retrying with the other date order")
+            alt_fmt = "%m/%d/%Y" if first_fmt == "%d/%m/%Y" else "%d/%m/%Y"
+            await self._fill_valid_dates(page, date_from, today, alt_fmt)
             await asyncio.sleep(1)
             if await self._click_search_and_wait(page):
                 got2 = _valid_dates_in_url(page.url)
@@ -1520,6 +1576,9 @@ class ArcusPortal:
             async def _parse_here(pg):
                 return _parse_results_html_fallback(await pg.content(), self.council_name)
             apps = await self._collect_further_pages(page, apps, _parse_here)
+            if len(apps) == 250:
+                print(f"    ⚠ [{self.council_name}] exactly 250 results — looks like the portal's own "
+                      f"maximum; the search window is probably too wide to get everything")
             print(f"    ✓ [{self.council_name}] Advanced Search: {len(apps)} via HTML fallback (CSV unavailable)")
         else:
             print(f"    ⚠ [{self.council_name}] Advanced Search: no results found via CSV or HTML fallback")
