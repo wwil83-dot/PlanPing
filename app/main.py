@@ -1727,7 +1727,9 @@ def _status_class(status: str) -> str:
         return "approved"
     if s in ("refused", "rejected"):
         return "refused"
-    if s in ("withdrawn",):
+    # "closed" (e.g. Wiltshire, added 2026-10-17) reuses the neutral
+    # withdrawn styling rather than looking like a live, pending case.
+    if s in ("withdrawn", "closed"):
         return "withdrawn"
     return "pending"
 
