@@ -121,6 +121,11 @@ def _normalise_status(status_raw: str, decision_raw: str = "") -> str:
         return "refused"
     if "withdraw" in s:
         return "withdrawn"
+    # 2026-10-17: Wiltshire's "Closed" (case finished, no outcome given
+    # in the status itself). It used to fall through to "pending", which
+    # made the nightly re-check keep re-fetching it for 120 days.
+    if "closed" in s:
+        return "closed"
     return "pending"
 
 
@@ -389,6 +394,9 @@ def _parse_csv(csv_text: str, council_name: str) -> list[dict]:
 # investigating with real evidence rather than assumed benign.
 _DECISION_DATE_DIAGNOSED: set[str] = set()
 _CATEGORY_DIAG_COUNCILS = {"Milton Keynes City Council", "Burnley Borough Council"}
+# Category values that mean the Advanced search form is on the wrong
+# register. Cumberland (2026-10-17) opens on "Planning Appeals".
+_WRONG_CATEGORIES = ("Building Control Applications", "Planning Appeals")
 
 
 def _valid_dates_in_url(url: str):
@@ -1356,12 +1364,13 @@ class ArcusPortal:
                 the visible text AND Playwright locators (which see into
                 shadow DOM, unlike inner_text)."""
                 try:
-                    if "Building Control Applications" in await _lines():
-                        return True
-                    loc = page.get_by_text("Building Control Applications", exact=True)
-                    for i in range(min(await loc.count(), 4)):
-                        if await loc.nth(i).is_visible():
+                    for wrong in _WRONG_CATEGORIES:
+                        if wrong in await _lines():
                             return True
+                        loc = page.get_by_text(wrong, exact=True)
+                        for i in range(min(await loc.count(), 4)):
+                            if await loc.nth(i).is_visible():
+                                return True
                 except Exception:
                     pass
                 return False
@@ -1403,7 +1412,8 @@ class ArcusPortal:
 
             seen_options: list = []
             # Attempt 1: click the displayed current value.
-            shown = page.get_by_text("Building Control Applications", exact=False)
+            shown = page.get_by_text(re.compile(
+                "^\\s*(" + "|".join(re.escape(w) for w in _WRONG_CATEGORIES) + ")\\s*$"))
             for i in range(min(await shown.count(), 6)):
                 el = shown.nth(i)
                 try:
