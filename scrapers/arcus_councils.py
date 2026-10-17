@@ -149,11 +149,17 @@ ARCUS_COUNCILS = [
      "weekly_list",
      ["Planning Applications Validated in last 7 days"]),
 
+    # 2026-10-17: moved from weekly_list to advanced_search. Its two
+    # quick-link lists always returned exactly 10 with no pager, while
+    # the Advanced search on the same /pr3 register (screenshot: Valid
+    # date 01/10-17/10, Planning Applications) lists well over 10 and
+    # paginates like Bromley/Milton Keynes. The addresses (Wigton,
+    # Workington, Maryport, Cockermouth) are Allerdale's area. Decisions
+    # are caught by the pending-recheck date widening, as for the other
+    # advanced_search councils. TEST FIRST with COUNCIL_FILTER=Cumberland.
     ("Cumberland Council",
      "https://cumberlandcouncil.my.site.com/pr3/s",
-     "weekly_list",
-     ["Decisions made in the last 7 days",
-      "Applications Validated past 7 days"]),
+     "advanced_search", None),
 
     # -------------------------------------------------------------------
     # mode="advanced_search" — activated 2026-07-16. First live production
