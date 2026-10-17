@@ -400,6 +400,10 @@ _WRONG_CATEGORIES = ("Building Control Applications", "Planning Appeals")
 
 
 def _valid_dates_in_url(url: str):
+    return _filter_dates_in_url(url, "valid")
+
+
+def _filter_dates_in_url(url: str, kind: str = "valid"):
     """Arcus puts the search it actually ran in the page URL (c__q=<base64
     JSON>). Return (valid_from_iso, valid_to_iso) as the SITE understood
     them, or None when the URL has no readable search. Rochdale
@@ -418,10 +422,16 @@ def _valid_dates_in_url(url: str):
         for req in data.get("requests", []):
             for f in req.get("searchFilters", []):
                 name = (f.get("fieldDeveloperName") or "").lower()
-                if not name or any(w in name for w in ("decision", "commence", "complet", "notice")):
+                if not name:
                     continue
-                if not ("valid" in name or "receiv" in name):
-                    continue
+                if kind == "decision":
+                    if "decision" not in name:
+                        continue
+                else:
+                    if any(w in name for w in ("decision", "commence", "complet", "notice")):
+                        continue
+                    if not ("valid" in name or "receiv" in name):
+                        continue
                 if name.endswith("from"):
                     frm, found = f.get("fieldValue"), True
                 elif name.endswith("to"):
@@ -1541,10 +1551,24 @@ class ArcusPortal:
         # by the standalone _compute_recheck_date_from() so this exact
         # logic is directly testable without a browser. ---
         today = date.today()
-        date_from = _compute_recheck_date_from(
-            self.pending_recheck, today,
-            normal_days_back=self.bulk_days_back or 14,
-        )
+        normal_days = self.bulk_days_back or 14
+        # 2026-10-17: Bromley, Bracknell and Wiltshire hit the portal's
+        # 250-result ceiling because the validated window was stretched
+        # back up to 120 days to re-check old pending cases. When the form
+        # has a "Decision date from" box we now run TWO small searches
+        # instead: validated in the last N days, then DECIDED in the last
+        # N days (which catches old applications that were just decided,
+        # the whole point of the stretched window). Forms without that box
+        # keep the old stretched window.
+        use_decision_search = await self._has_decision_field(page)
+        if use_decision_search:
+            date_from = today - timedelta(days=normal_days)
+        else:
+            date_from = _compute_recheck_date_from(
+                self.pending_recheck, today, normal_days_back=normal_days,
+            )
+        print(f"    ℹ [{self.council_name}] decision-date box: "
+              f"{'found, so validated + decided searches' if use_decision_search else 'not found, so one stretched validated search'}")
         first_fmt = await self._detect_date_format(page)
         await self._fill_valid_dates(page, date_from, today, first_fmt)
 
@@ -1574,11 +1598,30 @@ class ArcusPortal:
                     print(f"    {'ℹ' if ok else '⚠'} [{self.council_name}] after retry the site reads "
                           f"from={got2[0]} to={got2[1]}")
 
-        # --- Try CSV first, HTML fallback second — same as weekly_list mode ---
-        apps = await self._try_csv_download(page)
-        if apps:
-            print(f"    ✓ [{self.council_name}] Advanced Search: {len(apps)} via CSV")
-            return apps
+        apps = await self._read_advanced_results(page, "Advanced Search", try_csv=True)
+
+        if use_decision_search:
+            try:
+                more = await self._decision_date_search(page, today, normal_days, first_fmt)
+            except Exception as e:
+                print(f"    ⚠ [{self.council_name}] decided-in-window search failed: {e}")
+                more = []
+            if more:
+                seen = {a["reference"] for a in apps}
+                fresh = [a for a in more if a["reference"] not in seen]
+                print(f"    ℹ [{self.council_name}] decided-in-window search: {len(more)} found, "
+                      f"{len(fresh)} not already in the validated list")
+                apps = apps + fresh
+        return apps
+
+    async def _read_advanced_results(self, page: Page, label: str, try_csv: bool = True) -> list[dict]:
+        """Read the results now on the page (CSV first when asked, then the
+        HTML parser plus pagination) and log the outcome."""
+        if try_csv:
+            apps = await self._try_csv_download(page)
+            if apps:
+                print(f"    ✓ [{self.council_name}] {label}: {len(apps)} via CSV")
+                return apps
 
         html = await page.content()
         apps = _parse_results_html_fallback(html, self.council_name)
@@ -1589,11 +1632,68 @@ class ArcusPortal:
             if len(apps) == 250:
                 print(f"    ⚠ [{self.council_name}] exactly 250 results — looks like the portal's own "
                       f"maximum; the search window is probably too wide to get everything")
-            print(f"    ✓ [{self.council_name}] Advanced Search: {len(apps)} via HTML fallback (CSV unavailable)")
+            print(f"    ✓ [{self.council_name}] {label}: {len(apps)} via HTML fallback (CSV unavailable)")
         else:
-            print(f"    ⚠ [{self.council_name}] Advanced Search: no results found via CSV or HTML fallback")
+            print(f"    ⚠ [{self.council_name}] {label}: no results found via CSV or HTML fallback")
             await self._dump_form_controls(page)
         return apps
+
+    async def _has_decision_field(self, page: Page) -> bool:
+        try:
+            return await page.get_by_label(re.compile(r"decision.*date from", re.I)).count() > 0
+        except Exception:
+            return False
+
+    async def _clear_valid_dates(self, page: Page):
+        for label in ["Valid date from", "Date Valid From", "Date from", "Received date from",
+                      "Valid date to", "Date Valid To", "Date to", "Received date to"]:
+            try:
+                field = page.get_by_label(label, exact=False)
+                if await field.count() > 0:
+                    await field.first.fill("", timeout=5_000)
+                    await field.first.press("Tab")
+            except Exception:
+                continue
+
+    async def _set_decision_dates(self, page: Page, d_from: date, d_to: date, fmt: str):
+        for pattern, value in ((r"decision.*date from", d_from), (r"decision.*date to", d_to)):
+            try:
+                field = page.get_by_label(re.compile(pattern, re.I))
+                if await field.count() > 0:
+                    await field.first.fill(value.strftime(fmt), timeout=5_000)
+                    await field.first.press("Tab")
+            except Exception:
+                continue
+
+    async def _decision_date_search(self, page: Page, today: date, days: int, fmt: str) -> list[dict]:
+        """Second search: everything DECIDED in the last `days` days,
+        whenever it was validated. Reopens the criteria panel if the site
+        collapsed it after the first search (Rochdale/Burnley/Milton
+        Keynes show 'Show the search criteria' once results are up)."""
+        try:
+            show = page.get_by_text(re.compile(r"^\s*Show the search criteria\s*$", re.I))
+            if await show.count() > 0 and await show.first.is_visible():
+                await show.first.click(timeout=5_000)
+                await asyncio.sleep(2)
+        except Exception:
+            pass
+        want_from, want_to = (today - timedelta(days=days)).isoformat(), today.isoformat()
+        await self._clear_valid_dates(page)
+        await self._set_decision_dates(page, today - timedelta(days=days), today, fmt)
+        await asyncio.sleep(1)
+        if not await self._click_search_and_wait(page):
+            return []
+        got = _filter_dates_in_url(page.url, "decision")
+        print(f"    ℹ [{self.council_name}] decision dates sent {want_from} → {want_to}; "
+              f"site read: {got if got is not None else 'not shown in URL'}")
+        if got is not None and got[0] != want_from:
+            alt = "%m/%d/%Y" if fmt == "%d/%m/%Y" else "%d/%m/%Y"
+            print(f"    ⚠ [{self.council_name}] decision date read wrongly; retrying with the other date order")
+            await self._set_decision_dates(page, today - timedelta(days=days), today, alt)
+            await asyncio.sleep(1)
+            if not await self._click_search_and_wait(page):
+                return []
+        return await self._read_advanced_results(page, "Decided-in-window search", try_csv=False)
 
     async def _scrape_tabbed_weekly_list(self, page: Page, category_hint: Optional[str]) -> list[dict]:
         """For councils using the visibly different tabbed Arcus template
