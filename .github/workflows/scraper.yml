@@ -592,7 +592,6 @@ jobs:
       - run: playwright install --with-deps chromium
       - name: Run Arcus scraper
         env:
-          COUNCIL_FILTER: "Bracknell,Wiltshire"
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MAX_MINUTES: "30"
