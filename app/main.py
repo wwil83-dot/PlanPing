@@ -11,14 +11,65 @@ from typing import Optional
 from jinja2 import Environment, FileSystemLoader
 
 from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.db import get_db, lifespan
 from app.geocode import postcode_lookup
 
 app = FastAPI(lifespan=lifespan, title="PlanPing")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# ---------------------------------------------------------------------
+# Bandwidth protection — ADDED 2026-10-17. Render's request log showed
+# ~70% of traffic was declared crawlers (AhrefsBot, SemrushBot,
+# Bytespider, PetalBot...) walking /application/<id> pages, plus
+# browser-disguised scrapers, ~15 GB/month in total. Three cheap fixes:
+#   1. Refuse SEO/junk crawlers outright (tiny 403, no DB query).
+#      robots.txt asks them to stop too, but Bytespider and others
+#      ignore it. /robots.txt and /sitemap.xml stay open to everyone so
+#      well-behaved bots can still read the rules.
+#   2. gzip responses (the 63 KB /find-a-professional pages shrink most).
+#   3. Cache-Control on public pages, so a CDN (e.g. Cloudflare in front
+#      of Render) and browsers can reuse them instead of re-fetching.
+# Add more user-agent fragments without a code change by setting the
+# EXTRA_BLOCKED_UAS env var on Render (comma-separated).
+# ---------------------------------------------------------------------
+_BLOCKED_UA_SUBSTRINGS = (
+    "ahrefsbot", "semrushbot", "bytespider", "petalbot", "mj12bot",
+    "dotbot", "dataforseobot", "blexbot", "barkrowler", "serpstatbot",
+) + tuple(
+    s.strip().lower()
+    for s in os.environ.get("EXTRA_BLOCKED_UAS", "").split(",") if s.strip()
+)
+
+_CACHEABLE_PREFIXES = ("/application/", "/council/", "/towns/", "/guides/")
+
+
+@app.middleware("http")
+async def _bandwidth_policy(request: Request, call_next):
+    path = request.url.path
+    if path not in ("/robots.txt", "/sitemap.xml"):
+        ua = (request.headers.get("user-agent") or "").lower()
+        if ua and any(s in ua for s in _BLOCKED_UA_SUBSTRINGS):
+            return Response(content="Forbidden", status_code=403,
+                            media_type="text/plain",
+                            headers={"Cache-Control": "no-store"})
+
+    response = await call_next(request)
+
+    if (request.method == "GET" and response.status_code == 200
+            and "cache-control" not in response.headers):
+        if path.startswith(_CACHEABLE_PREFIXES):
+            response.headers["Cache-Control"] = "public, max-age=300, s-maxage=1800"
+        elif path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=3600"
+    return response
+
+
+# Added after the policy middleware above, so it wraps it (outermost).
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 @app.get("/googled05728f4001c6ecf.html", response_class=PlainTextResponse)
@@ -1097,7 +1148,29 @@ async def robots():
     # Points crawlers directly at the sitemap — the standard,
     # automatic discovery method alongside manually submitting it in
     # Search Console.
-    content = f"User-agent: *\nAllow: /\nSitemap: {SITE_BASE_URL}/sitemap.xml\n"
+    # 2026-10-17: SEO/junk crawlers blocked by name (also refused with a
+    # 403 in _bandwidth_policy above, since some ignore robots.txt), and
+    # query-driven pages that have no search value but cost a database
+    # query per hit (/search, street history) are closed to everyone, as
+    # are the deep "&page=N" pages of the professionals directory.
+    # Search Console (2026-10-17) showed the filtered town pages
+    # (?town=...) are starting to get impressions for local trade
+    # searches, so those stay crawlable.
+    blocked = ["AhrefsBot", "SemrushBot", "Bytespider", "PetalBot", "MJ12bot", "DotBot"]
+    parts = [f"User-agent: {b}\nDisallow: /\n" for b in blocked]
+    parts.append(
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /search\n"
+        "Disallow: /bulk-search\n"
+        "Disallow: /street-history?\n"
+        "Disallow: /find-a-professional?*page=\n"
+        "Disallow: /api/\n"
+        "Disallow: /confirm/\n"
+        "Disallow: /unsubscribe/\n"
+        f"Sitemap: {SITE_BASE_URL}/sitemap.xml\n"
+    )
+    content = "\n".join(parts)
     return PlainTextResponse(content=content, media_type="text/plain")
 
 KNOWN_GAP_REASONS = {
