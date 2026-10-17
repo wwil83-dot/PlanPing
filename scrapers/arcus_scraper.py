@@ -40,9 +40,13 @@ KEY DIFFERENCES FROM IDOX, worth remembering:
 import asyncio
 import csv
 import io
+import base64
+import json
 import os
+import random
 import re
 import sys
+import urllib.parse
 import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
@@ -78,6 +82,9 @@ BULK_DAYS_BACK = int(os.environ.get("BULK_DAYS_BACK", "180"))
 # lists are paginated — most councils show 10 per page (Eastleigh 5,
 # Wiltshire 100) — and until now only page 1 was ever read.
 MAX_RESULT_PAGES = int(os.environ.get("MAX_RESULT_PAGES", "30"))
+# Base pause (seconds) between result pages, plus 0-2s random jitter, so a
+# paginated search looks like a person clicking through, not a burst.
+PAGE_DELAY_SECONDS = float(os.environ.get("PAGE_DELAY_SECONDS", "4"))
 
 START_TIME = time.monotonic()
 
@@ -382,6 +389,38 @@ def _parse_csv(csv_text: str, council_name: str) -> list[dict]:
 # investigating with real evidence rather than assumed benign.
 _DECISION_DATE_DIAGNOSED: set[str] = set()
 _CATEGORY_DIAG_COUNCILS = {"Milton Keynes City Council", "Burnley Borough Council"}
+
+
+def _valid_dates_in_url(url: str):
+    """Arcus puts the search it actually ran in the page URL (c__q=<base64
+    JSON>). Return (valid_from_iso, valid_to_iso) as the SITE understood
+    them, or None when the URL has no readable search. Rochdale
+    (2026-10-16): we typed 12/08/2026 and 16/10/2026, the site read them as
+    2026-12-08 and nothing (mm/dd instead of dd/mm), so the search ran on
+    a future date and found nothing."""
+    try:
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get("c__q")
+        if not q:
+            return None
+        raw = q[0]
+        raw += "=" * (-len(raw) % 4)
+        data = json.loads(base64.urlsafe_b64decode(raw.encode()).decode())
+        frm = to = None
+        found = False
+        for req in data.get("requests", []):
+            for f in req.get("searchFilters", []):
+                name = (f.get("fieldDeveloperName") or "").lower()
+                if not name or any(w in name for w in ("decision", "commence", "complet", "notice")):
+                    continue
+                if not ("valid" in name or "receiv" in name):
+                    continue
+                if name.endswith("from"):
+                    frm, found = f.get("fieldValue"), True
+                elif name.endswith("to"):
+                    to, found = f.get("fieldValue"), True
+        return (frm, to) if found else None
+    except Exception:
+        return None
 
 # 2026-07-26/28: real evidence found via a SQL audit and 3 rounds of
 # direct diagnostic evidence. Three GENUINELY DIFFERENT root causes were
@@ -1026,10 +1065,16 @@ class ArcusPortal:
                     except Exception:
                         continue
             # "Load more" / "Show more" style controls
-            more = page.get_by_role("button", name=re.compile(r"^\s*(load|show|view)\s+more", re.I))
-            if await more.count() > 0 and await more.first.is_visible():
-                await more.first.click(timeout=15_000, no_wait_after=True)
-                return True
+            # Eastleigh (2026-10-16 log) shows an <a> "View More", i.e. a LINK,
+            # not a button — look for both.
+            for more in (page.get_by_role("button", name=re.compile(r"^\s*(load|show|view)\s+more", re.I)),
+                         page.get_by_role("link", name=re.compile(r"^\s*(load|show|view)\s+more", re.I)),
+                         page.get_by_text(re.compile(r"^\s*view more\s*$", re.I))):
+                for k in range(min(await more.count(), 3)):
+                    el = more.nth(k)
+                    if await el.is_visible():
+                        await el.click(timeout=15_000, no_wait_after=True)
+                        return True
         except Exception as e:
             print(f"    ⚠ [{self.council_name}] pagination click failed: {e}")
         return False
@@ -1047,6 +1092,7 @@ class ArcusPortal:
             if should_stop():
                 print(f"    ⚠ [{self.council_name}] stopping pagination: time budget nearly used")
                 break
+            await asyncio.sleep(PAGE_DELAY_SECONDS + random.uniform(0, 2))
             if not await self._go_next_page(page):
                 break
             await asyncio.sleep(3)
@@ -1146,6 +1192,77 @@ class ArcusPortal:
             print(f"    ⚠ [{self.council_name}] week-start-date retry failed: {e}")
             return []
 
+    async def _wait_for_advanced_form(self, page: Page):
+        """Milton Keynes/Burnley (2026-10-16 log): at the Category and date
+        steps the page text had no "Category" line at all, yet the final
+        dump a little later showed the full form. Their Advanced search
+        form renders slowly, so every step before it silently did nothing.
+        Wait (up to ~45s, re-clicking "Advanced search" once at 20s) until
+        the form's Category label is actually visible."""
+        start = asyncio.get_event_loop().time()
+        clicked_again = False
+        while asyncio.get_event_loop().time() - start < 45:
+            try:
+                lab = page.get_by_text("Category", exact=True)
+                for i in range(min(await lab.count(), 4)):
+                    if await lab.nth(i).is_visible():
+                        waited = asyncio.get_event_loop().time() - start
+                        if waited > 3:
+                            print(f"    ℹ [{self.council_name}] advanced form appeared after {waited:.0f}s")
+                        return
+            except Exception:
+                pass
+            if not clicked_again and asyncio.get_event_loop().time() - start > 20:
+                clicked_again = True
+                try:
+                    loc = page.get_by_text("Advanced search", exact=False)
+                    if await loc.count() > 0:
+                        await loc.first.click(timeout=5_000)
+                except Exception:
+                    pass
+            await asyncio.sleep(2)
+        print(f"    ⚠ [{self.council_name}] advanced form not visible after 45s")
+
+    async def _fill_valid_dates(self, page: Page, date_from: date, date_to: date, fmt: str):
+        """Type the from/to dates into whichever Valid/Received date boxes
+        exist (Milton Keynes has no 'to' box)."""
+        for label in ["Valid date from", "Date Valid From", "Date from", "Received date from"]:
+            try:
+                field = page.get_by_label(label, exact=False)
+                if await field.count() > 0:
+                    await field.first.fill(date_from.strftime(fmt), timeout=5_000)
+                    await field.first.press("Tab")
+                    break
+            except Exception:
+                continue
+        for label in ["Valid date to", "Date Valid To", "Date to", "Received date to"]:
+            try:
+                field = page.get_by_label(label, exact=False)
+                if await field.count() > 0:
+                    await field.first.fill(date_to.strftime(fmt), timeout=5_000)
+                    await field.first.press("Tab")
+                    break
+            except Exception:
+                continue
+
+    async def _click_search_and_wait(self, page: Page) -> bool:
+        """Click the LAST "Search" button (the round-12 fix) and wait."""
+        try:
+            search_buttons = page.get_by_role("button", name="Search", exact=False)
+            if await search_buttons.count() == 0:
+                print("    ⚠ No 'Search' button found")
+                return False
+            await search_buttons.last.click(timeout=5_000)
+        except Exception as e:
+            print(f"    ⚠ Error clicking Search: {e}")
+            return False
+        await asyncio.sleep(5)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=15_000)
+        except PlaywrightTimeout:
+            pass
+        return True
+
     async def _category_snapshot(self, page: Page, when: str):
         """Diagnostic (2026-10-16): print which Category the form shows at
         this moment. Milton Keynes and Burnley end up on Building Control
@@ -1153,8 +1270,12 @@ class ArcusPortal:
         try:
             lines = [l.strip() for l in (await page.inner_text("body")).split("\n") if l.strip()]
             if self.council_name in _CATEGORY_DIAG_COUNCILS or "Building Control Applications" in lines:
-                cat = lines[lines.index("Category") + 1] if "Category" in lines else "?"
-                print(f"    ℹ [{self.council_name}] category {when}: {cat!r}")
+                if "Category" in lines:
+                    cat = lines[lines.index("Category") + 1]
+                    print(f"    ℹ [{self.council_name}] category {when}: {cat!r}")
+                else:
+                    print(f"    ℹ [{self.council_name}] category {when}: form not visible yet; "
+                          f"page text starts: {lines[:10]}")
         except Exception:
             pass
 
@@ -1172,7 +1293,22 @@ class ArcusPortal:
             async def _lines() -> list[str]:
                 return [l.strip() for l in (await page.inner_text("body")).split("\n")]
 
-            if "Building Control Applications" not in await _lines():
+            async def _on_bc() -> bool:
+                """True if Building Control is the shown category. Checks
+                the visible text AND Playwright locators (which see into
+                shadow DOM, unlike inner_text)."""
+                try:
+                    if "Building Control Applications" in await _lines():
+                        return True
+                    loc = page.get_by_text("Building Control Applications", exact=True)
+                    for i in range(min(await loc.count(), 4)):
+                        if await loc.nth(i).is_visible():
+                            return True
+                except Exception:
+                    pass
+                return False
+
+            if not await _on_bc():
                 return
             print(f"    ℹ [{self.council_name}] form is on Building Control; switching to Planning")
 
@@ -1194,6 +1330,17 @@ class ArcusPortal:
                             await opts.nth(i).click(timeout=5_000, force=True)
                             return None
                     return texts
+                # Fallback (Milton Keynes screenshot 2026-10-17: the open list
+                # shows Building Control / Planning Appeals / Planning
+                # Applications / Planning Enforcements): click the exact text.
+                exact = page.get_by_text("Planning Applications", exact=True)
+                for i in range(min(await exact.count(), 4)):
+                    try:
+                        if await exact.nth(i).is_visible():
+                            await exact.nth(i).click(timeout=5_000, force=True)
+                            return None
+                    except Exception:
+                        continue
                 return []
 
             seen_options: list = []
@@ -1215,7 +1362,7 @@ class ArcusPortal:
             else:
                 res = "no-pick"
             # Attempt 2: the label/combobox route.
-            if "Building Control Applications" in await _lines():
+            if await _on_bc():
                 for fc in (page.get_by_role("combobox", name="Category", exact=False),
                            page.get_by_label("Category", exact=False),
                            page.get_by_role("button", name="Category", exact=False)):
@@ -1241,7 +1388,7 @@ class ArcusPortal:
             except PlaywrightTimeout:
                 pass
             await asyncio.sleep(3)
-            if "Building Control Applications" in await _lines():
+            if await _on_bc():
                 print(f"    ⚠ [{self.council_name}] still on Building Control; could not switch to "
                       f"Planning. Options seen: {seen_options}")
             else:
@@ -1292,6 +1439,7 @@ class ArcusPortal:
             await page.wait_for_load_state("networkidle", timeout=15_000)
         except PlaywrightTimeout:
             pass
+        await self._wait_for_advanced_form(page)
 
         # --- Select Category via Lightning combobox (click to open, click
         # the matching option — NOT select_option(), which only works on
@@ -1335,45 +1483,30 @@ class ArcusPortal:
             self.pending_recheck, today,
             normal_days_back=self.bulk_days_back or 14,
         )
-        for label in ["Valid date from", "Date Valid From", "Date from", "Received date from"]:
-            try:
-                field = page.get_by_label(label, exact=False)
-                if await field.count() > 0:
-                    await field.first.fill(date_from.strftime("%d/%m/%Y"), timeout=5_000)
-                    await field.first.press("Tab")
-                    break
-            except Exception:
-                continue
-        for label in ["Valid date to", "Date Valid To", "Date to", "Received date to"]:
-            try:
-                field = page.get_by_label(label, exact=False)
-                if await field.count() > 0:
-                    await field.first.fill(today.strftime("%d/%m/%Y"), timeout=5_000)
-                    await field.first.press("Tab")
-                    break
-            except Exception:
-                continue
+        await self._fill_valid_dates(page, date_from, today, "%d/%m/%Y")
 
         await asyncio.sleep(1)
         await self._category_snapshot(page, "before Search click")
 
-        # --- Click the LAST "Search" button — the round-12 fix ---
-        try:
-            search_buttons = page.get_by_role("button", name="Search", exact=False)
-            btn_count = await search_buttons.count()
-            if btn_count == 0:
-                print("    ⚠ No 'Search' button found")
-                return []
-            await search_buttons.last.click(timeout=5_000)
-        except Exception as e:
-            print(f"    ⚠ Error clicking Search: {e}")
+        if not await self._click_search_and_wait(page):
             return []
 
-        await asyncio.sleep(5)
-        try:
-            await page.wait_for_load_state("networkidle", timeout=15_000)
-        except PlaywrightTimeout:
-            pass
+        # --- Check the dates the SITE actually used (see _valid_dates_in_url).
+        # If it read dd/mm as mm/dd, retype them as mm/dd/yyyy and search
+        # once more. One retry at most. ---
+        want_from, want_to = date_from.isoformat(), today.isoformat()
+        got = _valid_dates_in_url(page.url)
+        if got is not None and (got[0] != want_from or got[1] not in (None, "", want_to)):
+            print(f"    ⚠ [{self.council_name}] site read the dates as from={got[0]} to={got[1]} "
+                  f"(wanted {want_from} / {want_to}); retrying as mm/dd/yyyy")
+            await self._fill_valid_dates(page, date_from, today, "%m/%d/%Y")
+            await asyncio.sleep(1)
+            if await self._click_search_and_wait(page):
+                got2 = _valid_dates_in_url(page.url)
+                if got2 is not None:
+                    ok = got2[0] == want_from
+                    print(f"    {'ℹ' if ok else '⚠'} [{self.council_name}] after retry the site reads "
+                          f"from={got2[0]} to={got2[1]}")
 
         # --- Try CSV first, HTML fallback second — same as weekly_list mode ---
         apps = await self._try_csv_download(page)
@@ -1915,7 +2048,13 @@ async def main():
     to_scrape: list[ArcusPortal] = []
     missing: list[str] = []
 
+    only = [s.strip().lower() for s in os.environ.get("COUNCIL_FILTER", "").split(",") if s.strip()]
+    if only:
+        print(f"COUNCIL_FILTER: only councils matching {only}\n")
+
     for name, base_url, mode, config in ARCUS_COUNCILS:
+        if only and not any(s in name.lower() for s in only):
+            continue
         council_id = COUNCIL_DB_IDS.get(name) or db_by_name.get(name.lower())
 
         if not council_id:
