@@ -1600,9 +1600,22 @@ class ArcusPortal:
 
         apps = await self._read_advanced_results(page, "Advanced Search", try_csv=True)
 
+        # The portal stops at 250 results. If a search hits that, halve the
+        # date window and search each half (Wiltshire, 2026-10-17: both its
+        # 14-day validated and decided searches came back at exactly 250).
+        if use_decision_search and len(apps) >= 250:
+            try:
+                apps = self._merge_apps(apps, await self._split_capped(
+                    page, "valid", date_from, today, first_fmt))
+            except Exception as e:
+                print(f"    ⚠ [{self.council_name}] splitting the validated window failed: {e}")
+
         if use_decision_search:
             try:
                 more = await self._decision_date_search(page, today, normal_days, first_fmt)
+                if len(more) >= 250:
+                    more = self._merge_apps(more, await self._split_capped(
+                        page, "decision", today - timedelta(days=normal_days), today, first_fmt))
             except Exception as e:
                 print(f"    ⚠ [{self.council_name}] decided-in-window search failed: {e}")
                 more = []
@@ -1665,11 +1678,14 @@ class ArcusPortal:
             except Exception:
                 continue
 
-    async def _decision_date_search(self, page: Page, today: date, days: int, fmt: str) -> list[dict]:
-        """Second search: everything DECIDED in the last `days` days,
-        whenever it was validated. Reopens the criteria panel if the site
-        collapsed it after the first search (Rochdale/Burnley/Milton
-        Keynes show 'Show the search criteria' once results are up)."""
+    @staticmethod
+    def _merge_apps(first: list[dict], second: list[dict]) -> list[dict]:
+        seen = {a["reference"] for a in first}
+        return first + [a for a in second if a["reference"] not in seen]
+
+    async def _reopen_criteria(self, page: Page):
+        """Rochdale/Burnley/Milton Keynes collapse the criteria panel once
+        results are up ('Show the search criteria'); open it again."""
         try:
             show = page.get_by_text(re.compile(r"^\s*Show the search criteria\s*$", re.I))
             if await show.count() > 0 and await show.first.is_visible():
@@ -1677,23 +1693,78 @@ class ArcusPortal:
                 await asyncio.sleep(2)
         except Exception:
             pass
-        want_from, want_to = (today - timedelta(days=days)).isoformat(), today.isoformat()
-        await self._clear_valid_dates(page)
-        await self._set_decision_dates(page, today - timedelta(days=days), today, fmt)
+
+    async def _clear_decision_dates(self, page: Page):
+        for pattern in (r"decision.*date from", r"decision.*date to"):
+            try:
+                field = page.get_by_label(re.compile(pattern, re.I))
+                if await field.count() > 0:
+                    await field.first.fill("", timeout=5_000)
+                    await field.first.press("Tab")
+            except Exception:
+                continue
+
+    async def _run_window(self, page: Page, kind: str, d_from: date, d_to: date, fmt: str) -> list[dict]:
+        """One search over [d_from, d_to] by validated date ('valid') or
+        decision date ('decision'), the other kind's dates cleared. Checks
+        the dates the site actually used and retries once with the other
+        date order if it read them wrongly."""
+        await self._reopen_criteria(page)
+        if kind == "valid":
+            await self._clear_decision_dates(page)
+            await self._fill_valid_dates(page, d_from, d_to, fmt)
+        else:
+            await self._clear_valid_dates(page)
+            await self._set_decision_dates(page, d_from, d_to, fmt)
         await asyncio.sleep(1)
         if not await self._click_search_and_wait(page):
             return []
-        got = _filter_dates_in_url(page.url, "decision")
-        print(f"    ℹ [{self.council_name}] decision dates sent {want_from} → {want_to}; "
+        want_from = d_from.isoformat()
+        got = _filter_dates_in_url(page.url, kind)
+        name = "validated" if kind == "valid" else "decided"
+        print(f"    ℹ [{self.council_name}] {name} {want_from} → {d_to.isoformat()}; "
               f"site read: {got if got is not None else 'not shown in URL'}")
         if got is not None and got[0] != want_from:
             alt = "%m/%d/%Y" if fmt == "%d/%m/%Y" else "%d/%m/%Y"
-            print(f"    ⚠ [{self.council_name}] decision date read wrongly; retrying with the other date order")
-            await self._set_decision_dates(page, today - timedelta(days=days), today, alt)
+            print(f"    ⚠ [{self.council_name}] date read wrongly; retrying with the other date order")
+            if kind == "valid":
+                await self._fill_valid_dates(page, d_from, d_to, alt)
+            else:
+                await self._set_decision_dates(page, d_from, d_to, alt)
             await asyncio.sleep(1)
             if not await self._click_search_and_wait(page):
                 return []
-        return await self._read_advanced_results(page, "Decided-in-window search", try_csv=False)
+        return await self._read_advanced_results(
+            page, f"{name.capitalize()} {want_from} to {d_to.isoformat()}", try_csv=False)
+
+    async def _decision_date_search(self, page: Page, today: date, days: int, fmt: str) -> list[dict]:
+        """Second search: everything DECIDED in the last `days` days,
+        whenever it was validated."""
+        return await self._run_window(page, "decision", today - timedelta(days=days), today, fmt)
+
+    async def _split_capped(self, page: Page, kind: str, d_from: date, d_to: date,
+                            fmt: str, depth: int = 0) -> list[dict]:
+        """Search the two halves of [d_from, d_to] separately, splitting a
+        half again if it also hits the 250 ceiling (at most 3 levels, never
+        below a single day)."""
+        span = (d_to - d_from).days
+        if span < 1:
+            return []
+        mid = d_from + timedelta(days=span // 2)
+        out: list[dict] = []
+        for lo, hi in ((d_from, mid), (mid + timedelta(days=1), d_to)):
+            if should_stop():
+                print(f"    ⚠ [{self.council_name}] stopping window splits: time budget nearly used")
+                break
+            part = await self._run_window(page, kind, lo, hi, fmt)
+            if len(part) >= 250:
+                if depth < 2 and (hi - lo).days >= 1:
+                    part = self._merge_apps(part, await self._split_capped(page, kind, lo, hi, fmt, depth + 1))
+                else:
+                    print(f"    ⚠ [{self.council_name}] {lo} to {hi} still returns 250; "
+                          f"cannot split further, some may be missed")
+            out = self._merge_apps(out, part)
+        return out
 
     async def _scrape_tabbed_weekly_list(self, page: Page, category_hint: Optional[str]) -> list[dict]:
         """For councils using the visibly different tabbed Arcus template
