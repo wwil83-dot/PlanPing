@@ -153,12 +153,16 @@
   // regardless of result count, so this needs to run every time, not
   // just when there happen to be results.
   (function () {
-    var allTowns = {{ town_names | tojson }};
+    // CHANGED (2026-10-18): the full town list is no longer embedded in
+    // the page (it made every page ~45 KB heavier); suggestions are now
+    // fetched from /api/towns as the person types.
     var input = document.getElementById('town-input');
     var box = document.getElementById('town-suggestions');
     if (!input || !box) return;
 
     var activeIndex = -1;
+    var lastQuery = '';
+    var timer = null;
 
     function render(matches) {
       box.innerHTML = '';
@@ -183,14 +187,22 @@
 
     input.addEventListener('input', function () {
       var q = input.value.trim().toLowerCase();
+      clearTimeout(timer);
       if (q.length < 2) {
         box.classList.remove('open');
         return;
       }
-      var matches = allTowns.filter(function (name) {
-        return name.toLowerCase().indexOf(q) !== -1;
-      });
-      render(matches);
+      timer = setTimeout(function () {
+        lastQuery = q;
+        fetch('/api/towns?q=' + encodeURIComponent(q))
+          .then(function (r) { return r.ok ? r.json() : []; })
+          .then(function (matches) {
+            // ignore a slow reply if the person has typed more since
+            if (q !== lastQuery) return;
+            render(matches);
+          })
+          .catch(function () { box.classList.remove('open'); });
+      }, 150);
     });
 
     input.addEventListener('keydown', function (e) {
