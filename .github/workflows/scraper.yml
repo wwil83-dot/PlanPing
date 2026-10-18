@@ -32,6 +32,7 @@ on:
     - cron: '5 8 * * *'   # NI Planning Portal nightly scrape
     - cron: '8 8 * * *'   # agileapplications.co.uk nightly scrape (Middlesbrough, Flintshire, Cannock)
     - cron: '12 8 * * *'  # statmap.co.uk/horizoNext nightly scrape (West Lindsey, East Staffordshire)
+    - cron: '13 8 * * *'  # Mole Valley nightly scrape (Statmap open JSON API, httpx only, ~4 requests a run)
     - cron: '15 8 * * *'  # "Search/Advanced" family nightly scrape (Westmorland and Furness, Cherwell, Wychavon, Malvern Hills)
     - cron: '22 8 * * *'  # Barrow (Westmorland and Furness Council) nightly scrape — shares council_id with esl_scraper.py above, deliberately scheduled after it clears
     - cron: '28 8 * * *'  # OcellaWeb nightly scrape (Great Yarmouth, South Holland, Havering, Hillingdon)
@@ -2949,9 +2950,13 @@ jobs:
           retention-days: 14
 
   medway_scraper:
-    if: >
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'medway_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '44 8 * * *')
+    # RETIRED as a scheduled job (tidied 2026-10-18). This was the old ODP-register
+    # scraper, which only ever returned the same 10 applications. Medway now runs
+    # through the standard Idox scrape (idox_councils.py: publicaccess1.medway.gov.uk),
+    # with outcomes filled in nightly by medway_decisions at 17:00 UTC. The
+    # '44 8 * * *' schedule was removed from the cron list earlier; this job's
+    # leftover schedule condition is removed here. Kept as a manual job only.
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'medway_scraper'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -5193,11 +5198,14 @@ jobs:
     # (no browser needed). Two sweeps: received newest-first and decided
     # newest-first, each stopping at the cutoff. See mole_valley_scraper.py for
     # the evidence trail and what is NOT confirmed.
-    # DELIBERATELY manual-trigger only for now — never run live yet.
+    # Nightly (13 8 * * *) — promoted after two clean production runs
+    # (2026-10-18): 480 applications saved both times, zero errors, status
+    # mix looked right on the live site. Still manually triggerable.
     #
-    # WINDOW_DAYS: "60" is for the ONE-OFF backfill. Set it to "14" before
-    # putting this on a schedule.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'mole_valley_scraper'
+    # WINDOW_DAYS: "14" for the nightly run. Use "60" for a one-off backfill.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'mole_valley_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '13 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
