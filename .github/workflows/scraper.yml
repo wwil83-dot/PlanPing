@@ -5210,5 +5210,5 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          WINDOW_DAYS: "60"
+          WINDOW_DAYS: "14"
         run: cd scrapers && python mole_valley_scraper.py
