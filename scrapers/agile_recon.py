@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PlanFind — Mole Valley RECON, round 2 (writes NOTHING to the database).
+PlanFind — Mole Valley RECON, round 3 (writes NOTHING to the database).
 
 Round 1 showed:
   - planning.agileapplications.co.uk/mole loads its framework and the council
@@ -102,50 +102,77 @@ async def click_visible(page, name, exact=True):
 
 
 async def statmap(ctx):
+    """Round 2 showed Weekly Lists is stale (5 PDFs, last 2026-05-29) and the
+    applications tab vanished after leaving the start page. So: do the
+    Planning Applications search FIRST, with and without a date filter, page
+    forward once, and open one result, logging every API call."""
+    from datetime import date, timedelta
     print("=" * 78)
-    print("STATMAP HORIZON PORTAL:", STATMAP)
+    print("STATMAP HORIZON PORTAL (applications search):", STATMAP)
     page = await ctx.new_page()
-    watch(page, "api")
+    watch(page, "api", body_len=2500)
     await page.goto(STATMAP, wait_until="domcontentloaded", timeout=60_000)
     await asyncio.sleep(8)
     await click_visible(page, "Accept additional cookies")
     await asyncio.sleep(2)
 
-    for tab in ("Weekly Lists", "Planning Applications"):
-        print(f"\n>>> TAB: {tab}")
-        if await click_visible(page, tab):
+    if not await click_visible(page, "Planning Applications"):
+        await describe(page, "start page (tab not found)")
+        await page.close()
+        return
+    await asyncio.sleep(5)
+    await describe(page, "Planning Applications search form")
+
+    # ---- Search 1: date-received range, last 14 days ----
+    today = date.today()
+    d_from, d_to = (today - timedelta(days=14)).strftime("%d/%m/%Y"), today.strftime("%d/%m/%Y")
+    inputs = page.locator("input[type=text]")
+    n = await inputs.count()
+    filled = []
+    for i in range(n):
+        el = inputs.nth(i)
+        try:
+            if not await el.is_visible():
+                continue
+            name = ((await el.get_attribute("name")) or "") + " " + ((await el.get_attribute("id")) or "")
+            low = name.lower()
+            if "receiv" in low and "from" in low:
+                await el.fill(d_from); filled.append((name.strip(), d_from))
+            elif "receiv" in low and "to" in low:
+                await el.fill(d_to); filled.append((name.strip(), d_to))
+        except Exception:
+            continue
+    print("  filled date fields:", filled or "NONE MATCHED (see VISIBLE FIELDS above)")
+    await asyncio.sleep(1)
+    if await click_visible(page, "Search"):
+        await asyncio.sleep(10)
+        await describe(page, "results after date-range search")
+
+        # ---- page forward once (shows pageSize/offset handling) ----
+        if await click_visible(page, "next", exact=False):
             await asyncio.sleep(6)
-            await describe(page, f"after opening {tab}")
-            # Press the Search / Go button if present, to see the data call.
-            for btn in ("Search", "Go to Search", "Show results", "Submit"):
-                if await click_visible(page, btn):
-                    await asyncio.sleep(10)
-                    await describe(page, f"after {btn} on {tab}")
-                    break
-    await page.close()
+            await describe(page, "results, page 2")
 
-
-async def agile(ctx):
-    print("=" * 78)
-    print("AGILE APPLICATIONS (why is it blank?):", AGILE)
-    page = await ctx.new_page()
-    watch(page, "agile-xhr", body_len=500)
-    page.on("console", lambda m: print(f"  [console.{m.type}] {short(m.text, 300)}") if m.type in ("error", "warning") else None)
-    page.on("pageerror", lambda e: print(f"  [pageerror] {short(str(e), 400)}"))
-    page.on("requestfailed", lambda r: print(f"  [requestfailed] {r.url[:160]} {r.failure}"))
-    await page.goto(AGILE, wait_until="domcontentloaded", timeout=60_000)
-    await asyncio.sleep(30)
-    await describe(page, "Agile after 30s")
+        # ---- open the first result (shows the detail call + detail fields) ----
+        rows = page.locator("table tbody tr a, table tbody tr")
+        try:
+            if await rows.count() > 0:
+                print("\n>>> opening first result")
+                await rows.first.click(timeout=8_000)
+                await asyncio.sleep(8)
+                await describe(page, "first result detail")
+        except Exception as e:
+            print("  (could not open a result)", short(str(e), 150))
     await page.close()
 
 
 async def main():
-    print("PlanFind Mole Valley recon, round 2 (no database writes)")
+    print("PlanFind Mole Valley recon, round 3 (no database writes)")
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage"])
         ctx = await browser.new_context(user_agent=UA, locale="en-GB", timezone_id="Europe/London",
                                         viewport={"width": 1280, "height": 900}, ignore_https_errors=True)
-        for fn in (statmap, agile):
+        for fn in (statmap,):
             try:
                 await fn(ctx)
             except Exception as e:
