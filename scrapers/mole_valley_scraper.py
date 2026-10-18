@@ -129,8 +129,16 @@ def _normalise_status(decision: Optional[str]) -> str:
         return "pending"
     if "withdraw" in s:
         return "withdrawn"
-    if "closed" in s:
+    # Outcomes that are not a grant/refusal of permission. Seen in the first
+    # production run (2026-10-18): 'TPO CONFIRMED', 'NO FURTHER ACTION',
+    # 'ENVIRONMENTAL IMPACT ASSESSMENT - REQUIRED'. Shown as 'closed' (same
+    # neutral grey as withdrawn) rather than left as 'pending'.
+    if any(x in s for x in ("closed", "no further action", "tpo confirmed", "environmental impact")):
         return "closed"
+    # 'SPLIT DECISION (TREE OR CONDITIONS)' = part granted, part refused.
+    # Treated as approved (some consent was given); a judgement call.
+    if "split decision" in s:
+        return "approved"
     if any(x in s for x in ("approv", "grant", "permit", "allow", "no objection", "not required")):
         return "approved"
     if any(x in s for x in ("refus", "reject", "dismiss", "not permit")):
@@ -203,9 +211,6 @@ async def sweep(client: httpx.AsyncClient, kind: str, cutoff: date) -> dict[str,
             if d < cutoff:
                 reached_end = True
                 break
-            if kind == "decided" and rec["status"] == "pending":
-                # decided date present but decision still unmapped/pending
-                pass
             out[rec["reference"]] = rec
         print(f"    ℹ {kind} sweep page {page_no + 1}: {len(recs)} read, {len(out)} in window so far")
         if reached_end:
