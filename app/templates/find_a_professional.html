@@ -36,6 +36,12 @@
     padding: 8px 12px;
     font-size: .85rem;
     cursor: pointer;
+    /* CHANGED (2026-10-18): set the text colour explicitly. The filter bar
+       has white text on a dark background, and the suggestions inherited it,
+       so they were white-on-white until hovered. */
+    color: #1e293b;
+    text-align: left;
+    font-weight: 400;
   }
   .town-autocomplete-item:hover,
   .town-autocomplete-item.active { background: var(--page); color: var(--blue); }
