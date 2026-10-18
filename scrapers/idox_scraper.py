@@ -1767,6 +1767,16 @@ async def main():
     # --------------------------------------------------------------------
     targeted = "--targeted" in sys.argv
 
+    # ADDED 2026-10-18: --only="Council A,Council B" runs just those councils
+    # (exact names as in idox_councils.py). Used for a nightly Medway-only run:
+    # Medway sits in batch 3 of 8, which only fires on odd days, so without
+    # this its applications refresh every second night. Mutually exclusive
+    # with --batch and --targeted.
+    only_names = None
+    for arg in sys.argv:
+        if arg.startswith("--only="):
+            only_names = {n.strip() for n in arg.split("=", 1)[1].split(",") if n.strip()}
+
     batch = None
     total_batches = 2
     for arg in sys.argv:
@@ -1785,6 +1795,9 @@ async def main():
     if targeted and batch is not None:
         print("ERROR: --targeted and --batch are mutually exclusive")
         sys.exit(1)
+    if only_names and (targeted or batch is not None):
+        print("ERROR: --only cannot be combined with --batch or --targeted")
+        sys.exit(1)
 
     try:
         from idox_councils import IDOX_COUNCILS, COUNCIL_DB_IDS
@@ -1793,7 +1806,16 @@ async def main():
         sys.exit(1)
 
     full_count = len(IDOX_COUNCILS)
-    if targeted:
+    if only_names:
+        IDOX_COUNCILS = [c for c in IDOX_COUNCILS if c[0] in only_names]
+        _missing_only = only_names - {c[0] for c in IDOX_COUNCILS}
+        if _missing_only:
+            print(f"⚠ WARNING: --only name(s) not found in IDOX_COUNCILS "
+                  f"(check spelling/renames): {sorted(_missing_only)}")
+        if not IDOX_COUNCILS:
+            print("ERROR: --only matched no councils")
+            sys.exit(1)
+    elif targeted:
         IDOX_COUNCILS = [c for c in IDOX_COUNCILS if c[0] in TARGETED_GROUP]
         found_names = {c[0] for c in IDOX_COUNCILS}
         missing = TARGETED_GROUP - found_names
@@ -1832,7 +1854,9 @@ async def main():
 
     print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Idox scraper (Playwright)")
     print(f"Mode:        {'BULK' if bulk else 'FAST'} ({days} days back)")
-    if targeted:
+    if only_names:
+        print(f"Batch:       ONLY {sorted(only_names)} ({len(IDOX_COUNCILS)} of {full_count} councils)")
+    elif targeted:
         print(f"Batch:       TARGETED GROUP ({len(IDOX_COUNCILS)} confirmed WAF/429-affected councils)")
     elif batch is not None:
         print(f"Batch:       {batch} of {total_batches} ({len(IDOX_COUNCILS)} of {full_count} councils)")
