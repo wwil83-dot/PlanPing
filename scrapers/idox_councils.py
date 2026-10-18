@@ -967,6 +967,14 @@ IDOX_COUNCILS = [
     ("Wealden District Council",
      "https://planning.wealden.gov.uk/online-applications"),
 
+    # ADDED 2026-10-18: Hastings confirmed Idox Public Access (council site
+    # links to publicaccess.hastings.gov.uk/online-applications; it also has a
+    # Weekly / Monthly Lists tab). No COUNCIL_DB_IDS entry: idox_scraper.py
+    # looks the id up by name until one is added. Run INSERT_SQL first so the
+    # row exists.
+    ("Hastings Borough Council",
+     "https://publicaccess.hastings.gov.uk/online-applications"),
+
     # --- WEST SUSSEX districts ---
     ("Chichester District Council",
      "https://publicaccess.chichester.gov.uk/online-applications"),
@@ -2185,7 +2193,8 @@ VALUES
   ('London Borough of Barnet','london-borough-of-barnet','idox','england','https://publicaccess.barnet.gov.uk/online-applications','pending',true),
   ('London Borough of Enfield','london-borough-of-enfield','idox','england','https://planningandbuildingcontrol.enfield.gov.uk/online-applications','pending',true),
   ('London Borough of Haringey','london-borough-of-haringey','idox','england','https://www.haringey.gov.uk/online-applications','pending',true),
-  ('London Borough of Islington','london-borough-of-islington','idox','england','https://www.islington.gov.uk/online-applications','pending',true)
+  ('London Borough of Islington','london-borough-of-islington','idox','england','https://www.islington.gov.uk/online-applications','pending',true),
+  ('Hastings Borough Council','hastings-borough-council','idox','england','https://publicaccess.hastings.gov.uk/online-applications','pending',true)
 ON CONFLICT (name) DO UPDATE SET
   system = 'idox',
   active = true,
