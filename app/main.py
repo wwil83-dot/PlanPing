@@ -1530,6 +1530,25 @@ async def _get_cached_professionals_static_data(db) -> tuple[list[str], object]:
     return names, last_synced
 
 
+@app.get("/api/towns")
+async def api_towns(q: str = ""):
+    """Town-name suggestions for the find-a-professional search box.
+
+    The page used to embed the whole town list (~45 KB) in every response,
+    which scrapers crawling /find-a-professional?town=... were downloading
+    thousands of times a day. The box now asks for at most 8 matches as the
+    person types (same substring matching and order as before).
+    """
+    q = (q or "").strip().lower()[:60]
+    headers = {"Cache-Control": "public, max-age=3600"}
+    if len(q) < 2:
+        return JSONResponse([], headers=headers)
+    async with get_db() as db:
+        town_names, _ = await _get_cached_professionals_static_data(db)
+    matches = [n for n in town_names if q in n.lower()][:8]
+    return JSONResponse(matches, headers=headers)
+
+
 @app.get("/find-a-professional", response_class=HTMLResponse)
 async def find_a_professional(request: Request, trade: Optional[str] = None, town: Optional[str] = None,
                                 keyword: Optional[str] = None, page: int = 1):
@@ -1570,7 +1589,7 @@ async def find_a_professional(request: Request, trade: Optional[str] = None, tow
             """, trade, town, keyword, PAGE_SIZE, offset)
 
     async with get_db() as db:
-        town_names, last_synced = await _get_cached_professionals_static_data(db)
+        _town_names, last_synced = await _get_cached_professionals_static_data(db)
 
     professionals = [dict(r) for r in professionals]
     for p in professionals:
@@ -1598,7 +1617,6 @@ async def find_a_professional(request: Request, trade: Optional[str] = None, tow
         "town": town,
         "keyword": keyword or "",
         "trade_options": PROFESSIONAL_TRADE_LABELS,
-        "town_names": town_names,
         "last_synced": last_synced,
         "has_filter": has_filter,
         "page": page,
