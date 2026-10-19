@@ -221,15 +221,15 @@ async def sweep(client: httpx.AsyncClient, kind: str, d_from: date, d_to: date, 
     tok = _token(r.text)
     if not tok:
         raise RuntimeError("No anti-forgery token on /Search/Advanced")
-    form = [("__RequestVerificationToken", tok), ("AdvancedSearch", "True"),
-            ("SearchPlanning", "true"), ("SearchPlanning", "false"),
-            ("SearchEnforcement", "false"), ("SearchAppeals", "false"), ("Outstanding", "false"),
-            (field + "From", d_from.strftime("%d/%m/%Y")), (field + "To", d_to.strftime("%d/%m/%Y"))]
+    form = {"__RequestVerificationToken": tok, "AdvancedSearch": "True",
+            "SearchPlanning": ["true", "false"], "SearchEnforcement": "false",
+            "SearchAppeals": "false", "Outstanding": "false",
+            field + "From": d_from.strftime("%d/%m/%Y"), field + "To": d_to.strftime("%d/%m/%Y")}
     r = await _req(client, "POST", "/Search/Results", data=form, headers={"Referer": BASE + "/Search/Advanced"})
     total, rows = parse_results(r.text)
     if per_page == 50:
         r = await _req(client, "POST", "/Search/ChangeResultsPerPage",
-                       data=[("__RequestVerificationToken", tok), ("resultsPerPage", "50")],
+                       data={"__RequestVerificationToken": tok, "resultsPerPage": "50"},
                        headers={"Referer": BASE + "/Search/Results"})
         total2, rows = parse_results(r.text)
         total = total2 if total2 is not None else total
