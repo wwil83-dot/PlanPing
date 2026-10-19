@@ -84,7 +84,8 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 START = time.monotonic()
 
 SKIP_TYPE_WORDS = ("pre app", "pre-app", "preapp", "pre application", "pre-application",
-                   "validation surgery", "entered in error", "house name")
+                   "validation surgery", "entered in error", "house name",
+                   "app type - enforcement", "app type - invalid", "enforcement appeal")
 
 try:
     from pyproj import Transformer
@@ -121,7 +122,13 @@ _UNMAPPED: set[str] = set()
 def _normalise_status(decision: Optional[str], app_status: Optional[str] = None) -> str:
     """Same vocabulary as every other scraper (pending/approved/refused/withdrawn/closed).
     `decision` is the portal's decision description (from its own code list);
-    `app_status` is the free-text ApplicationStatus, used only when there is no decision."""
+    `app_status` is the free-text ApplicationStatus, used only when there is no decision.
+    Eastbourne's 18 decision codes (seen 2026-10-19): Advert Approved, Approved conditionally,
+    Standard advert approval, Approved unconditionally, Committee (Enforcement) - Notice issue
+    Endorsed, Committee (Enforcement) - Officer Negotiation recommended, Discharged, Deferred,
+    Issued, Not determined, County Council - No Objection, County Council - Objection,
+    Prior Approval - not required, Permitted Development, Refused, Split Advert Decision,
+    Split Tree Decision, Withdrawn."""
     s = (decision or "").strip().lower()
     if not s:
         a = (app_status or "").strip().lower()
@@ -130,22 +137,31 @@ def _normalise_status(decision: Optional[str], app_status: Optional[str] = None)
         if any(x in a for x in ("invalid", "returned", "closed", "cancel")):
             return "closed"
         return "pending"
-    if s in ("pending", "pending decision", "pending consideration"):
+    if s in ("pending", "pending decision", "pending consideration") or s.startswith("deferred"):
         return "pending"
     if "withdraw" in s:
         return "withdrawn"
+    # Enforcement committee outcomes are not planning decisions ('Notice issue Endorsed'
+    # contains 'issue', so this must come before the approval words).
+    if "enforcement" in s:
+        return "closed"
     if any(x in s for x in ("invalid", "no further action", "not appropriate procedure",
                             "advised to apply", "returned", "closed", "cancel",
-                            "entered in error", "not valid", "finally disposed")):
+                            "entered in error", "not valid", "finally disposed",
+                            "not determined")):
         return "closed"
+    # 'County Council - No Objection' must be caught before the refusal words ('objection').
+    if "no objection" in s or "no formal objection" in s:
+        return "approved"
     if "split" in s or "part consent" in s or "part permit" in s or "partially" in s:
         return "approved"
     if any(x in s for x in ("refus", "reject", "dismiss", "not permit", "not lawful",
-                            "unlawful", "objection raised")):
+                            "unlawful", "objection")):
         return "refused"
-    if any(x in s for x in ("approv", "grant", "permit", "allow", "consent", "no objection",
+    # 'Discharged' = a condition was discharged (the application succeeded).
+    if any(x in s for x in ("approv", "grant", "permit", "allow", "consent",
                             "not required", "lawful", "agree", "accept", "issue",
-                            "prior approval", "no formal objection")):
+                            "discharge", "prior approval")):
         return "approved"
     if s not in _UNMAPPED:
         _UNMAPPED.add(s)
