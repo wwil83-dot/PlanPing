@@ -164,8 +164,15 @@ def _word_status(s: str) -> Optional[str]:
     if any(x in s for x in ("invalid", "returned", "closed", "cancel", "not proceed", "finally disposed",
                             "no further action", "not determined", "entered in error", "not valid")):
         return "closed"
-    if "no objection" in s or "no formal objection" in s:
+    if "no objection" in s or "no formal objection" in s or "no observations" in s:
         return "approved"
+    # Consultation replies on County Matters etc. ('Observations'): not a grant or a refusal.
+    if "observations" in s:
+        return "closed"
+    # 'Prior Approval Required' = a full application is needed; it is NOT an approval
+    # ('Prior Approval Not Required' is handled by the approval words below).
+    if "approval required" in s and "not" not in s:
+        return "closed"
     if "split" in s or "part consent" in s or "part permit" in s or "partially" in s:
         return "approved"
     if any(x in s for x in ("refus", "reject", "dismiss", "not permit", "not lawful", "unlawful")):
@@ -179,6 +186,9 @@ def _word_status(s: str) -> Optional[str]:
 def normalise_status(results_status: str, detail_status: str, panel_decision: str, has_decision_date: bool) -> str:
     """Panel decision first (the outcome), then the detail Status, then the results-table status.
     'Decision Issued' alone is ambiguous, so it is only trusted via the panel."""
+    # A withdrawal anywhere wins (one record showed results 'Withdrawn' with panel 'Not Required').
+    if any("withdraw" in (x or "").lower() for x in (panel_decision, detail_status, results_status)):
+        return "withdrawn"
     for src in (panel_decision, detail_status, results_status):
         r = _word_status(src)
         if r:
