@@ -133,7 +133,7 @@ def _normalise_status(decision: Optional[str]) -> str:
                             "unlawful", "objection raised", "prior approval required and refused")):
         return "refused"
     if any(x in s for x in ("approv", "grant", "permit", "allow", "consent", "no objection",
-                            "not required", "lawful", "agreed", "full permission",
+                            "not required", "lawful", "agree", "full permission",
                             "prior approval")):
         return "approved"
     if s not in _UNMAPPED:
