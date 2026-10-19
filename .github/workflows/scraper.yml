@@ -5363,9 +5363,9 @@ jobs:
   eastbourne_scraper:
     # Eastbourne Borough Council - Civica W2 API (APPPlanCase) on the gtest host behind
     # lewes-eastbourne.gov.uk; plain HTTP works, no browser. See eastbourne_scraper.py.
-    # Manual-trigger only. DRY_RUN "1" prints the code lists, status mapping and sample rows
-    # and writes NOTHING. Set DRY_RUN to "0" for the first real (60-day) run, then WINDOW_DAYS
-    # to "14" before scheduling.
+    # Manual-trigger only for now. Dry run on 2026-10-19 showed the 18 decision codes; mapping
+    # fixed (Discharged/Not determined/Deferred/enforcement/objection). DRY_RUN "0" = the first
+    # real 60-day backfill. Set WINDOW_DAYS to "14" and add a cron before scheduling.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'eastbourne_scraper'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
@@ -5380,5 +5380,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           WINDOW_DAYS: "60"
-          DRY_RUN: "1"
+          DRY_RUN: "0"
         run: cd scrapers && python eastbourne_scraper.py
