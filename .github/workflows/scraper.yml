@@ -5444,7 +5444,7 @@ jobs:
   northdevon_scraper:
     # North Devon Council - server-rendered portal, plain HTTP (token + cookie), received/determined
     # date sweeps plus one detail page per application. See northdevon_scraper.py.
-    # MANUAL ONLY for now: first run is a 60-day DRY RUN (writes nothing). After the log is checked,
+    # MANUAL ONLY for now. 60-day dry run was clean (346 parsed, 0 failures); this is the real 60-day backfill. After its log is checked,
     # set DRY_RUN to "0" for the real backfill, then promote to nightly (WINDOW_DAYS "14" plus a
     # unique cron, planned '18 8 * * *').
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northdevon_scraper'
@@ -5461,5 +5461,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           WINDOW_DAYS: "60"
-          DRY_RUN: "1"
+          DRY_RUN: "0"
         run: cd scrapers && python northdevon_scraper.py
