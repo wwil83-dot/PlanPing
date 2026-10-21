@@ -5573,7 +5573,8 @@ jobs:
   wokingham_scraper:
     # Wokingham Borough Council - classic ASP FastWebPL, headless Chromium (plain HTTP is reset).
     # Date-window searches (valid + decided), results already hold everything. See wokingham_scraper.py.
-    # MANUAL ONLY for now: first run is a 60-day DRY RUN (writes nothing; also checks a cold detail
+    # MANUAL ONLY for now. The 60-day dry run was clean (349 valid + 382 decided = 667, counts matched the portal;
+    # cold detail link returned HTTP 200). This is the real 60-day backfill (also checks a cold detail
     # link). After the log is checked set DRY_RUN to "0" for the real backfill, then promote to
     # nightly (WINDOW_DAYS "14" plus a unique cron, planned '20 8 * * *').
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'wokingham_scraper'
@@ -5596,5 +5597,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           WINDOW_DAYS: "60"
-          DRY_RUN: "1"
+          DRY_RUN: "0"
         run: cd scrapers && python wokingham_scraper.py
