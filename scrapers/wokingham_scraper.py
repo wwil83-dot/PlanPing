@@ -35,7 +35,7 @@ HONEST LIMITATIONS:
 
 Env: SUPABASE_URL, SUPABASE_KEY (required unless DRY_RUN)
      WINDOW_DAYS (default 14; 60 for the first backfill), DRY_RUN ("1" = write nothing)
-     PAGE_DELAY_SECONDS (default 2), MAX_PAGES (default 40), MAX_MINUTES (default 40)
+     PAGE_DELAY_SECONDS (default 3), MAX_PAGES (default 40), MAX_MINUTES (default 40)
      WOKINGHAM_COUNCIL_ID (optional)
 """
 import asyncio
@@ -60,7 +60,7 @@ PER_PAGE = 20
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 WINDOW_DAYS = int(os.environ.get("WINDOW_DAYS", "14"))
-PAGE_DELAY = float(os.environ.get("PAGE_DELAY_SECONDS", "2"))
+PAGE_DELAY = float(os.environ.get("PAGE_DELAY_SECONDS", "3"))
 MAX_PAGES = int(os.environ.get("MAX_PAGES", "40"))
 MAX_MINUTES = float(os.environ.get("MAX_MINUTES", "40"))
 DRY_RUN = os.environ.get("DRY_RUN", "").strip() in ("1", "true", "yes")
@@ -189,8 +189,7 @@ async def _body(page) -> str:
     return await page.inner_text("body")
 
 
-async def sweep(page, kind: str, d_from: date, d_to: date) -> dict:
-    """kind 'valid' (DateValidStart/End) or 'decided' (DateDecidedStart/End)."""
+async def run_search(page, kind: str, d_from: date, d_to: date):
     pre = "DateValid" if kind == "valid" else "DateDecided"
     await page.goto(B + "welcome.asp", wait_until="networkidle", timeout=60000)
     await page.goto(B + "search.asp", wait_until="networkidle", timeout=60000)
@@ -198,6 +197,12 @@ async def sweep(page, kind: str, d_from: date, d_to: date) -> dict:
     await page.fill(f"input[name={pre}End]", d_to.strftime("%d/%m/%Y"))
     await page.click("input#Submit")
     await page.wait_for_load_state("networkidle")
+
+
+async def sweep(page, kind: str, d_from: date, d_to: date) -> tuple:
+    """kind 'valid' (DateValidStart/End) or 'decided' (DateDecidedStart/End).
+    Returns ({ref: record}, complete: bool)."""
+    await run_search(page, kind, d_from, d_to)
     total = await page.evaluate("() => { const e = document.querySelector('input[name=RecCount]'); return e ? e.value : null }")
     total = int(total) if total and str(total).isdigit() else None
     text = await _body(page)
@@ -218,17 +223,43 @@ async def sweep(page, kind: str, d_from: date, d_to: date) -> dict:
     print(f"    ℹ {kind} sweep {d_from:%d/%m/%Y}-{d_to:%d/%m/%Y}: portal says {total} ({pages} page(s)); page 1 read {len(rows)}")
     if pages > 1 and not next_href:
         print("    ⚠ more than one page but no 'Next' link found; only page 1 collected")
+    complete = True
     if next_href:
         u = urlparse(next_href)
         q = parse_qsl(u.query, keep_blank_values=True)
         for n in range(2, min(pages, MAX_PAGES) + 1):
             if (time.monotonic() - START) / 60 > MAX_MINUTES:
                 print(f"    ⚠ MAX_MINUTES reached during the {kind} sweep at page {n}")
+                complete = False
                 break
             await asyncio.sleep(PAGE_DELAY)
             qn = [(k, str(n) if k == "Scroll" else v) for k, v in q]
-            await page.goto(f"{u.scheme}://{u.netloc}{u.path}?{urlencode(qn)}", wait_until="networkidle", timeout=60000)
-            rows = parse_results_text(await _body(page))
+            url = f"{u.scheme}://{u.netloc}{u.path}?{urlencode(qn)}"
+            rows = []
+            # An empty page mid-sweep happened on the first real run (page 14 of 18, page 11 of 20).
+            # Retry with back-off; on the third try start a fresh search session first.
+            for attempt, wait in ((1, 0), (2, 6), (3, 15), (4, 30)):
+                if wait:
+                    await asyncio.sleep(wait)
+                try:
+                    if attempt == 3:
+                        await run_search(page, kind, d_from, d_to)
+                    await page.goto(url, wait_until="networkidle", timeout=60000)
+                    rows = parse_results_text(await _body(page))
+                except Exception as e:
+                    print(f"    ⚠ {kind} page {n} attempt {attempt} error: {str(e)[:150]}")
+                    rows = []
+                if rows:
+                    break
+                try:
+                    head = re.sub(r"\s+", " ", (await _body(page)))[:260]
+                    print(f"    ⚠ {kind} page {n} attempt {attempt} returned no rows | title {await page.title()!r} | {head!r}")
+                except Exception:
+                    pass
+            if not rows:
+                print(f"    ✗ {kind} page {n} still empty after retries; stopping this sweep")
+                complete = False
+                break
             for r in rows:
                 rec = to_record(r)
                 if rec.get("_skip"):
@@ -236,15 +267,15 @@ async def sweep(page, kind: str, d_from: date, d_to: date) -> dict:
                 else:
                     out[r["reference"]] = rec
             print(f"    ℹ {kind} page {n}/{pages}: read {len(rows)}, {len(out)} kept so far")
-            if not rows:
-                break
         if pages > MAX_PAGES:
             print(f"    ⚠ {kind} sweep capped at MAX_PAGES={MAX_PAGES} of {pages}")
+            complete = False
     if skipped:
         print(f"    ℹ {kind} sweep skipped {skipped} non-planning records")
     if total and len(out) + skipped < total:
         print(f"    ⚠ {kind} sweep collected {len(out) + skipped} of {total}")
-    return out
+        complete = False
+    return out, complete
 
 
 async def link_check(browser, ref: str):
@@ -344,9 +375,10 @@ async def main():
         ctx = await browser.new_context(user_agent=UA, locale="en-GB", ignore_https_errors=True,
                                         viewport={"width": 1400, "height": 1000})
         page = await ctx.new_page()
-        valid = await sweep(page, "valid", d_from, today)
+        valid, ok1 = await sweep(page, "valid", d_from, today)
         await asyncio.sleep(PAGE_DELAY)
-        decided = await sweep(page, "decided", d_from, today)
+        decided, ok2 = await sweep(page, "decided", d_from, today)
+        complete_run = ok1 and ok2
         apps = merge(valid, decided)
         if DRY_RUN and apps:
             await link_check(browser, apps[0]["reference"])
@@ -363,6 +395,8 @@ async def main():
           f"missing submitted date: {sum(1 for a in apps if not a['submitted_date'])}")
 
     if DRY_RUN:
+        if not complete_run:
+            print("    ⚠ dry run: at least one sweep was incomplete")
         print("\n    --- 6 sample rows ---")
         for a in apps[:6]:
             print("   ", {k: v for k, v in a.items() if not k.startswith('_')})
@@ -416,6 +450,10 @@ async def main():
     print("\n" + "=" * 50)
     print(f"Finished in {(time.monotonic() - START) / 60:.1f} minutes")
     print(f"Applications saved: {saved}")
+    if not complete_run:
+        print("⚠ INCOMPLETE: at least one sweep stopped early (see warnings above). What was collected has been "
+              "saved; the next run re-reads the same window, so gaps fill in. Failing the job so it shows red.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
