@@ -5390,7 +5390,7 @@ jobs:
   site_recon:
     # GENERIC portal recon, reusable for any council: edit RECON_NAME / RECON_URLS / RECON_TERM
     # below, then run the workflow with job = site_recon. Writes NOTHING to the database.
-    # Currently pointed at North Devon (planning.northdevon.gov.uk).
+    # Currently runs THREE recons in one go: South Hams (West Devon shares the system), West Devon homepage, Wokingham.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'site_recon'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
@@ -5406,10 +5406,18 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-v1
       - run: pip install playwright
       - run: playwright install --with-deps chromium
-      - name: Recon portal
+      - name: Recon South Hams
+        continue-on-error: true
         env:
-          RECON_NAME: "North Devon"
-          RECON_URLS: "https://planning.northdevon.gov.uk/,https://planning.northdevon.gov.uk/Planning/Display/72905"
+          RECON_NAME: "South Hams"
+          RECON_URLS: "https://apps.southhams.gov.uk/PlanningSearchMVC/,https://www.southhams.gov.uk/,https://www.westdevon.gov.uk/"
+          RECON_TERM: "2026"
+        run: cd scrapers && python site_recon.py
+      - name: Recon Wokingham
+        continue-on-error: true
+        env:
+          RECON_NAME: "Wokingham"
+          RECON_URLS: "https://planning.wokingham.gov.uk/FastWebPL/welcome.asp,https://www.wokingham.gov.uk/"
           RECON_TERM: "2026"
         run: cd scrapers && python site_recon.py
 
