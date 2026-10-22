@@ -110,10 +110,70 @@ def parse_results(page: str) -> list:
     return out
 
 
+_UNMAPPED_R: set = set()
+
+
+def _w(s: str) -> Optional[str]:
+    """One portal phrase -> status, or None if it says nothing decisive."""
+    s = (s or "").strip().lower()
+    if not s or s in ("n/a", "pending", "pending decision", "-") or s in (
+            "allocated to officer", "under consideration", "within consultation period"):
+        return None
+    if "withdraw" in s:
+        return "withdrawn"
+    if "eia" in s or "do not wish to comment" in s or "observations" in s:
+        return "closed"
+    if any(x in s for x in ("invalid", "returned", "closed", "cancel", "not proceed", "finally disposed",
+                            "no further action", "not determined", "entered in error", "not valid")):
+        return "closed"
+    if "no objection" in s or "no formal objection" in s:
+        return "approved"
+    if "objection" in s:
+        return "refused"
+    if "refus" in s or "reject" in s or "dismiss" in s or "not permit" in s or "unlawful" in s or "not lawful" in s:
+        return "refused"
+    if "permission required" in s and "not" not in s:
+        return "refused"
+    if "approval required and given" in s:
+        return "approved"
+    if "approval required" in s or "details required" in s:
+        return "closed"
+    if "split" in s or "part consent" in s or "partial" in s:
+        return "approved"
+    if any(x in s for x in ("approv", "grant", "permit", "allow", "consent", "not required", "certified",
+                            "lawful", "discharge", "deemed", "agree", "accept")):
+        return "approved"
+    return None
+
+
+def reg_status(results_status: str, detail_status: str, panel: str, has_decision_date: bool) -> str:
+    """Withdrawal anywhere wins; then an explicit Approved/Refused in the results status (South Hams /
+    West Devon); then the detail panel's decision text; then the other statuses."""
+    texts = (results_status, detail_status, panel)
+    if any("withdraw" in (t or "").lower() for t in texts):
+        return "withdrawn"
+    r = (results_status or "").strip().lower()
+    if r in ("approved", "refused"):
+        return r
+    for t in (panel, detail_status, results_status):
+        v = _w(t)
+        if v:
+            return v
+    if has_decision_date:
+        label = f"{results_status} | {detail_status} | {panel}"
+        if label not in _UNMAPPED_R:
+            _UNMAPPED_R.add(label)
+            print(f"    ⚠ UNMAPPED STATUS {label!r}: saved as 'pending' until a mapping is added")
+    return "pending"
+
+
 def parse_detail(text: str) -> dict:
     det = N.parse_detail_text(text)
     if det.get("address"):
         det["address"] = re.sub(r"\s+UPRN\s+\S+\s*$", "", det["address"]).strip() or None
+    i0 = text.find("Summary Application Number")
+    m = re.search(r"(?<!Target )Decision Date\s+(\d{2}/\d{2}/\d{4})", text[i0:] if i0 >= 0 else text)
+    det["decided"] = N._dmy(m.group(1)) if m else None  # 'Target Decision Date' is a future estimate
     if not det.get("panel_decision"):
         i = text.find("Summary Application Number")
         m = re.search(r"Appeal Decision\s+\S.*?\s+Decision\s+(.*?)\s+Back to top", text[i:] if i >= 0 else text)
@@ -148,35 +208,59 @@ async def advanced_token(client: httpx.AsyncClient) -> str:
     raise RuntimeError("Could not reach the advanced search form after accepting the disclaimer")
 
 
-async def sweep(client: httpx.AsyncClient, kind: str, d_from: date, d_to: date) -> dict:
+SLICE_DAYS = int(os.environ.get("SLICE_DAYS", "7"))
+CAP = 50  # rows per results page; a window that returns this many may be truncated, so it is split
+
+
+async def run_window(client: httpx.AsyncClient, kind: str, a: date, b: date) -> list:
     base = CFG["base"]
     f_from, f_to = CFG["recv"] if kind == "received" else CFG["dec"]
     tok = await advanced_token(client)
     form = {"__RequestVerificationToken": tok, "AdvancedSearch": "True", **CFG["flags"],
-            f_from: d_from.strftime("%d/%m/%Y"), f_to: d_to.strftime("%d/%m/%Y")}
-    r = await N._req(client, "POST", base + CFG["action"], data=form, headers={"Referer": f"{base}/Search/Advanced"})
+            f_from: a.strftime("%d/%m/%Y"), f_to: b.strftime("%d/%m/%Y")}
+    await N._req(client, "POST", base + CFG["action"], data=form, headers={"Referer": f"{base}/Search/Advanced"})
     r = await N._req(client, "POST", f"{base}/Search/ChangeResultsPerPage",
-                     data={"__RequestVerificationToken": tok, "resultsPerPage": "50"},
+                     data={"__RequestVerificationToken": tok, "resultsPerPage": str(CAP)},
                      headers={"Referer": f"{base}/Search/Results"})
+    return parse_results(r.text)
+
+
+async def collect(client, kind: str, a: date, b: date, out: dict, stats: dict):
+    """Read one date window; if it returns a full page it may be capped/paged, so split it in half.
+    (Recon logs showed each 60-90 day window returning exactly 50 rows with page 2 identical to page 1,
+    so these portals cap or ignore paging; narrow windows avoid depending on it.)"""
+    await asyncio.sleep(1)
+    rows = await run_window(client, kind, a, b)
+    stats["searches"] += 1
+    if len(rows) >= CAP and a < b:
+        mid = a + (b - a) // 2
+        await collect(client, kind, a, mid, out, stats)
+        await collect(client, kind, mid + 1, b, out, stats)
+        return
+    if len(rows) >= CAP:
+        stats["capped_days"].append(a.isoformat())
+        print(f"    ⚠ {kind} single day {a:%d/%m/%Y} returned {len(rows)} rows (may be truncated)")
+    new = 0
+    for row in rows:
+        if row["reference"] not in out:
+            new += 1
+        out[row["reference"]] = row
+    print(f"    ℹ {kind} {a:%d/%m/%Y}-{b:%d/%m/%Y}: {len(rows)} rows, {new} new, {len(out)} total")
+
+
+async def sweep(client: httpx.AsyncClient, kind: str, d_from: date, d_to: date) -> dict:
     out: dict = {}
-    page_no = 1
-    rows = parse_results(r.text)
-    summary = re.search(r"(?:returned|found|showing)[^.]{0,60}\d+[^.]{0,80}", N._strip(r.text), flags=re.I)
-    while True:
-        new = 0
-        for row in rows:
-            if row["reference"] not in out:
-                new += 1
-            out[row["reference"]] = row
-        print(f"    ℹ {kind} page {page_no}: {len(rows)} rows, {new} new, {len(out)} total")
-        if new == 0 or page_no >= 80 or (time.monotonic() - START) / 60 > MAX_MINUTES:
+    stats = {"searches": 0, "capped_days": []}
+    start = d_from
+    while start <= d_to:
+        if (time.monotonic() - START) / 60 > MAX_MINUTES:
+            print(f"    ⚠ MAX_MINUTES reached during the {kind} sweep at {start:%d/%m/%Y}")
             break
-        page_no += 1
-        await asyncio.sleep(1)
-        r = await N._req(client, "GET", f"{base}/Search/Results/{page_no}/50")
-        rows = parse_results(r.text)
-    print(f"    ℹ {kind} sweep {d_from:%d/%m/%Y}-{d_to:%d/%m/%Y}: collected {len(out)}"
-          + (f" | page text: {summary.group(0)[:100]!r}" if summary else ""))
+        end = min(start + timedelta(days=SLICE_DAYS - 1), d_to)
+        await collect(client, kind, start, end, out, stats)
+        start = end + timedelta(days=1)
+    print(f"    ℹ {kind} sweep {d_from:%d/%m/%Y}-{d_to:%d/%m/%Y}: collected {len(out)} in {stats['searches']} searches"
+          + (f"; capped days: {stats['capped_days']}" if stats["capped_days"] else ""))
     return out
 
 
@@ -247,9 +331,8 @@ async def main():
                 await asyncio.sleep(DETAIL_DELAY)
                 continue
             address = det["address"] or row["location"]
-            decided = det["decided"] or N._dmy(row["decision_date_text"])
-            status = N.normalise_status(row["results_status"], det["status"] or "", det["panel_decision"] or "",
-                                        bool(decided))
+            decided = N._dmy(row["decision_date_text"]) or det["decided"]
+            status = reg_status(row["results_status"], det["status"] or "", det["panel_decision"] or "", bool(decided))
             valid = det["valid"] or N._dmy(row["valid_text"])
             submitted = valid or det["received"]
             apps.append({
