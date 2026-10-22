@@ -5504,8 +5504,8 @@ jobs:
         run: cd scrapers && python wokingham_probe2.py
 
   url_check:
-    # Reachability check for hosts that block the runner (South Hams / West Devon CloudFront 403).
-    # Edit URLS below. Writes NOTHING to the database.
+    # Reachability check from the uk-runner (plain HTTP and Chromium). Currently: South Hams and West Devon
+    # planning-register hosts, Torridge, Dorset, Wealden. Edit URLS below. Writes NOTHING to the database.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'url_check'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 10
@@ -5523,7 +5523,7 @@ jobs:
       - run: playwright install --with-deps chromium
       - name: Check URLs
         env:
-          URLS: "https://new.southhams.gov.uk/,https://southhams.gov.uk/article/5962/Search-View-or-Comment-on-an-Application,https://southhams.gov.uk/,https://www.southhams.gov.uk/civica/Resource/Civica/Handler.ashx/keyobject/getsearchcriteria/APPPlanCase,https://www.westdevon.gov.uk/planning/planning-applications,https://westdevon.gov.uk/,https://api.ipify.org/"
+          URLS: "https://southhams.planning-register.co.uk/Search/Advanced,https://westdevon.planning-register.co.uk/Search/Advanced,https://publicaccess.torridge.gov.uk/online-applications/,https://planning.dorsetcouncil.gov.uk/advsearch.aspx,https://planning.wealden.gov.uk/Planning/WeeklyList/"
         run: cd scrapers && python url_check.py
 
   wokingham_probe3:
