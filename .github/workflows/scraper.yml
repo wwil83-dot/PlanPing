@@ -36,6 +36,7 @@ on:
     - cron: '14 8 * * *'  # Waverley nightly scrape (Civica W2 open JSON API, httpx only, ~4 requests a run)
     - cron: '16 8 * * *'  # Eastbourne nightly scrape (Civica W2 open JSON API on the gtest host, httpx + pyproj, ~4 requests a run)
     - cron: '18 8 * * *'  # North Devon nightly scrape (server-rendered portal over plain HTTP, ~200 requests a run, ~5 min)
+    - cron: '24 8 * * *'  # South Hams / West Devon / Wealden nightly scrape (Planning Register engine over plain HTTP, 14-day window, ~25 min in total)
     - cron: '20 8 * * *'  # Wokingham nightly scrape (classic ASP FastWebPL via headless Chromium, ~40 page loads, ~2-4 min)
     - cron: '15 8 * * *'  # "Search/Advanced" family nightly scrape (Westmorland and Furness, Cherwell, Wychavon, Malvern Hills)
     - cron: '22 8 * * *'  # Barrow (Westmorland and Furness Council) nightly scrape — shares council_id with esl_scraper.py above, deliberately scheduled after it clears
@@ -5642,10 +5643,12 @@ jobs:
     # South Hams, West Devon and Wealden - the 'Planning Register' engine North Devon uses, plus a
     # /Disclaimer step. One run covers all three (matrix, one at a time, a failure in one does not stop
     # the others). See register_scraper.py.
-    # MANUAL ONLY for now: dry runs are clean, so this is the real 60-day BACKFILL (DRY_RUN "0").
-    # After it is checked, promote to nightly (WINDOW_DAYS "14" plus a
+    # Nightly (24 8 * * *) - promoted after the 60-day backfill on 2026-10-22: 647 + 247 + 882 saved.
+    # WINDOW_DAYS "14" nightly; use "60" for a manual backfill. Promote to nightly (WINDOW_DAYS "14" plus a
     # unique cron).
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'register_scraper'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'register_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '24 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 75
     strategy:
@@ -5664,6 +5667,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           COUNCIL: ${{ matrix.council }}
-          WINDOW_DAYS: "60"
+          WINDOW_DAYS: "14"
           DRY_RUN: "0"
         run: cd scrapers && python register_scraper.py
