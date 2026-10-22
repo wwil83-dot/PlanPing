@@ -121,6 +121,12 @@ def _w(s: str) -> Optional[str]:
         return None
     if "withdraw" in s:
         return "withdrawn"
+    if "not issue" in s:
+        return "refused"
+    if s in ("issue certificate", "be discharged") or "details approved" in s:
+        return "approved"
+    if "modification to planning obligation" in s or "appeal lodged" in s:
+        return "closed" if "modification" in s else None
     if "eia" in s or "do not wish to comment" in s or "observations" in s or s in ("decision made", "request responded to"):
         return "closed"
     if any(x in s for x in ("invalid", "returned", "closed", "cancel", "not proceed", "finally disposed",
