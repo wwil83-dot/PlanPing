@@ -121,7 +121,7 @@ def _w(s: str) -> Optional[str]:
         return None
     if "withdraw" in s:
         return "withdrawn"
-    if "eia" in s or "do not wish to comment" in s or "observations" in s:
+    if "eia" in s or "do not wish to comment" in s or "observations" in s or s in ("decision made", "request responded to"):
         return "closed"
     if any(x in s for x in ("invalid", "returned", "closed", "cancel", "not proceed", "finally disposed",
                             "no further action", "not determined", "entered in error", "not valid")):
@@ -235,7 +235,7 @@ async def collect(client, kind: str, a: date, b: date, out: dict, stats: dict):
     if len(rows) >= CAP and a < b:
         mid = a + (b - a) // 2
         await collect(client, kind, a, mid, out, stats)
-        await collect(client, kind, mid + 1, b, out, stats)
+        await collect(client, kind, mid + timedelta(days=1), b, out, stats)
         return
     if len(rows) >= CAP:
         stats["capped_days"].append(a.isoformat())
