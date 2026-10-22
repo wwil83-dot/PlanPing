@@ -5642,8 +5642,8 @@ jobs:
     # South Hams, West Devon and Wealden - the 'Planning Register' engine North Devon uses, plus a
     # /Disclaimer step. One run covers all three (matrix, one at a time, a failure in one does not stop
     # the others). See register_scraper.py.
-    # MANUAL ONLY for now: first run is a 60-day DRY RUN (writes nothing). After the logs are checked
-    # set DRY_RUN to "0" for the real backfill, then promote to nightly (WINDOW_DAYS "14" plus a
+    # MANUAL ONLY for now: dry runs are clean, so this is the real 60-day BACKFILL (DRY_RUN "0").
+    # After it is checked, promote to nightly (WINDOW_DAYS "14" plus a
     # unique cron).
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'register_scraper'
     runs-on: [self-hosted, uk-runner]
@@ -5665,5 +5665,5 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           COUNCIL: ${{ matrix.council }}
           WINDOW_DAYS: "60"
-          DRY_RUN: "1"
+          DRY_RUN: "0"
         run: cd scrapers && python register_scraper.py
