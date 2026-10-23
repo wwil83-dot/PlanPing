@@ -5718,7 +5718,7 @@ jobs:
     # share one reference sequence with no ward/parish/council field, so this sweeps by date only and files each
     # row to Boston (id 560) or East Lindsey (id 33) by address. See lincs_shared_scraper.py.
     # East Lindsey's own ward-based scraper still works (verified 2026-10-23: newest rows 22 Oct), so this saves
-    # BOSTON ONLY (SAVE_EAST_LINDSEY "0"). MANUAL, DRY RUN first (writes nothing). Once the log is checked:
+    # BOSTON ONLY (SAVE_EAST_LINDSEY "0"). Dry run was clean on 2026-10-23 (91 Boston apps in 30 days), so this is now the real 60-day BACKFILL. Then:
     # DRY_RUN "0" for a 60-day backfill, then nightly with DAYS_BACK "14" and remove the cron line/condition of
     # boston_scraper (40 9), which is ward based and now finds nothing new. Leave east_lindsey_scraper alone.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'lincs_shared_scraper'
@@ -5742,7 +5742,7 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           BOSTON_COUNCIL_ID: "560"
           SAVE_EAST_LINDSEY: "0"
-          DAYS_BACK: "30"
+          DAYS_BACK: "60"
           MAX_MINUTES: "60"
-          DRY_RUN: "1"
+          DRY_RUN: "0"
         run: cd scrapers && python lincs_shared_scraper.py
