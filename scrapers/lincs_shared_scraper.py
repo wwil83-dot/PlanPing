@@ -17,7 +17,8 @@ application. This scraper sweeps the portal by date only (no ward), 7-day window
 Decided applications: a second sweep by decision date reads each decided application's Summary page for the
 decision text and date, so they are saved as approved / refused / withdrawn rather than 'pending'.
 
-Env: SUPABASE_URL, SUPABASE_KEY, BOSTON_COUNCIL_ID (560), EAST_LINDSEY_COUNCIL_ID (33), DAYS_BACK (14),
+Env: SUPABASE_URL, SUPABASE_KEY, BOSTON_COUNCIL_ID (560), SAVE_EAST_LINDSEY (0; 1 also saves East Lindsey,
+needs EAST_LINDSEY_COUNCIL_ID 33), DAYS_BACK (14),
 SLICE_DAYS (7), MAX_MINUTES (45), DRY_RUN (1 = write nothing), DETAIL_DELAY (1.0).
 """
 import asyncio
@@ -43,6 +44,9 @@ DAYS_BACK = int(os.environ.get("DAYS_BACK", "14"))
 SLICE_DAYS = int(os.environ.get("SLICE_DAYS", "7"))
 MAX_MINUTES = float(os.environ.get("MAX_MINUTES", "45"))
 DRY_RUN = os.environ.get("DRY_RUN", "1") == "1"
+# East Lindsey's own ward-based scraper still works (its applications carry a ward), so by default this only
+# SAVES Boston. East Lindsey rows are still classified and counted so the two can be compared.
+SAVE_EL = os.environ.get("SAVE_EAST_LINDSEY", "0") == "1"
 DETAIL_DELAY = float(os.environ.get("DETAIL_DELAY", "1.0"))
 START = time.monotonic()
 SOURCE = "lincs_shared_scraper"
@@ -223,8 +227,8 @@ async def main():
     print(f"Days back {DAYS_BACK}   slice {SLICE_DAYS}d   DRY_RUN {DRY_RUN}   max {MAX_MINUTES} min   "
           f"boston_id {BOSTON_ID}   east_lindsey_id {EL_ID}")
     print(f"SUPABASE: {'set' if SUPABASE_URL and SUPABASE_KEY else 'NOT SET'}\n")
-    if not DRY_RUN and not (SUPABASE_URL and SUPABASE_KEY and BOSTON_ID and EL_ID):
-        print("ERROR: set SUPABASE_URL, SUPABASE_KEY, BOSTON_COUNCIL_ID and EAST_LINDSEY_COUNCIL_ID")
+    if not DRY_RUN and not (SUPABASE_URL and SUPABASE_KEY and BOSTON_ID and (EL_ID or not SAVE_EL)):
+        print("ERROR: set SUPABASE_URL, SUPABASE_KEY and BOSTON_COUNCIL_ID (and EAST_LINDSEY_COUNCIL_ID if SAVE_EAST_LINDSEY=1)")
         sys.exit(1)
 
     today = date.today()
@@ -246,7 +250,8 @@ async def main():
                 print("    ⚠ MAX_MINUTES reached while reading decisions")
                 break
             row = decided[ref]
-            if classify(row["address"])[0] == "skip":
+            who = classify(row["address"])[0]
+            if who == "skip" or (who == "east_lindsey" and not SAVE_EL):
                 continue
             try:
                 dec_info[ref] = await read_decision(page, row["council_url"])
@@ -273,7 +278,7 @@ async def main():
             continue
         status = E._normalise_status(row["raw_status"])
         dtext, ddate = dec_info.get(ref, ("", None))
-        dstat = decision_to_status(dtext) if ref in decided else None
+        dstat = decision_to_status(dtext) if (ref in decided and dtext) else None
         if ref in decided and dstat:
             status = dstat
         elif ref in decided and row["raw_status"].lower().startswith("decided") and status == "pending":
@@ -302,7 +307,7 @@ async def main():
     if DRY_RUN:
         print("\nDRY_RUN: nothing written.")
         return
-    for who, cid in (("boston", BOSTON_ID), ("east_lindsey", EL_ID)):
+    for who, cid in (("boston", BOSTON_ID),) + ((("east_lindsey", EL_ID),) if SAVE_EL else ()):
         recs = records[who]
         if not recs:
             await E._supa_patch_council(cid, {"last_scraped_at": datetime.now(timezone.utc).isoformat()})
