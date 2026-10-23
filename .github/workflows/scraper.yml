@@ -117,7 +117,7 @@ on:
                           # LIMITATION: this is a "Received" report with
                           # no decision/status column — everything from
                           # this source files as 'pending'.
-    - cron: '40 9 * * *'  # Boston Borough Council nightly scrape —
+    - cron: '40 9 * * *'  # Boston nightly (lincs_shared_scraper: date-only sweep of the shared South & East Lincolnshire Idox portal, filed to Boston by address, ~5 min)
                           # promoted after a confirmed clean production
                           # run (2026-09-27): 19 real applications
                           # saved across 6 real wards, only 1 centroid
@@ -4272,9 +4272,8 @@ jobs:
     # mislabeled Boston applications) is still pending, deliberately
     # deferred. DELIBERATELY manual-trigger only for now — never run
     # live yet.
-    if: >
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'boston_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '40 9 * * *')
+    # RETIRED from the nightly schedule 2026-10-23: ward based, finds nothing since Boston moved platform. See lincs_shared_scraper.
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'boston_scraper'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -5721,7 +5720,10 @@ jobs:
     # BOSTON ONLY (SAVE_EAST_LINDSEY "0"). Dry run was clean on 2026-10-23 (91 Boston apps in 30 days), so this is now the real 60-day BACKFILL. Then:
     # DRY_RUN "0" for a 60-day backfill, then nightly with DAYS_BACK "14" and remove the cron line/condition of
     # boston_scraper (40 9), which is ward based and now finds nothing new. Leave east_lindsey_scraper alone.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'lincs_shared_scraper'
+    # NIGHTLY (40 9 * * *) from 2026-10-23: 60-day backfill saved 169 Boston applications in 12.7 minutes.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'lincs_shared_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '40 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 75
     steps:
@@ -5742,7 +5744,7 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           BOSTON_COUNCIL_ID: "560"
           SAVE_EAST_LINDSEY: "0"
-          DAYS_BACK: "60"
-          MAX_MINUTES: "60"
+          DAYS_BACK: "14"
+          MAX_MINUTES: "40"
           DRY_RUN: "0"
         run: cd scrapers && python lincs_shared_scraper.py
