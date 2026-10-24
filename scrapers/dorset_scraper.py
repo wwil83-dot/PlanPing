@@ -12,7 +12,8 @@ Flow (confirmed by dorset_probe / dorset_probe2):
     Decision, Decision Date and a link plandisp.aspx?recno=N. Next page = POST the results form with the
     RadDataPager1 Next button.
   * Detail page (plandisp.aspx): Status, Type, Valid Date, Issue Date, Address.
-Two sweeps (received window with a lag, and decision/issued window) merged by reference; decided wins.
+One sweep by received date (window + lag). The register's decision-date search returns nothing useful, so
+older applications still 'pending' in our database are re-read each run (RECHECK_DAYS) to pick up decisions.
 
 Env: SUPABASE_URL, SUPABASE_KEY (not needed for DRY_RUN), DORSET_COUNCIL_ID (368), WINDOW_DAYS (14; 60 for a
 backfill), VALIDATION_LAG_DAYS (21), SLICE_DAYS (7), DETAIL_DELAY_SECONDS (0.7), MAX_MINUTES (45), DRY_RUN.
@@ -46,6 +47,7 @@ LAG_DAYS = int(os.environ.get("VALIDATION_LAG_DAYS", "21"))
 SLICE_DAYS = int(os.environ.get("SLICE_DAYS", "7"))
 DETAIL_DELAY = float(os.environ.get("DETAIL_DELAY_SECONDS", "0.7"))
 MAX_MINUTES = float(os.environ.get("MAX_MINUTES", "45"))
+RECHECK_DAYS = int(os.environ.get("RECHECK_DAYS", "180"))
 DRY_RUN = N.DRY_RUN
 UA = N.UA
 START = N.START
@@ -142,24 +144,30 @@ _UNMAPPED: set = set()
 
 
 def map_status(detail_status: str, decision: str, has_decision: bool) -> str:
-    texts = [(decision or "").lower(), (detail_status or "").lower()]
-    joined = " | ".join(texts)
-    if "withdraw" in joined:
+    """Detail-page Status first (it says Application Approved / Refused outright), then the list's Decision text
+    (used for tree notices and prior approvals, whose Status is just 'Response Issued')."""
+    ds = (detail_status or "").strip().lower()
+    d = (decision or "").strip().lower()
+    if "withdraw" in ds or "withdraw" in d:
         return "withdrawn"
-    d = texts[0]
-    if d:
-        if "split" in d:
-            return "approved"
-        if "refus" in d or "reject" in d or "dismiss" in d:
-            return "refused"
-        if any(x in d for x in ("grant", "approv", "permit", "consent", "no objection", "not required", "certif",
-                                "lawful", "no further action", "not expedient")) and "not permit" not in d:
-            return "approved"
-        if any(x in d for x in ("invalid", "returned", "closed", "cancel", "not determined", "disposed", "lapsed")):
-            return "closed"
-    s = texts[1]
-    if any(x in s for x in ("invalid", "returned", "closed", "cancel", "not proceed", "lapsed", "disposed")):
+    if ds == "application approved":
+        return "approved"
+    if ds == "application refused":
+        return "refused"
+    if ds.startswith("split decision"):
+        return "approved"
+    if "invalid" in ds or ds.startswith("closed") or "lapsed" in ds or "cancel" in ds:
         return "closed"
+    if ds == "planning not required":
+        return "approved"
+    if d:
+        if "consent required" in d or "prior approval required" in d or "response given" in d or "dc managed" in d:
+            return "closed"
+        if "refus" in d or "not pd" in d:
+            return "refused"
+        if any(x in d for x in ("acceptable", "does not require", "no objection", "grant", "approv", "consent",
+                                "not required", "split", "certif", "lawful")):
+            return "approved"
     if has_decision:
         key = f"{detail_status} | {decision}"
         if key not in _UNMAPPED:
@@ -231,6 +239,24 @@ async def sweep(client, kind: str, d_from: date, d_to: date) -> dict:
     return out
 
 
+async def pending_to_recheck(cid: int, older_than: date, newer_than: date) -> list:
+    """Pending Dorset applications saved earlier that fell out of the received sweep (the register's decision
+    search does not work - it returned 0 rows a week), so they would otherwise stay pending for ever."""
+    out, offset = [], 0
+    async with httpx.AsyncClient(timeout=30) as c:
+        while True:
+            r = await c.get(f"{SUPABASE_URL}/rest/v1/planning_applications", headers=N._h(), params=[
+                ("select", "reference,council_url,submitted_date"), ("council_id", f"eq.{cid}"), ("status", "eq.pending"),
+                ("submitted_date", f"gte.{newer_than.isoformat()}"), ("submitted_date", f"lt.{older_than.isoformat()}"),
+                ("order", "submitted_date.desc"), ("limit", "1000"), ("offset", str(offset))])
+            r.raise_for_status()
+            rows = r.json()
+            out += rows
+            if len(rows) < 1000:
+                return [x for x in out if x.get("council_url")]
+            offset += 1000
+
+
 async def council_id() -> int:
     env = os.environ.get("DORSET_COUNCIL_ID", "").strip()
     if env.isdigit():
@@ -261,9 +287,9 @@ async def main():
     async with httpx.AsyncClient(timeout=60, follow_redirects=True,
                                  headers={"User-Agent": UA, "Accept": "text/html,*/*;q=0.8"}) as client:
         received = await sweep(client, "received", d_from - timedelta(days=LAG_DAYS), today)
-        decided = await sweep(client, "decided", d_from, today)
-        refs = list(dict.fromkeys(list(decided) + list(received)))
-        print(f"    ℹ received list {len(received)}, decided list {len(decided)}, unique {len(refs)}")
+        decided = {}  # the decision-date search is useless on this register (0 rows a week); see pending_to_recheck
+        refs = list(received)
+        print(f"    ℹ received list {len(received)}, unique {len(refs)}")
 
         apps, failed, timed_out = [], 0, False
         for n, ref in enumerate(refs, 1):
@@ -293,6 +319,33 @@ async def main():
             if n % 25 == 0:
                 print(f"    ℹ detail pages {n}/{len(refs)}")
             await asyncio.sleep(DETAIL_DELAY)
+
+        # older applications still 'pending' in our database: re-read their detail page for a decision
+        updates, recheck_combo = [], Counter()
+        if cid and not timed_out:
+            todo = await pending_to_recheck(cid, d_from - timedelta(days=LAG_DAYS), today - timedelta(days=RECHECK_DAYS))
+            print(f"    ℹ rechecking {len(todo)} older pending applications")
+            for n, row in enumerate(todo, 1):
+                if minutes() > MAX_MINUTES:
+                    print(f"    ⚠ MAX_MINUTES reached after {n - 1} of {len(todo)} rechecks")
+                    break
+                try:
+                    r = await N._req(client, "GET", row["council_url"])
+                    det = parse_detail(BeautifulSoup(r.text, "html.parser").get_text(" "))
+                except Exception as e:
+                    failed += 1
+                    print(f"    ⚠ recheck {row['reference']} failed: {e}")
+                    continue
+                st = map_status(det["status"], "", bool(det["issued"]))
+                recheck_combo[(det["status"], st)] += 1
+                if st != "pending":
+                    updates.append({"council_id": cid, "reference": row["reference"], "status": st,
+                                    "decision_date": det["issued"].isoformat() if det["issued"] else None})
+                if n % 50 == 0:
+                    print(f"    ℹ rechecked {n}/{len(todo)}")
+                await asyncio.sleep(DETAIL_DELAY)
+            print(f"    ℹ recheck: {len(updates)} of {len(todo)} now decided; detail status -> status: "
+                  f"{dict(recheck_combo.most_common(12))}")
 
     print(f"    ℹ parsed {len(apps)}; detail failures {failed}")
     print(f"    ℹ by status: {dict(Counter(a['status'] for a in apps))}")
@@ -340,6 +393,11 @@ async def main():
             saved += len(records[i:i + 50])
         else:
             ok = False
+    for i in range(0, len(updates), 50):  # same four keys in every object, so no column is nulled by mistake
+        if not await N._upsert(updates[i:i + 50]):
+            ok = False
+    if updates:
+        print(f"    ✓ Updated {len(updates)} older applications that now have a decision")
     now = datetime.now(timezone.utc).isoformat()
     if ok and not timed_out:
         await N._patch_council(cid, {"coverage_source": SOURCE, "last_scraped_at": now, "last_saved_at": now,
