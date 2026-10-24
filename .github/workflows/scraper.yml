@@ -36,6 +36,7 @@ on:
     - cron: '14 8 * * *'  # Waverley nightly scrape (Civica W2 open JSON API, httpx only, ~4 requests a run)
     - cron: '16 8 * * *'  # Eastbourne nightly scrape (Civica W2 open JSON API on the gtest host, httpx + pyproj, ~4 requests a run)
     - cron: '18 8 * * *'  # North Devon nightly scrape (server-rendered portal over plain HTTP, ~200 requests a run, ~5 min)
+    - cron: '26 8 * * *'  # Dorset Council nightly scrape (custom ASP.NET register over plain HTTP, 14-day window + recheck of older pending applications, ~20 min)
     - cron: '24 8 * * *'  # South Hams / West Devon / Wealden nightly scrape (Planning Register engine over plain HTTP, 14-day window, ~25 min in total)
     - cron: '20 8 * * *'  # Wokingham nightly scrape (classic ASP FastWebPL via headless Chromium, ~40 page loads, ~2-4 min)
     - cron: '15 8 * * *'  # "Search/Advanced" family nightly scrape (Westmorland and Furness, Cherwell, Wychavon, Malvern Hills)
@@ -5780,7 +5781,10 @@ jobs:
     # Dorset Council (id 368): custom ASP.NET register over plain HTTP, Telerik date pickers, 10 per page.
     # See dorset_scraper.py. Dry run on 2026-10-24 parsed 1453 applications with 0 failures, so this is the real
     # 60-day BACKFILL (about 40 minutes). Then promote to nightly (WINDOW_DAYS "14" plus a unique cron).
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'dorset_scraper'
+    # NIGHTLY (26 8 * * *) from 2026-10-24: 60-day backfill saved 1453 applications in 34 minutes.
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'dorset_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '26 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 80
     steps:
@@ -5794,7 +5798,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           DORSET_COUNCIL_ID: "368"
-          WINDOW_DAYS: "60"
-          MAX_MINUTES: "65"
+          WINDOW_DAYS: "14"
+          MAX_MINUTES: "40"
           DRY_RUN: "0"
         run: cd scrapers && python dorset_scraper.py
