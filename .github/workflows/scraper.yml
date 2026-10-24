@@ -5778,11 +5778,11 @@ jobs:
 
   dorset_scraper:
     # Dorset Council (id 368): custom ASP.NET register over plain HTTP, Telerik date pickers, 10 per page.
-    # See dorset_scraper.py. MANUAL, 60-day DRY RUN first (writes nothing). After the log is checked set
-    # DRY_RUN "0" for the backfill, then promote to nightly (WINDOW_DAYS "14" plus a unique cron).
+    # See dorset_scraper.py. Dry run on 2026-10-24 parsed 1453 applications with 0 failures, so this is the real
+    # 60-day BACKFILL (about 40 minutes). Then promote to nightly (WINDOW_DAYS "14" plus a unique cron).
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'dorset_scraper'
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 75
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -5795,6 +5795,6 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           DORSET_COUNCIL_ID: "368"
           WINDOW_DAYS: "60"
-          MAX_MINUTES: "60"
-          DRY_RUN: "1"
+          MAX_MINUTES: "65"
+          DRY_RUN: "0"
         run: cd scrapers && python dorset_scraper.py
