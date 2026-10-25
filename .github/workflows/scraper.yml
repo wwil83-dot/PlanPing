@@ -5819,10 +5819,11 @@ jobs:
 
   arun_scraper:
     # Arun District Council (id 5): embedded OcellaWeb search (www1.arun.gov.uk/aplanning/OcellaWeb), same product
-    # as the four councils in ocellaweb_scraper. 7-day slices, DRY RUN first (writes nothing). See arun_scraper.py.
+    # as the four councils in ocellaweb_scraper. 7-day slices. Dry run clean on 2026-10-25 (205 apps, 0 detail
+    # failures), so this is the real 60-day BACKFILL, then nightly. See arun_scraper.py.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'arun_scraper'
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -5840,7 +5841,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           ARUN_COUNCIL_ID: "5"
-          DAYS_BACK: "30"
-          MAX_MINUTES: "30"
-          DRY_RUN: "1"
+          DAYS_BACK: "60"
+          MAX_MINUTES: "45"
+          DRY_RUN: "0"
         run: cd scrapers && python arun_scraper.py
