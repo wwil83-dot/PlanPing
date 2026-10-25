@@ -36,6 +36,7 @@ on:
     - cron: '14 8 * * *'  # Waverley nightly scrape (Civica W2 open JSON API, httpx only, ~4 requests a run)
     - cron: '16 8 * * *'  # Eastbourne nightly scrape (Civica W2 open JSON API on the gtest host, httpx + pyproj, ~4 requests a run)
     - cron: '18 8 * * *'  # North Devon nightly scrape (server-rendered portal over plain HTTP, ~200 requests a run, ~5 min)
+    - cron: '30 8 * * *'  # Arun District Council nightly scrape (OcellaWeb, 14-day window received + decided, ~5 min)
     - cron: '26 8 * * *'  # Dorset Council nightly scrape (custom ASP.NET register over plain HTTP, 14-day window + recheck of older pending applications, ~20 min)
     - cron: '24 8 * * *'  # South Hams / West Devon / Wealden nightly scrape (Planning Register engine over plain HTTP, 14-day window, ~25 min in total)
     - cron: '20 8 * * *'  # Wokingham nightly scrape (classic ASP FastWebPL via headless Chromium, ~40 page loads, ~2-4 min)
@@ -5820,8 +5821,10 @@ jobs:
   arun_scraper:
     # Arun District Council (id 5): embedded OcellaWeb search (www1.arun.gov.uk/aplanning/OcellaWeb), same product
     # as the four councils in ocellaweb_scraper. 7-day slices. Dry run clean on 2026-10-25 (205 apps, 0 detail
-    # failures), so this is the real 60-day BACKFILL, then nightly. See arun_scraper.py.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'arun_scraper'
+    # failures). 60-day backfill saved 416 on 2026-10-25; now NIGHTLY (14-day window, received + decided sweeps).
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'arun_scraper') ||
+      (github.event_name == 'schedule' && github.event.schedule == '30 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 60
     steps:
@@ -5841,7 +5844,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           ARUN_COUNCIL_ID: "5"
-          DAYS_BACK: "60"
-          MAX_MINUTES: "45"
+          DAYS_BACK: "14"
+          MAX_MINUTES: "30"
           DRY_RUN: "0"
         run: cd scrapers && python arun_scraper.py
