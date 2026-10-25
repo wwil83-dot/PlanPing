@@ -54,11 +54,11 @@ def status_of(raw: str) -> str:
     s = (raw or "").lower()
     if "withdraw" in s:
         return "withdrawn"
-    if any(x in s for x in ("refus", "reject", "dismiss", "not permitted")):
+    if any(x in s for x in ("refus", "reject", "dismiss", "not permitted", "appealed")):
         return "refused"
     if "undecided" in s or not s.strip():
         return "pending"
-    if any(x in s for x in ("approv", "grant", "permit", "allow", "no objection", "consent", "not required", "certif")):
+    if any(x in s for x in ("approv", "app cond", "grant", "permit", "allow", "no objection", "consent", "not required", "certif")):
         return "approved"
     if any(x in s for x in ("invalid", "returned", "closed", "cancel", "lapsed", "disposed", "no further action")):
         return "closed"
@@ -68,7 +68,11 @@ def status_of(raw: str) -> str:
 _STATUS_SEEN: Counter = Counter()
 _HEADERS_SHOWN = False
 
-TYPE_BY_CODE = {"HH": "Householder", "PL": "Full Planning", "T": "Tree Works", "DOC": "Discharge of Conditions"}
+TYPE_BY_CODE = {"HH": "Householder", "PL": "Full Planning", "T": "Tree Works", "DOC": "Discharge of Conditions",
+                "TC": "Tree Works - Conservation Area", "CLP": "Certificate of Lawfulness - Proposed",
+                "CLE": "Certificate of Lawfulness - Existing", "NMA": "Non-material Amendment",
+                "S73": "Variation of Condition", "L": "Listed Building Consent", "A": "Advertisement Consent",
+                "AG": "Agricultural Prior Approval"}
 
 
 def parse_table(html: str) -> list:
