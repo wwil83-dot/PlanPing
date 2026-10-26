@@ -521,11 +521,11 @@ IDOX_COUNCILS = [
     # (southhams.planning-register.co.uk) — skip both permanently.
     # North Devon CONFIRMED not Idox (bespoke "Council Services" product,
     # planning.northdevon.gov.uk/Search/Advanced) — skip.
-    # Torridge CONFIRMED Idox Jul 2026. Plymouth already flagged broken
+    # Torridge CONFIRMED Idox Jul 2026 (https since Oct 2026: the old http:// address now answers 404). Plymouth already flagged broken
     # (redirects to Gloucester's server, see SOUTH WEST section below).
     # -------------------------------------------------------------------------
     ("Torridge District Council",
-     "http://publicaccess.torridge.gov.uk/online-applications"),
+     "https://publicaccess.torridge.gov.uk/online-applications"),
 
     ("Teignbridge District Council",
      "https://publicaccess.teignbridge.gov.uk/online-applications"),
