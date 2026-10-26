@@ -101,6 +101,9 @@ class Portal:
                 await asyncio.sleep(DELAY)
                 CALLS["n"] += 1
                 r = await self.session.get(self.base + path, timeout=60, **kw)
+                if r.status_code >= 500 and n < tries - 1:
+                    await asyncio.sleep(3 + 4 * n)
+                    continue
                 return r
             except Exception as e:
                 last = e
@@ -113,8 +116,12 @@ class Portal:
             try:
                 await asyncio.sleep(DELAY)
                 CALLS["n"] += 1
-                return await self.session.post(self.base + path, data=data, timeout=90,
-                                               headers={"Referer": f"{self.base}/search.do?action=advanced&searchType=Application"})
+                r = await self.session.post(self.base + path, data=data, timeout=90,
+                                            headers={"Referer": f"{self.base}/search.do?action=advanced&searchType=Application"})
+                if r.status_code >= 500 and n < tries - 1:
+                    await asyncio.sleep(3 + 4 * n)
+                    continue
+                return r
             except Exception as e:
                 last = e
                 await asyncio.sleep(2 + 3 * n)
@@ -145,10 +152,10 @@ class Portal:
                     raise Blocked("Cloudflare challenge on results")
                 if "too many results" in low or "enter some more parameters" in low:
                     raise TooMany()
-                if "searchresult" not in low:
+                fields = card_fields(r.text)
+                if not fields:
                     break                          # the form page again / no results: nothing to parse (and no noisy diagnostic)
                 got, has_next = I.parse_results_page(r.text, self.base, self.root, self.name)
-                fields = card_fields(r.text)
                 for g in got:
                     g["_fields"] = fields.get(g.get("reference"), {})
                 if not got:
@@ -228,6 +235,70 @@ async def run_council(name: str, base: str, cid: int) -> tuple:
     return p, list(out.values()), problems
 
 
+DETAIL_MAX = int(os.environ.get("DETAIL_MAX", "150"))
+_DETAIL_SHOWN = set()
+
+
+def detail_fields(html: str) -> dict:
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+    f = {}
+    for tr in soup.find_all("tr"):
+        th, td = tr.find("th"), tr.find("td")
+        if th and td:
+            f[" ".join(th.get_text(" ", strip=True).lower().rstrip(":").split())] = " ".join(td.get_text(" ", strip=True).split())
+    for dl in soup.find_all("dl"):
+        for dt, dd in zip(dl.find_all("dt"), dl.find_all("dd")):
+            f.setdefault(" ".join(dt.get_text(" ", strip=True).lower().rstrip(":").split()), " ".join(dd.get_text(" ", strip=True).split()))
+    return f
+
+
+async def add_outcomes(p: Portal, apps: list, problems: list):
+    """The result cards of these portals say 'decided' but not what was decided. For every such application read the detail page
+    (Decision / Decision Issued Date) so approved / refused / withdrawn are right."""
+    todo = [a for a in apps if a.get("status") == "closed" and a.get("council_url")]
+    if not todo:
+        return
+    todo = todo[:DETAIL_MAX]
+    p.log(f"reading {len(todo)} decision detail pages")
+    p.session = AsyncSession(impersonate="chrome")
+    fixed = 0
+    try:
+        for a in todo:
+            if minutes() > MAX_MINUTES:
+                problems.append(f"{p.name}: MAX_MINUTES reached while reading decision details")
+                break
+            url = a["council_url"]
+            try:
+                await asyncio.sleep(DELAY)
+                CALLS["n"] += 1
+                r = await p.session.get(url, timeout=60)
+            except Exception as e:
+                continue
+            if r.status_code != 200:
+                continue
+            f = detail_fields(r.text)
+            if p.name not in _DETAIL_SHOWN:
+                _DETAIL_SHOWN.add(p.name)
+                p.log(f"detail page fields for {a['reference']}: { {k: v[:40] for k, v in list(f.items())[:18]} }")
+            raw = (f.get("decision") or f.get("status") or "").strip()
+            st = I._normalise_status(raw) if raw else "pending"
+            if st != "pending":
+                a["status"] = st
+                fixed += 1
+            for key in ("decision issued date", "decision made date", "decision date", "decision notice sent date"):
+                d = I._parse_date(f.get(key, ""))
+                if d:
+                    a["decision_date"] = d
+                    break
+    finally:
+        try:
+            await p.session.close()
+        except Exception:
+            pass
+    p.log(f"outcome found for {fixed} of {len(todo)}")
+
+
 async def geocode_and_save(p: Portal, apps: list) -> int:
     need = [a["postcode"] for a in apps if not a.get("lat") and a.get("postcode")]
     if need:
@@ -288,6 +359,7 @@ async def main() -> int:
             continue
         print(f"\n[{name}] (council_id={cid})")
         p, apps, problems = await run_council(name, base, cid)
+        await add_outcomes(p, apps, problems)
         all_problems += problems
         st = {}
         for a in apps:
