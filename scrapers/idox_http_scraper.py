@@ -51,6 +51,27 @@ def minutes() -> float:
     return (time.monotonic() - START) / 60
 
 
+def card_fields(html: str) -> dict:
+    """reference -> raw metaInfo fields of every result card (same splitting as idox_scraper._parse_result)."""
+    from bs4 import BeautifulSoup
+    out = {}
+    for li in BeautifulSoup(html, "html.parser").select("li.searchresult"):
+        f = {}
+        meta = li.find(class_=re.compile(r"metaInfo|meta-info|metadata", re.I))
+        if meta:
+            for part in meta.get_text(separator="|", strip=True).split("|"):
+                if ":" in part:
+                    k, _, v = part.partition(":")
+                    f[k.strip().lower()] = v.strip()
+        ref = (f.get("ref. no") or f.get("ref no") or f.get("reference") or "").strip()
+        if ref:
+            out[ref] = f
+    return out
+
+
+RAW_STATUS = {}                      # council -> Counter of raw status/decision labels seen
+
+
 class TooMany(Exception):
     pass
 
@@ -124,7 +145,14 @@ class Portal:
                     raise Blocked("Cloudflare challenge on results")
                 if "too many results" in low or "enter some more parameters" in low:
                     raise TooMany()
+                if "searchresult" not in low:
+                    break                          # the form page again / no results: nothing to parse (and no noisy diagnostic)
                 got, has_next = I.parse_results_page(r.text, self.base, self.root, self.name)
+                fields = card_fields(r.text)
+                for g in got:
+                    g["_fields"] = fields.get(g.get("reference"), {})
+                if not got:
+                    self.log("⚠ page %d: cards present but none parsed; starts %r" % (page, " ".join(r.text[:200].split())))
                 apps.extend(got)
                 if not has_next or not got or page >= MAX_PAGES:
                     break
@@ -162,6 +190,17 @@ async def sweep(p: Portal, kind: str, a: date, b: date, out: dict, problems: lis
         ref = app.get("reference")
         if not ref:
             continue
+        f = app.pop("_fields", {}) or {}
+        raw = (f.get("decision") or f.get("status") or "").strip()
+        RAW_STATUS.setdefault(p.name, {}).setdefault(raw or "(none)", 0)
+        RAW_STATUS[p.name][raw or "(none)"] += 1
+        status = I._normalise_status(raw) if raw else app.get("status", "pending")
+        if kind == "decided":
+            if status == "pending":
+                status = "closed"                  # it was found by DECISION date, so a decision exists; the label is not one we map
+            if not app.get("decision_date"):
+                app["decision_date"] = a.isoformat()   # decided sweeps run one day at a time, so the window IS the decision day
+        app["status"] = status
         old = out.get(ref)
         if old is None:
             out[ref] = app
@@ -181,8 +220,11 @@ async def run_council(name: str, base: str, cid: int) -> tuple:
     while a <= today:
         b = min(a + timedelta(days=SLICE_DAYS - 1), today)
         await sweep(p, "received", a, b, out, problems)
-        await sweep(p, "decided", a, b, out, problems)
         a = b + timedelta(days=1)
+    d = start
+    while d <= today:
+        await sweep(p, "decided", d, d, out, problems)
+        d += timedelta(days=1)
     return p, list(out.values()), problems
 
 
@@ -252,6 +294,7 @@ async def main() -> int:
             st[a.get("status", "pending")] = st.get(a.get("status", "pending"), 0) + 1
         dec = sum(1 for a in apps if a.get("decision_date"))
         nosub = sum(1 for a in apps if not a.get("submitted_date"))
+        p.log(f"raw status labels seen: {dict(sorted(RAW_STATUS.get(name, {}).items(), key=lambda kv: -kv[1])[:12])}")
         p.log(f"{len(apps)} applications; status {st}; with decision date {dec}; without submitted date {nosub}")
         if DRY_RUN:
             for a in apps[:3]:
