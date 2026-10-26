@@ -6117,10 +6117,11 @@ jobs:
   kensington_scraper:
     # Kensington & Chelsea (id 45): Atlas binary API through ScraperAPI (the council site is behind Cloudflare and the
     # reply is text-decoded by ScraperAPI, so lost bytes are repaired from the structure). One sweep returns new
-    # applications and decisions together. DRY RUN first (30 days, also cross-checks /caseCounts). See kensington_scraper.py.
+    # applications and decisions together. Dry run clean on 2026-10-26 (939 cases / 30 days, counts matched exactly), so this is
+    # the real 120-day BACKFILL, then nightly. See kensington_scraper.py.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'kensington_scraper'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -6133,9 +6134,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           KENSINGTON_COUNCIL_ID: "45"
-          DAYS_BACK: "30"
+          DAYS_BACK: "120"
           SLICE_DAYS: "14"
           CHECK_COUNTS: "1"
-          MAX_MINUTES: "20"
-          DRY_RUN: "1"
+          MAX_MINUTES: "30"
+          DRY_RUN: "0"
         run: cd scrapers && python kensington_scraper.py
