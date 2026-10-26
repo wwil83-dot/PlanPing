@@ -463,6 +463,10 @@ async def main():
         print(f"        {st_!r:<14} {nm!r:<22} {lg!r:<38} -> {mapped:<9} x{n}")
     print(f"    ℹ reference prefixes: {dict(Counter(r['_prefix'] for r in rows).most_common(20))}")
     print(f"    ℹ application types: {dict(Counter(r['application_type'] for r in rows).most_common(12))}")
+    for pre in sorted({r["_prefix"] for r in rows if not r["application_type"]}):
+        ex = [r for r in rows if r["_prefix"] == pre][:3]
+        print(f"    ℹ unmapped prefix {pre} (x{sum(1 for r in rows if r['_prefix'] == pre)}): "
+              + " | ".join((e["description"] or "")[:90] for e in ex))
     subs = [r["submitted_date"] for r in rows if r["submitted_date"]]
     decs = [r["decision_date"] for r in rows if r["decision_date"]]
     print(f"    ℹ submitted_date range {min(subs) if subs else None} .. {max(subs) if subs else None}; "
