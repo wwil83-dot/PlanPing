@@ -20,6 +20,9 @@ How RBKC's register works (found over 14 probe rounds)
     are repaired from the structure: dates must be UTC midnights (one candidate survives), string lengths must be followed by a valid
     next field, coordinates fall back to postcode geocoding. Every reply is checked end to end (the parse must consume the buffer
     exactly, the count prefix must match, and optionally the JSON /caseCounts total must match) and a window that fails is split.
+  * The charset ScraperAPI used is not always Windows-1252 (it appears to guess per reply), so the reversal tries a list of charsets and
+    keeps the first under which the whole reply parses. A single day that still will not decode is re-fetched inside a wider window
+    (bigger replies decode more reliably), filtered back to that day by latestDate and verified against /caseCounts.
 
 Env: SCRAPERAPI_KEY, SUPABASE_URL, SUPABASE_KEY (not needed for DRY_RUN), KENSINGTON_COUNCIL_ID (45), DAYS_BACK (30),
 SLICE_DAYS (14), CHECK_COUNTS (1 = also call /caseCounts per window, +10 credits each), MAX_MINUTES (20), DRY_RUN (1 = write nothing).
@@ -55,7 +58,8 @@ DRY_RUN = os.environ.get("DRY_RUN", "1") == "1"
 SOURCE = "kensington_scraper"
 START = time.monotonic()
 
-UNDEF = (0x81, 0x8D, 0x8F, 0x90, 0x9D)          # bytes Windows-1252 cannot decode -> U+FFFD
+CP1252_UNDEF = (0x81, 0x8D, 0x8F, 0x90, 0x9D)   # bytes Windows-1252 cannot decode -> U+FFFD
+UNDEF = CP1252_UNDEF                           # swapped per charset while one reply is being parsed
 TICKS_1970 = 621355968000000000
 TICKS_DAY = 864_000_000_000
 TICKS_MASK = 0x3FFFFFFFFFFFFFFF
@@ -73,18 +77,46 @@ class ParseError(ValueError):
     pass
 
 
-def to_buf(raw: bytes) -> list:
-    """Reverse ScraperAPI's text decode: UTF-8 text -> original bytes; U+FFFD -> None (one of UNDEF)."""
-    text = raw.decode("utf-8")
+# ScraperAPI does not always decode with Windows-1252: it seems to guess the charset per reply (a run of ordinary-looking
+# replies came back as Baltic / Arabic / Mac Roman / Shift-JIS text). So the reversal tries a list of charsets and keeps the
+# first one under which the WHOLE reply parses exactly (structure, count prefix, and later /caseCounts).
+SINGLE_BYTE = ["cp1252", "latin_1", "cp1257", "cp1256", "cp1251", "cp1250", "cp1253", "cp1254", "cp1255", "cp1258",
+               "mac_roman", "mac_cyrillic", "mac_latin2", "iso8859_2", "iso8859_4", "iso8859_5", "iso8859_7",
+               "iso8859_9", "iso8859_13", "iso8859_15", "cp437", "cp850", "cp1125"]
+MULTI_BYTE = ["cp932", "gbk", "big5", "cp949", "euc_jp"]      # only usable when no byte was lost (U+FFFD is ambiguous there)
+_UNDEF_CACHE: dict = {}
+
+
+def undefined_bytes(enc: str) -> tuple:
+    """Byte values the codec cannot decode (those arrive as U+FFFD)."""
+    if enc not in _UNDEF_CACHE:
+        bad = []
+        for b in range(256):
+            try:
+                bytes([b]).decode(enc)
+            except UnicodeDecodeError:
+                bad.append(b)
+        _UNDEF_CACHE[enc] = tuple(bad)
+    return _UNDEF_CACHE[enc]
+
+
+def to_buf(text: str, enc: str = "cp1252") -> list:
+    """Reverse the text decode: text -> original bytes; U+FFFD -> None (one of the codec's undefined bytes)."""
+    multi = enc in MULTI_BYTE
     out = []
     for ch in text:
-        if ch == "�":
+        if ch == "\ufffd":
+            if multi or not undefined_bytes(enc):
+                raise ParseError(f"lost byte under {enc}")
             out.append(None)
-        else:
-            try:
-                out.append(ch.encode("cp1252")[0])
-            except UnicodeEncodeError:
-                raise ParseError(f"unexpected character U+{ord(ch):04X} in the reply (not a Windows-1252 text decode)")
+            continue
+        try:
+            bs = ch.encode(enc)
+        except UnicodeEncodeError:
+            raise ParseError(f"unexpected character U+{ord(ch):04X} in the reply (not a {enc} text decode)")
+        if len(bs) != 1 and not multi:
+            raise ParseError(f"character U+{ord(ch):04X} is not a single {enc} byte")
+        out.extend(bs)
     return out
 
 
@@ -149,7 +181,8 @@ def _text(bs, stats):
     stats["text_guessed"] += 1
     if len(unk) <= 3:
         best = None
-        for rank, combo in enumerate(product(_PREFER, repeat=len(unk))):
+        pref = [u for u in _PREFER if u in UNDEF] + [u for u in UNDEF if u not in _PREFER]
+        for rank, combo in enumerate(product(pref, repeat=len(unk))):
             b = list(bs)
             for k, val in zip(unk, combo):
                 b[k] = val
@@ -229,9 +262,7 @@ def _parse_record(buf, i, stats):
     return rec, i
 
 
-def decode_cases(raw: bytes):
-    """-> (records, stats, declared_count). Raises ParseError unless the whole reply parses cleanly."""
-    buf = to_buf(raw)
+def _decode_buf(buf):
     _need(buf, 0, 4)
     declared = _u32(buf[0:4])
     stats = Counter()
@@ -246,12 +277,35 @@ def decode_cases(raw: bytes):
     return recs, stats, declared
 
 
+def decode_cases(raw: bytes):
+    """-> (records, stats, declared_count). Raises ParseError unless the whole reply parses cleanly under some charset."""
+    global UNDEF
+    text = raw.decode("utf-8")
+    first_err = None
+    for enc in SINGLE_BYTE + MULTI_BYTE:
+        try:
+            buf = to_buf(text, enc)
+            UNDEF = undefined_bytes(enc) or UNDEF
+            recs, stats, declared = _decode_buf(buf)
+        except ParseError as e:
+            first_err = first_err or e
+            continue
+        finally:
+            UNDEF = CP1252_UNDEF
+        if enc != "cp1252":
+            stats[f"charset_{enc}"] += 1
+        return recs, stats, declared
+    raise first_err or ParseError("reply could not be decoded")
+
+
 # ---------------------------------------------------------------------------
 # Mapping to PlanFind rows
 # ---------------------------------------------------------------------------
 TYPE_BY_PREFIX = {"PP": "Planning Permission", "LB": "Listed Building Consent", "NMA": "Non-Material Amendment",
                   "CON": "Approval of Conditions", "CL": "Certificate of Lawfulness", "PA": "Prior Approval",
-                  "ACV": "Asset of Community Value", "EIA": "EIA Screening / Scoping", "ARB": "Tree Works"}
+                  "ACV": "Asset of Community Value", "EIA": "EIA Screening / Scoping", "ARB": "Tree Works",
+                  "CA": "Advertisement Consent", "NOT": "Prior Notification", "OB": "Neighbouring Authority Consultation",
+                  "PC": "Vehicle Crossover", "SNN": "Street Naming and Numbering", "TTT": "Thames Tideway Tunnel"}
 _STATUS_SEEN: Counter = Counter()
 POSTCODE_RE = re.compile(r"\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b", re.I)
 
@@ -338,6 +392,38 @@ async def counts_total(client, a: date, b: date) -> Optional[int]:
         return None
 
 
+async def padded(client, a: date, b: date):
+    """Re-fetch a window that would not decode inside a wider one (bigger replies decode more reliably), keep only the cases whose
+    latestDate lies in a..b, and verify with /caseCounts for both the wide and the narrow window. -> (recs, stats, declared, expected) or None."""
+    today = datetime.now(timezone.utc).date()
+    for pad in (7, 14):
+        if minutes() > MAX_MINUTES:
+            return None
+        b2 = min(b + timedelta(days=pad), today)
+        a2 = a - timedelta(days=2 * pad - (b2 - b).days)      # near today the window grows backwards instead
+        try:
+            recs, st, declared = decode_cases(await fetch(client, f"{API_BASE}/cases/everywhere?dateFrom={day_ms(a2)}&dateTo={day_ms(b2)}&sort=1"))
+        except Exception as e:
+            print(f"    ⚠ padded {a2}..{b2}: {type(e).__name__}: {e}")
+            continue
+        if CHECK_COUNTS:
+            wide = await counts_total(client, a2, b2)
+            if wide is not None and wide != len(recs):
+                print(f"    ⚠ padded {a2}..{b2}: parsed {len(recs)} but /caseCounts says {wide}")
+                continue
+        if any(r["latestDate"] is None for r in recs):
+            print(f"    ⚠ padded {a2}..{b2}: a latestDate was unreadable")
+            continue
+        keep = [r for r in recs if a <= r["latestDate"] <= b]
+        expected = await counts_total(client, a, b) if CHECK_COUNTS else None
+        if expected is not None and expected != len(keep):
+            print(f"    ⚠ padded {a2}..{b2}: {len(keep)} fall in {a}..{b} but /caseCounts says {expected}")
+            continue
+        st["padded_window"] += 1
+        return keep, st, declared, expected
+    return None
+
+
 async def collect(client, a: date, b: date, out: dict, stats: Counter, problems: list):
     if minutes() > MAX_MINUTES:
         problems.append(f"MAX_MINUTES reached before {a}..{b}")
@@ -354,15 +440,22 @@ async def collect(client, a: date, b: date, out: dict, stats: Counter, problems:
     if bad:
         why = err or f"parsed {len(recs)} but /caseCounts says {expected}"
         print(f"    ⚠ {a}..{b}: {why}")
-        if a < b:
+        if err is not None and a == b:
+            got = await padded(client, a, b)       # a single day cannot be split any further
+            if got:
+                recs, st, declared, expected = got
+                bad = False
+                print(f"    ✓ {a}: recovered through a padded window")
+        if bad and a < b:
             mid = a + (b - a) // 2
             await collect(client, a, mid, out, stats, problems)
             await collect(client, mid + timedelta(days=1), b, out, stats, problems)
             return
-        if recs is None:
-            problems.append(f"{a}: {why}")
-            return
-        problems.append(f"{a}: {why} (kept the parsed records)")
+        if bad:
+            if recs is None:
+                problems.append(f"{a}: {why}")
+                return
+            problems.append(f"{a}: {why} (kept the parsed records)")
     stats.update(st)
     for r in recs:
         old = out.get(r["caseReference"])
