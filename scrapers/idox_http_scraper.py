@@ -238,14 +238,19 @@ async def run_council(name: str, base: str, cid: int) -> tuple:
 
 
 def outcome(raw: str) -> str:
-    """Decision label -> approved / refused / withdrawn, or 'pending' when the label is not one we can map."""
-    st = I._normalise_status(raw)
-    if st != "pending":
-        return st
-    t = (raw or "").lower()
-    if re.search(r"unlawful|not lawful|invalid|refus", t):
+    """Decision label -> approved / refused / withdrawn / closed (decided, outcome neutral), or 'pending' when not recognised."""
+    t = (raw or "").lower().strip()
+    if not t:
+        return "pending"
+    if "withdraw" in t:
+        return "withdrawn"
+    if re.search(r"not discharged|further discharge|details required|approval required|permission required|determine not|"
+                 r"recommendation only|request responded|unknown|not to make", t):
+        return "closed"
+    if re.search(r"refus|unlawful|not lawful|invalid|reject|dismiss", t):
         return "refused"
-    if re.search(r"discharg|lawful|no objection|not required|no further|split|agreed|consent|prior approval|conditional|determined|acceptable", t):
+    if re.search(r"approv|grant|permit|permission|discharg|lawful|certificate|no objection|not required|no further|consent|"
+                 r"section 106|split|agreed|conditional|outline|reserved|determined|acceptable|advertisement|non material|allow", t):
         return "approved"
     return "pending"
 
@@ -297,8 +302,14 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
             if p.name not in _DETAIL_SHOWN:
                 _DETAIL_SHOWN.add(p.name)
                 p.log(f"detail page fields for {a['reference']}: { {k: v[:40] for k, v in list(f.items())[:18]} }")
-            raw = (f.get("decision") or f.get("status") or "").strip()
-            st = outcome(raw) if raw else "pending"
+            raw = (f.get("decision") or "").strip()
+            st = outcome(raw)
+            if st in ("pending", "closed") and f.get("status"):
+                st2 = outcome(f["status"])                 # e.g. Hinckley: decision 'Planning Permission', status 'Permitted'
+                if st2 not in ("pending", "closed"):
+                    st, raw = st2, f["status"]
+            if not raw:
+                raw = (f.get("status") or "").strip()
             OUTCOMES_SEEN.setdefault(p.name, {})
             OUTCOMES_SEEN[p.name][raw or "(none)"] = OUTCOMES_SEEN[p.name].get(raw or "(none)", [st, 0])
             if isinstance(OUTCOMES_SEEN[p.name][raw or "(none)"], list):
@@ -374,36 +385,43 @@ async def geocode_and_save(p: Portal, apps: list) -> int:
     return saved
 
 
+async def process(name: str, base: str, cid: int, quiet_samples: bool = False) -> tuple:
+    p, apps, problems = await run_council(name, base, cid)
+    await add_outcomes(p, apps, problems)
+    st = {}
+    for a in apps:
+        st[a.get("status", "pending")] = st.get(a.get("status", "pending"), 0) + 1
+    dec = sum(1 for a in apps if a.get("decision_date"))
+    nosub = sum(1 for a in apps if not a.get("submitted_date"))
+    p.log(f"raw status labels seen: {dict(sorted(RAW_STATUS.get(name, {}).items(), key=lambda kv: -kv[1])[:12])}")
+    p.log(f"{len(apps)} applications; status {st}; with decision date {dec}; without submitted date {nosub}")
+    if DRY_RUN:
+        for a in apps[:3]:
+            p.log(f"sample: {a.get('reference')} | {a.get('status')} | sub {a.get('submitted_date')} | dec {a.get('decision_date')} | "
+                  f"{(a.get('address') or '')[:50]} | {(a.get('description') or '')[:50]}")
+        return 0, problems
+    if not apps:
+        await I._supa_patch_council(cid, {"last_scraped_at": datetime.now(timezone.utc).isoformat()})
+        if not problems:
+            await I._supa_increment_empty_runs(cid)
+        return 0, problems
+    return await geocode_and_save(p, apps), problems
+
+
 async def main() -> int:
     print(f"[{datetime.now(timezone.utc).isoformat()}] PlanFind Idox HTTP scraper (curl_cffi)")
-    print(f"Days back {DAYS_BACK}   slice {SLICE_DAYS}d   DRY_RUN {DRY_RUN}   max {MAX_MINUTES} min   "
+    print(f"Days back {DAYS_BACK}   slice {SLICE_DAYS}d   DRY_RUN {DRY_RUN}   max {MAX_MINUTES} min   detail cap {DETAIL_MAX}   "
           f"SUPABASE {'set' if I.SUPABASE_URL and I.SUPABASE_KEY else 'NOT set'}\n")
-    all_problems, total = [], 0
-    for name, base, cid in COUNCILS:
-        if ONLY and cid not in ONLY:
-            continue
-        print(f"\n[{name}] (council_id={cid})")
-        p, apps, problems = await run_council(name, base, cid)
-        await add_outcomes(p, apps, problems)
-        all_problems += problems
-        st = {}
-        for a in apps:
-            st[a.get("status", "pending")] = st.get(a.get("status", "pending"), 0) + 1
-        dec = sum(1 for a in apps if a.get("decision_date"))
-        nosub = sum(1 for a in apps if not a.get("submitted_date"))
-        p.log(f"raw status labels seen: {dict(sorted(RAW_STATUS.get(name, {}).items(), key=lambda kv: -kv[1])[:12])}")
-        p.log(f"{len(apps)} applications; status {st}; with decision date {dec}; without submitted date {nosub}")
-        if DRY_RUN:
-            for a in apps[:3]:
-                print(f"        sample: {a.get('reference')} | {a.get('status')} | sub {a.get('submitted_date')} | dec {a.get('decision_date')} | "
-                      f"{(a.get('application_type') or '')[:20]} | {(a.get('address') or '')[:50]} | {(a.get('description') or '')[:50]}")
-            continue
-        if not apps:
-            await I._supa_patch_council(cid, {"last_scraped_at": datetime.now(timezone.utc).isoformat()})
-            if not problems:
-                await I._supa_increment_empty_runs(cid)
-            continue
-        total += await geocode_and_save(p, apps)
+    todo = [c for c in COUNCILS if not ONLY or c[2] in ONLY]
+    print(f"Running {len(todo)} councils in parallel (different servers; each one is paced at {DELAY}s per request)\n")
+    results = await asyncio.gather(*(process(*c) for c in todo), return_exceptions=True)
+    total, all_problems = 0, []
+    for c, r in zip(todo, results):
+        if isinstance(r, Exception):
+            all_problems.append(f"{c[0]}: {type(r).__name__}: {str(r)[:150]}")
+        else:
+            total += r[0]
+            all_problems += r[1]
     print(f"\nHTTP requests: {CALLS['n']}   applications saved: {total}   {minutes():.1f} min")
     if all_problems:
         print("⚠ PROBLEMS:")
