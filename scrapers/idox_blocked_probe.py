@@ -7,6 +7,7 @@ Verdicts:  OK_HTTP (form + search works, add to idox_http_scraper) | FORM_ONLY (
            CHALLENGE (Cloudflare / WAF) | RECAPTCHA_FORM | MOVED (redirected to another host) | TIMEOUT | ERROR | NOT_IDOX
 """
 import asyncio
+import os
 import re
 import sys
 from collections import defaultdict
@@ -17,6 +18,8 @@ import httpx
 from curl_cffi.requests import AsyncSession
 
 COUNCILS = [
+    (296, 'Gosport Borough Council', 'https://publicaccess.gosport.gov.uk/online-applications', 'manual_link'),
+    (0, 'Melton Borough Council', 'https://pa.melton.gov.uk/online-applications', 'manual_link'),
     (1, 'Aberdeen City Council', 'https://publicaccess.aberdeencity.gov.uk/online-applications', 'manual_link'),
     (392, 'Bassetlaw District Council', 'https://publicaccess.bassetlaw.gov.uk/online-applications', 'manual_link'),
     (282, 'Braintree District Council', 'https://publicaccess.braintree.gov.uk/online-applications', 'manual_link'),
@@ -48,8 +51,7 @@ COUNCILS = [
     (244, 'London Borough of Islington', 'https://www.islington.gov.uk/online-applications', 'pending'),
     (234, 'London Borough of Kingston upon Thames', 'https://publicaccess.kingston.gov.uk/online-applications', 'manual_link'),
     (233, 'London Borough of Merton', 'https://www.merton.gov.uk/online-applications', 'pending'),
-    (223, 'London Borough of Newham', 'https://development.towerhamlets.gov.uk/online-applications', 'pending'),
-    (235, 'London Borough of Richmond upon Thames', 'https://planning.royalgreenwich.gov.uk/online-applications', 'pending'),
+    (223, 'London Borough of Newham', 'https://pa.newham.gov.uk/online-applications', 'pending'),
     (219, 'London Borough of Southwark', 'https://planning.southwark.gov.uk/online-applications', 'manual_link'),
     (232, 'London Borough of Sutton', 'https://planningregister.sutton.gov.uk/online-applications', 'manual_link'),
     (319, 'Newport City Council', 'https://planning.newport.gov.uk/online-applications', 'manual_link'),
@@ -90,7 +92,19 @@ HEAD = {"User-Agent": UA, "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
 FORM = "/search.do?action=advanced&searchType=Application"
 CHALLENGE = re.compile(r"just a moment|cf-chl|challenge-platform|attention required|incapsula|_incap_|request unsuccessful|access denied|"
                        r"pardon our interruption|are you a robot|perimeterx|akamai", re.I)
-SEM = asyncio.Semaphore(8)
+# PROXY_URLS: optional comma list of http://user:pass@host:port, used round-robin for the curl_cffi requests.
+# ONLY_FAILED=1 re-tests only councils that are not already known-good (everything except the 4 that passed without a proxy).
+PROXIES = [x.strip() for x in os.environ.get("PROXY_URLS", "").split(",") if x.strip()]
+SEM = asyncio.Semaphore(4 if PROXIES else 8)
+_rr = [0]
+
+
+def next_proxy():
+    if not PROXIES:
+        return None
+    _rr[0] += 1
+    p = PROXIES[_rr[0] % len(PROXIES)]
+    return {"http": p, "https": p}
 
 
 def title_of(html: str) -> str:
@@ -116,8 +130,8 @@ async def baseline(base: str) -> str:
 async def probe(cid: int, name: str, base: str, src: str) -> dict:
     out = {"id": cid, "name": name, "base": base, "src": src, "plain": "", "verdict": "", "detail": ""}
     async with SEM:
-        out["plain"] = await baseline(base)
-        s = AsyncSession(impersonate="chrome")
+        out["plain"] = "skipped (proxy)" if PROXIES else await baseline(base)
+        s = AsyncSession(impersonate="chrome", proxies=next_proxy())
         try:
             try:
                 r = await s.get(base + FORM, timeout=35)
@@ -172,7 +186,14 @@ async def probe(cid: int, name: str, base: str, src: str) -> dict:
 
 
 async def main() -> int:
-    print(f"Probing {len(COUNCILS)} Idox councils (curl_cffi Chrome fingerprint, 8 at a time)\n")
+    for px in PROXIES:
+        try:
+            async with AsyncSession(impersonate="chrome", proxies={"http": px, "https": px}) as t:
+                r = await t.get("https://api.ipify.org", timeout=20)
+            print(f"proxy {px.split('@')[-1]} exits as {r.text.strip()}")
+        except Exception as e:
+            print(f"proxy {px.split('@')[-1]} FAILED: {type(e).__name__}: {str(e)[:80]}")
+    print(f"Probing {len(COUNCILS)} Idox councils (curl_cffi Chrome fingerprint, {'via ' + str(len(PROXIES)) + ' proxies, ' if PROXIES else ''}{SEM._value} at a time)\n")
     results = await asyncio.gather(*(probe(*c) for c in COUNCILS))
     by = defaultdict(list)
     for r in results:
