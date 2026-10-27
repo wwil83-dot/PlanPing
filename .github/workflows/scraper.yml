@@ -6268,4 +6268,6 @@ jobs:
           python-version: '3.12'
       - run: pip install httpx curl_cffi
       - name: Idox blocked-council probe
+        env:
+          PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
         run: cd scrapers && python idox_blocked_probe.py
