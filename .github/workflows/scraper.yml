@@ -6186,10 +6186,10 @@ jobs:
   idox_http_scraper:
     # Idox councils the Playwright scraper cannot drive: NE Derbyshire, Bolsover, Derbyshire Dales (Cloudflare challenge) and
     # Blaby, Hinckley & Bosworth (reCAPTCHA on the monthly list). Plain HTTP with a Chrome fingerprint, advanced search by date
-    # received and date decided. DRY RUN first (writes nothing); then DRY_RUN "0" for the real run. See idox_http_scraper.py.
+    # received and date decided. Dry run clean on 2026-10-26/27, so this is the real 60-day BACKFILL (then nightly with DAYS_BACK 14). See idox_http_scraper.py.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_scraper'
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 40
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -6200,8 +6200,9 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          DAYS_BACK: "14"
+          DAYS_BACK: "60"
           SLICE_DAYS: "7"
-          MAX_MINUTES: "30"
-          DRY_RUN: "1"
+          DETAIL_MAX: "400"
+          MAX_MINUTES: "65"
+          DRY_RUN: "0"
         run: cd scrapers && python idox_http_scraper.py
