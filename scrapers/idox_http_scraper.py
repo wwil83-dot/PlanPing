@@ -206,7 +206,8 @@ async def sweep(p: Portal, kind: str, a: date, b: date, out: dict, problems: lis
             if status == "pending":
                 status = "closed"                  # it was found by DECISION date, so a decision exists; the label is not one we map
             if not app.get("decision_date"):
-                app["decision_date"] = a.isoformat()   # decided sweeps run one day at a time, so the window IS the decision day
+                app["decision_date"] = b.isoformat()   # best guess (window end); the detail page gives the real date
+                app["_dd_guess"] = True
         app["status"] = status
         old = out.get(ref)
         if old is None:
@@ -228,13 +229,28 @@ async def run_council(name: str, base: str, cid: int) -> tuple:
         b = min(a + timedelta(days=SLICE_DAYS - 1), today)
         await sweep(p, "received", a, b, out, problems)
         a = b + timedelta(days=1)
-    d = start
-    while d <= today:
-        await sweep(p, "decided", d, d, out, problems)
-        d += timedelta(days=1)
+    a = start
+    while a <= today:
+        b = min(a + timedelta(days=SLICE_DAYS - 1), today)
+        await sweep(p, "decided", a, b, out, problems)
+        a = b + timedelta(days=1)
     return p, list(out.values()), problems
 
 
+def outcome(raw: str) -> str:
+    """Decision label -> approved / refused / withdrawn, or 'pending' when the label is not one we can map."""
+    st = I._normalise_status(raw)
+    if st != "pending":
+        return st
+    t = (raw or "").lower()
+    if re.search(r"unlawful|not lawful|invalid|refus", t):
+        return "refused"
+    if re.search(r"discharg|lawful|no objection|not required|no further|split|agreed|consent|prior approval|conditional|determined|acceptable", t):
+        return "approved"
+    return "pending"
+
+
+OUTCOMES_SEEN = {}                    # council -> {label: mapped status}
 DETAIL_MAX = int(os.environ.get("DETAIL_MAX", "150"))
 _DETAIL_SHOWN = set()
 
@@ -256,7 +272,7 @@ def detail_fields(html: str) -> dict:
 async def add_outcomes(p: Portal, apps: list, problems: list):
     """The result cards of these portals say 'decided' but not what was decided. For every such application read the detail page
     (Decision / Decision Issued Date) so approved / refused / withdrawn are right."""
-    todo = [a for a in apps if a.get("status") == "closed" and a.get("council_url")]
+    todo = [a for a in apps if (a.get("status") == "closed" or a.get("_dd_guess")) and a.get("council_url")]
     if not todo:
         return
     todo = todo[:DETAIL_MAX]
@@ -282,7 +298,11 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
                 _DETAIL_SHOWN.add(p.name)
                 p.log(f"detail page fields for {a['reference']}: { {k: v[:40] for k, v in list(f.items())[:18]} }")
             raw = (f.get("decision") or f.get("status") or "").strip()
-            st = I._normalise_status(raw) if raw else "pending"
+            st = outcome(raw) if raw else "pending"
+            OUTCOMES_SEEN.setdefault(p.name, {})
+            OUTCOMES_SEEN[p.name][raw or "(none)"] = OUTCOMES_SEEN[p.name].get(raw or "(none)", [st, 0])
+            if isinstance(OUTCOMES_SEEN[p.name][raw or "(none)"], list):
+                OUTCOMES_SEEN[p.name][raw or "(none)"][1] += 1
             if st != "pending":
                 a["status"] = st
                 fixed += 1
@@ -290,6 +310,7 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
                 d = I._parse_date(f.get(key, ""))
                 if d:
                     a["decision_date"] = d
+                    a.pop("_dd_guess", None)
                     break
     finally:
         try:
@@ -297,6 +318,9 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
         except Exception:
             pass
     p.log(f"outcome found for {fixed} of {len(todo)}")
+    seen = OUTCOMES_SEEN.get(p.name, {})
+    if seen:
+        p.log("decision labels -> status: " + "; ".join(f"{k!r} -> {v[0]} x{v[1]}" for k, v in sorted(seen.items(), key=lambda kv: -kv[1][1])[:15]))
 
 
 async def geocode_and_save(p: Portal, apps: list) -> int:
@@ -321,6 +345,7 @@ async def geocode_and_save(p: Portal, apps: list) -> int:
             p.log(f"council centroid fallback for {n} apps")
     records, seen = [], set()
     for a in apps:
+        a.pop("_dd_guess", None)
         if a["reference"] in seen:
             continue
         seen.add(a["reference"])
