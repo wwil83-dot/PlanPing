@@ -95,7 +95,7 @@ CHALLENGE = re.compile(r"just a moment|cf-chl|challenge-platform|attention requi
 # PROXY_URLS: optional comma list of http://user:pass@host:port, used round-robin for the curl_cffi requests.
 # ONLY_FAILED=1 re-tests only councils that are not already known-good (everything except the 4 that passed without a proxy).
 PROXIES = [x.strip() for x in os.environ.get("PROXY_URLS", "").split(",") if x.strip()]
-SEM = asyncio.Semaphore(4 if PROXIES else 8)
+SEM = asyncio.Semaphore(min(8, max(2, len(PROXIES))) if PROXIES else 8)
 _rr = [0]
 
 
