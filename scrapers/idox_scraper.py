@@ -1039,6 +1039,21 @@ class IdoxPortal:
         self._log(f"{len(all_apps)} this month → {len(recent)} in last {days_back} days")
         return recent
 
+    async def _goto_results_page(self, page, url: str, label: str) -> bool:
+        """Load a results page (pagination), retrying slow or failed loads. True when the page loaded."""
+        for attempt in range(3):
+            try:
+                await goto_with_backoff(page, url, self.council_name, timeout=30_000)
+                # Give JS time to render - don't use wait_for_selector here as it can time out on non-standard selectors
+                await asyncio.sleep(2)
+                return True
+            except Exception as e:
+                first = str(e).strip().splitlines()[0][:110] if str(e).strip() else type(e).__name__
+                self._log(f"{label} nav error (try {attempt + 1}/3): {first}")
+                if attempt < 2 and not should_stop():
+                    await asyncio.sleep(4 + 4 * attempt)
+        return False
+
     async def _scrape_month(self, page: Page, for_month: date,
                              budget_minutes: Optional[float] = None) -> list[dict]:
         """Load the monthly list, submit it for date received, collect all pages."""
@@ -1325,13 +1340,9 @@ class IdoxPortal:
                 f"{self.base_url}/pagedSearchResults.do"
                 f"?action=page&searchCriteria.page={page_num}"
             )
-            try:
-                response = await goto_with_backoff(page, next_url, self.council_name, timeout=15_000)
-                # Give JS time to render — don't use wait_for_selector here
-                # as it can time out on pages that use non-standard selectors
-                await asyncio.sleep(2)
-            except Exception as e:
-                self._log(f"Page {page_num} nav error: {e}")
+            # RETRY (2026-10-27): one slow page used to end the whole month's pagination (Bolton, Sefton and Cheshire West
+            # lost most of their results to a single 15 s timeout). Now 3 tries at 30 s with a short pause between them.
+            if not await self._goto_results_page(page, next_url, f"Page {page_num}"):
                 break
 
         if page_num > 1:
@@ -1403,11 +1414,9 @@ class IdoxPortal:
                 f"{self.base_url}/pagedSearchResults.do"
                 f"?action=page&searchCriteria.page={page_num}"
             )
-            try:
-                response = await goto_with_backoff(page, next_url, self.council_name, timeout=15_000)
-                await asyncio.sleep(2)
-            except Exception as e:
-                self._log(f"Fallback page {page_num} nav error: {e}")
+            # RETRY (2026-10-27): one slow page used to end the whole month's pagination (Bolton, Sefton and Cheshire West
+            # lost most of their results to a single 15 s timeout). Now 3 tries at 30 s with a short pause between them.
+            if not await self._goto_results_page(page, next_url, f"Fallback page {page_num}"):
                 break
 
         if page_num > 1:
@@ -1497,11 +1506,9 @@ class IdoxPortal:
                 f"{self.base_url}/pagedSearchResults.do"
                 f"?action=page&searchCriteria.page={page_num}"
             )
-            try:
-                response = await goto_with_backoff(page, next_url, self.council_name, timeout=15_000)
-                await asyncio.sleep(2)
-            except Exception as e:
-                self._log(f"Page {page_num} nav error: {e}")
+            # RETRY (2026-10-27): one slow page used to end the whole month's pagination (Bolton, Sefton and Cheshire West
+            # lost most of their results to a single 15 s timeout). Now 3 tries at 30 s with a short pause between them.
+            if not await self._goto_results_page(page, next_url, f"Page {page_num}"):
                 break
 
         if page_num > 1:
