@@ -2107,6 +2107,15 @@ IDOX_COUNCILS = [
 
 ]
 
+# Scraped by idox_http_scraper.py instead (curl_cffi advanced search): the Playwright scraper can no longer drive these -
+# North East Derbyshire, Bolsover and Derbyshire Dales sit behind a Cloudflare challenge, and Blaby and Hinckley & Bosworth
+# put a reCAPTCHA on the monthly list. Kept in COUNCIL_DB_IDS above; only the nightly batch list skips them.
+_HTTP_SCRAPED = {
+    "North East Derbyshire District Council", "Bolsover District Council", "Derbyshire Dales District Council",
+    "Blaby District Council", "Hinckley and Bosworth Borough Council",
+}
+IDOX_COUNCILS = [c for c in IDOX_COUNCILS if c[0] not in _HTTP_SCRAPED]
+
 # ---------------------------------------------------------------------------
 # SQL to insert all Idox councils into Supabase
 # Run once in Supabase SQL editor before the first scrape
