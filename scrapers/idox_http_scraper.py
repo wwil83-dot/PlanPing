@@ -35,6 +35,7 @@ COUNCILS = [
     ("Derbyshire Dales District Council", "https://planning.derbyshiredales.gov.uk/online-applications", 391),
     ("Blaby District Council", "https://pa.blaby.gov.uk/online-applications", 362),
     ("Hinckley and Bosworth Borough Council", "https://pa.hinckley-bosworth.gov.uk/online-applications", 361),
+    ("Dumfries and Galloway Council", "https://eaccess.dumgal.gov.uk/online-applications", 355),  # Cloudflare for Playwright; passes with the Chrome fingerprint (probe 2026-10-27)
 ]
 DAYS_BACK = int(os.environ.get("DAYS_BACK", "14"))
 SLICE_DAYS = int(os.environ.get("SLICE_DAYS", "7"))
