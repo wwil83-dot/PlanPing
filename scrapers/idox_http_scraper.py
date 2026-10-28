@@ -56,6 +56,8 @@ DELAY = float(os.environ.get("REQUEST_DELAY_SECONDS", "1.5"))
 # session cookie and CSRF token stay on one IP; if a portal cannot be reached, the next proxy is tried. DIRECT councils never use one.
 PROXIES = [x.strip() for x in os.environ.get("HTTP_PROXY_URLS", "").split(",") if x.strip()]
 DIRECT = {389, 390, 391, 362, 361, 355}
+# Portals that answer HTTP 429 at the normal pace (seen 2026-10-28): Westminster, Enfield, South Downs. Seconds between requests.
+SLOW = {267: 6.0, 242: 5.0, 257: 5.0}
 ONLY = {int(x) for x in os.environ.get("HTTP_COUNCILS", "").replace(" ", "").split(",") if x}
 MAX_PAGES = 80
 START = time.monotonic()
@@ -113,33 +115,45 @@ class Portal:
             return AsyncSession(impersonate="chrome", proxies={"http": px, "https": px})
         return AsyncSession(impersonate="chrome")
 
+    @property
+    def delay(self) -> float:
+        return SLOW.get(self.cid, DELAY)
+
     def log(self, msg: str):
         print(f"    [{self.name}] {msg}")
 
-    async def get(self, path: str, tries: int = 3, **kw):
+    async def get(self, path: str, tries: int = 4, timeout: int = 60, fast: bool = False, **kw):
         last = None
         for n in range(tries):
             try:
-                await asyncio.sleep(DELAY)
+                await asyncio.sleep(self.delay)
                 CALLS["n"] += 1
-                r = await self.session.get(self.base + path, timeout=60, **kw)
+                r = await self.session.get(self.base + path, timeout=timeout, **kw)
+                if r.status_code == 429 and n < tries - 1:
+                    await asyncio.sleep(20 * (n + 1))      # rate limited: wait it out (20s, 40s, 60s)
+                    continue
                 if r.status_code >= 500 and n < tries - 1:
                     await asyncio.sleep(3 + 4 * n)
                     continue
                 return r
             except Exception as e:
                 last = e
+                if fast:
+                    break
                 await asyncio.sleep(2 + 3 * n)
         raise RuntimeError(f"GET {path[:60]} failed: {type(last).__name__}: {str(last)[:100]}")
 
-    async def post(self, path: str, data: dict, tries: int = 3):
+    async def post(self, path: str, data: dict, tries: int = 4):
         last = None
         for n in range(tries):
             try:
-                await asyncio.sleep(DELAY)
+                await asyncio.sleep(self.delay)
                 CALLS["n"] += 1
                 r = await self.session.post(self.base + path, data=data, timeout=90,
                                             headers={"Referer": f"{self.base}/search.do?action=advanced&searchType=Application"})
+                if r.status_code == 429 and n < tries - 1:
+                    await asyncio.sleep(20 * (n + 1))
+                    continue
                 if r.status_code >= 500 and n < tries - 1:
                     await asyncio.sleep(3 + 4 * n)
                     continue
@@ -154,13 +168,15 @@ class Portal:
         self.session = self.mk_session()
         try:
             r = None
-            for attempt in range(3 if (PROXIES and self.cid not in DIRECT) else 1):
+            use_proxy = bool(PROXIES) and self.cid not in DIRECT
+            for attempt in range(5 if use_proxy else 1):
                 try:
-                    r = await self.get("/search.do?action=advanced&searchType=Application", tries=2)
+                    r = await self.get("/search.do?action=advanced&searchType=Application", tries=3,
+                                       timeout=25 if use_proxy else 60, fast=use_proxy)
                     break
                 except RuntimeError as e:
                     self.log(f"search form unreachable (proxy {self.pi % max(1, len(PROXIES))}): {str(e)[:90]}")
-                    if attempt >= 2 or not PROXIES or self.cid in DIRECT:
+                    if attempt >= 4 or not use_proxy:
                         raise
                     self.pi += 1
                     self.session = self.mk_session()
@@ -316,20 +332,35 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
     p.log(f"reading {len(todo)} decision detail pages")
     p.session = p.mk_session()
     fixed = 0
+    http = {}
+    nodec = 0
     try:
         for a in todo:
             if minutes() > MAX_MINUTES:
                 problems.append(f"{p.name}: MAX_MINUTES reached while reading decision details")
                 break
             url = a["council_url"]
-            try:
-                await asyncio.sleep(DELAY)
-                CALLS["n"] += 1
-                r = await p.session.get(url, timeout=60)
-            except Exception as e:
+            r = None
+            for n in range(3):
+                try:
+                    await asyncio.sleep(p.delay)
+                    CALLS["n"] += 1
+                    r = await p.session.get(url, timeout=60)
+                except Exception as e:
+                    http[type(e).__name__] = http.get(type(e).__name__, 0) + 1
+                    r = None
+                    break
+                if r.status_code == 429 and n < 2:
+                    http["429"] = http.get("429", 0) + 1
+                    await asyncio.sleep(20 * (n + 1))
+                    continue
+                break
+            if r is None:
                 continue
             if r.status_code != 200:
+                http[str(r.status_code)] = http.get(str(r.status_code), 0) + 1
                 continue
+            http["200"] = http.get("200", 0) + 1
             f = detail_fields(r.text)
             if p.name not in _DETAIL_SHOWN:
                 _DETAIL_SHOWN.add(p.name)
@@ -342,6 +373,9 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
                     st, raw = st2, f["status"]
             if not raw:
                 raw = (f.get("status") or "").strip()
+            if st in ("pending", "closed") and nodec < 3:
+                nodec += 1
+                p.log(f"no outcome on detail page {a['reference']}: { {k: v[:30] for k, v in list(f.items())[:14]} }")
             OUTCOMES_SEEN.setdefault(p.name, {})
             OUTCOMES_SEEN[p.name][raw or "(none)"] = OUTCOMES_SEEN[p.name].get(raw or "(none)", [st, 0])
             if isinstance(OUTCOMES_SEEN[p.name][raw or "(none)"], list):
@@ -360,6 +394,7 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
             await p.session.close()
         except Exception:
             pass
+    p.log(f"detail pages HTTP: {http}")
     p.log(f"outcome found for {fixed} of {len(todo)}")
     seen = OUTCOMES_SEEN.get(p.name, {})
     if seen:
