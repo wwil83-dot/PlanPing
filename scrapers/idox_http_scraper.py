@@ -322,12 +322,50 @@ def detail_fields(html: str) -> dict:
     return f
 
 
+async def stored_outcomes(p: Portal) -> dict:
+    """{reference: (status, decision_date)} for this council's applications that already have a final outcome in the database,
+    so each night only newly decided applications cost a detail-page request. Empty on DRY_RUN or if the lookup fails."""
+    if DRY_RUN or not (I.SUPABASE_URL and I.SUPABASE_KEY):
+        return {}
+    since = (datetime.now(timezone.utc).date() - timedelta(days=DAYS_BACK + 7)).isoformat()
+    out, off = {}, 0
+    try:
+        while off < 20000:
+            rows = await I._supa_get("planning_applications", select="reference,status,decision_date", council_id=f"eq.{p.cid}",
+                                     status="in.(approved,refused,withdrawn)", decision_date=f"gte.{since}", limit=1000, offset=off)
+            for r in rows:
+                out[r["reference"]] = (r["status"], r.get("decision_date"))
+            if len(rows) < 1000:
+                break
+            off += 1000
+    except Exception as e:
+        p.log(f"stored-outcome lookup failed ({type(e).__name__}: {str(e)[:80]}); reading all detail pages")
+        return {}
+    return out
+
+
 async def add_outcomes(p: Portal, apps: list, problems: list):
     """The result cards of these portals say 'decided' but not what was decided. For every such application read the detail page
     (Decision / Decision Issued Date) so approved / refused / withdrawn are right."""
     todo = [a for a in apps if (a.get("status") == "closed" or a.get("_dd_guess")) and a.get("council_url")]
     if not todo:
         return
+    known = await stored_outcomes(p)
+    if known:
+        left = []
+        for a in todo:
+            k = known.get(a.get("reference"))
+            if k:
+                a["status"] = k[0]
+                if k[1] and not a.get("decision_date"):
+                    a["decision_date"] = k[1]
+                a.pop("_dd_guess", None)
+            else:
+                left.append(a)
+        p.log(f"{len(todo) - len(left)} of {len(todo)} decided applications already have an outcome in the database: detail page not re-read")
+        todo = left
+        if not todo:
+            return
     todo = todo[:DETAIL_MAX]
     p.log(f"reading {len(todo)} decision detail pages")
     p.session = p.mk_session()
