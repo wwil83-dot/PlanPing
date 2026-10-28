@@ -131,14 +131,32 @@ async def probe(cid: int, name: str, base: str, src: str) -> dict:
     out = {"id": cid, "name": name, "base": base, "src": src, "plain": "", "verdict": "", "detail": ""}
     async with SEM:
         out["plain"] = "skipped (proxy)" if PROXIES else await baseline(base)
-        s = AsyncSession(impersonate="chrome", proxies=next_proxy())
-        try:
+        s = None
+        r = None
+        err = None
+        insecure = False
+        for attempt in range(3 if PROXIES else 1):
+            s = AsyncSession(impersonate="chrome", proxies=next_proxy(), verify=not insecure)
             try:
                 r = await s.get(base + FORM, timeout=35)
+                err = None
+                break
             except Exception as e:
+                err = e
+                try:
+                    await s.close()
+                except Exception:
+                    pass
+                if "ertificate" in f"{type(e).__name__}{e}":
+                    insecure = True
+        try:
+            if r is None:
+                e = err
                 out["verdict"] = "TIMEOUT" if "imeout" in f"{type(e).__name__}{e}" or "timed out" in str(e) else "ERROR"
-                out["detail"] = f"{type(e).__name__}: {str(e)[:70]}"
+                out["detail"] = f"{type(e).__name__}: {str(e)[:70]} (tried {attempt + 1} proxies)"
                 return out
+            if insecure:
+                out["detail"] = "CERT CHAIN BAD (verify off needed) "
             final = urlparse(str(r.url)).netloc
             if final and final != urlparse(base).netloc:
                 out["detail"] = f"redirected to {final}"
@@ -170,7 +188,7 @@ async def probe(cid: int, name: str, base: str, src: str) -> dict:
             low = p.text.lower()
             if p.status_code == 200 and n:
                 out["verdict"] = "OK_HTTP"
-                out["detail"] = f"{n} result cards on page 1" + (" (recaptcha on form, not needed)" if recaptcha else "")
+                out["detail"] = out["detail"] + f"{n} result cards on page 1" + (" (recaptcha on form, not needed)" if recaptcha else "")
             elif p.status_code == 200 and ("no results" in low or "no applications" in low or "searchCriteriaForm" in p.text):
                 out["verdict"] = "OK_HTTP"
                 out["detail"] = "search accepted, 0 results in the last 10 days"
@@ -186,6 +204,7 @@ async def probe(cid: int, name: str, base: str, src: str) -> dict:
 
 
 async def main() -> int:
+    print(f"PROXY_URLS: {len(PROXIES)} proxies loaded" + ("" if PROXIES else "  <-- NONE, running direct from the runner IP (check the PROBE_PROXY_URLS secret and the job's env: block)"))
     for px in PROXIES:
         try:
             async with AsyncSession(impersonate="chrome", proxies={"http": px, "https": px}) as t:

@@ -36,12 +36,26 @@ COUNCILS = [
     ("Blaby District Council", "https://pa.blaby.gov.uk/online-applications", 362),
     ("Hinckley and Bosworth Borough Council", "https://pa.hinckley-bosworth.gov.uk/online-applications", 361),
     ("Dumfries and Galloway Council", "https://eaccess.dumgal.gov.uk/online-applications", 355),  # Cloudflare for Playwright; passes with the Chrome fingerprint (probe 2026-10-27)
+    # Reachable only through a UK residential proxy (probe 2026-10-28). Not in the nightly until each has had a dry run + backfill.
+    ("Aberdeen City Council", "https://publicaccess.aberdeencity.gov.uk/online-applications", 1),
+    ("Bury Metropolitan Borough Council", "https://planning.bury.gov.uk/online-applications", 170),
+    ("City of Westminster", "https://idoxpa.westminster.gov.uk/online-applications", 267),
+    ("Hart District Council", "https://publicaccess.hart.gov.uk/online-applications", 297),
+    ("London Borough of Enfield", "https://planningandbuildingcontrol.enfield.gov.uk/online-applications", 242),
+    ("Scottish Borders Council", "https://eplanning.scotborders.gov.uk/online-applications", 351),
+    ("South Downs National Park Authority", "https://planningpublicaccess.southdowns.gov.uk/online-applications", 257),
+    ("Watford Borough Council", "https://pa.watford.gov.uk/publicaccess", 449),
+    ("Wolverhampton City Council", "https://planningonline.wolverhampton.gov.uk/online-applications", 79),
 ]
 DAYS_BACK = int(os.environ.get("DAYS_BACK", "14"))
 SLICE_DAYS = int(os.environ.get("SLICE_DAYS", "7"))
 MAX_MINUTES = float(os.environ.get("MAX_MINUTES", "25"))
 DRY_RUN = os.environ.get("DRY_RUN", "1") == "1"
 DELAY = float(os.environ.get("REQUEST_DELAY_SECONDS", "1.5"))
+# HTTP_PROXY_URLS: optional comma list of http://user:pass@host:port. Each council sticks to one proxy (its cid picks it) so the
+# session cookie and CSRF token stay on one IP; if a portal cannot be reached, the next proxy is tried. DIRECT councils never use one.
+PROXIES = [x.strip() for x in os.environ.get("HTTP_PROXY_URLS", "").split(",") if x.strip()]
+DIRECT = {389, 390, 391, 362, 361, 355}
 ONLY = {int(x) for x in os.environ.get("HTTP_COUNCILS", "").replace(" ", "").split(",") if x}
 MAX_PAGES = 80
 START = time.monotonic()
@@ -91,6 +105,13 @@ class Portal:
         p = urlparse(self.base)
         self.root = f"{p.scheme}://{p.netloc}"
         self.session = None
+        self.pi = cid % len(PROXIES) if PROXIES else 0
+
+    def mk_session(self):
+        if PROXIES and self.cid not in DIRECT:
+            px = PROXIES[self.pi % len(PROXIES)]
+            return AsyncSession(impersonate="chrome", proxies={"http": px, "https": px})
+        return AsyncSession(impersonate="chrome")
 
     def log(self, msg: str):
         print(f"    [{self.name}] {msg}")
@@ -130,9 +151,19 @@ class Portal:
 
     async def search(self, kind: str, a: date, b: date) -> list:
         """kind: 'received' | 'decided'. Returns parsed applications for the window, or raises TooMany / Blocked."""
-        self.session = AsyncSession(impersonate="chrome")
+        self.session = self.mk_session()
         try:
-            r = await self.get("/search.do?action=advanced&searchType=Application")
+            r = None
+            for attempt in range(3 if (PROXIES and self.cid not in DIRECT) else 1):
+                try:
+                    r = await self.get("/search.do?action=advanced&searchType=Application", tries=2)
+                    break
+                except RuntimeError as e:
+                    self.log(f"search form unreachable (proxy {self.pi % max(1, len(PROXIES))}): {str(e)[:90]}")
+                    if attempt >= 2 or not PROXIES or self.cid in DIRECT:
+                        raise
+                    self.pi += 1
+                    self.session = self.mk_session()
             if r.status_code != 200 or "just a moment" in r.text[:3000].lower():
                 raise Blocked(f"search form HTTP {r.status_code}")
             m = re.search(r'name="_csrf"\s+value="([^"]+)"', r.text) or re.search(r'value="([^"]+)"\s+name="_csrf"', r.text)
@@ -283,7 +314,7 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
         return
     todo = todo[:DETAIL_MAX]
     p.log(f"reading {len(todo)} decision detail pages")
-    p.session = AsyncSession(impersonate="chrome")
+    p.session = p.mk_session()
     fixed = 0
     try:
         for a in todo:
@@ -414,6 +445,7 @@ async def main() -> int:
     print(f"Days back {DAYS_BACK}   slice {SLICE_DAYS}d   DRY_RUN {DRY_RUN}   max {MAX_MINUTES} min   detail cap {DETAIL_MAX}   "
           f"SUPABASE {'set' if I.SUPABASE_URL and I.SUPABASE_KEY else 'NOT set'}\n")
     todo = [c for c in COUNCILS if not ONLY or c[2] in ONLY]
+    print(f"Proxies: {len(PROXIES)} loaded (direct for ids {sorted(DIRECT)})")
     print(f"Running {len(todo)} councils in parallel (different servers; each one is paced at {DELAY}s per request)\n")
     results = await asyncio.gather(*(process(*c) for c in todo), return_exceptions=True)
     total, all_problems = 0, []
