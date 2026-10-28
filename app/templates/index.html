@@ -243,6 +243,8 @@
   // found — not preemptively for names that merely look unusual.
   var COUNCIL_NAME_ALIASES = {
     'newcastle city council': 'newcastle upon tyne',
+    // ADDED 2026-10-28: the DB row is named "Kensington and Chelsea RLBC" (id 45); ONS calls it "Kensington and Chelsea".
+    'kensington and chelsea rlbc': 'kensington and chelsea',
   };
 
   function normalizeCouncilName(raw) {
