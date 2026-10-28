@@ -6259,7 +6259,7 @@ jobs:
     # proxies: Aberdeen, Bury, Westminster, Dumfries, Hart, Enfield, Scottish Borders, South Downs, Watford, Wolverhampton.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_proxy_dry'
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -6272,7 +6272,7 @@ jobs:
           DAYS_BACK: "21"
           SLICE_DAYS: "7"
           DETAIL_MAX: "40"
-          MAX_MINUTES: "30"
+          MAX_MINUTES: "45"
           DRY_RUN: "1"
           HTTP_COUNCILS: "1,170,267,355,297,242,351,257,449,79"
         run: cd scrapers && python idox_http_scraper.py
