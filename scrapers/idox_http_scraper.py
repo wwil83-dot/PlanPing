@@ -46,6 +46,46 @@ COUNCILS = [
     ("South Downs National Park Authority", "https://planningpublicaccess.southdowns.gov.uk/online-applications", 257),
     ("Watford Borough Council", "https://pa.watford.gov.uk/publicaccess", 449),
     ("Wolverhampton City Council", "https://planningonline.wolverhampton.gov.uk/online-applications", 79),
+
+    # Reached through the UK proxies in the 2026-10-29 probe (round 2). Dry run first; not in any nightly yet.
+    ("Gosport Borough Council", "https://publicaccess.gosport.gov.uk/online-applications", 296),
+    ("Melton Borough Council", "https://pa.melton.gov.uk/online-applications", 446),
+    ("Bassetlaw District Council", "https://publicaccess.bassetlaw.gov.uk/online-applications", 392),
+    ("Calderdale Metropolitan Borough Council", "https://portal.calderdale.gov.uk/online-applications", 176),
+    ("Cardiff Council", "https://www.cardiffidoxcloud.wales/publicaccess", 26),
+    ("Clackmannanshire Council", "https://publicaccess.clacks.gov.uk/publicaccess", 342),
+    ("Derby City Council", "https://eplanning.derby.gov.uk/online-applications", 32),
+    ("Gloucester City Council", "https://publicaccess.gloucester.gov.uk/online-applications", 37),
+    ("Harborough District Council", "https://pa2.harborough.gov.uk/online-applications", 360),
+    ("Harlow District Council", "https://planningonline.harlow.gov.uk/online-applications", 285),
+    ("Lancaster City Council", "https://planning.lancaster.gov.uk/online-applications", 308),
+    ("London Borough of Bexley", "https://pa.bexley.gov.uk/online-applications", 228),
+    ("London Borough of Kingston upon Thames", "https://publicaccess.kingston.gov.uk/online-applications", 234),
+    ("London Borough of Newham", "https://pa.newham.gov.uk/online-applications", 223),
+    ("London Borough of Southwark", "https://planning.southwark.gov.uk/online-applications", 219),
+    ("London Borough of Sutton", "https://planningregister.sutton.gov.uk/online-applications", 232),
+    ("North East Lincolnshire Council", "https://planninganddevelopment.nelincs.gov.uk/online-applications", 388),
+    ("North Kesteven District Council", "https://planningonline.n-kesteven.gov.uk/online-applications", 478),
+    ("North Lanarkshire Council", "https://eplanning.northlanarkshire.gov.uk/online-applications", 350),
+    ("North Northamptonshire Council", "https://publicaccess.northnorthants.gov.uk/online-applications", 387),
+    ("North Yorkshire Council", "https://publicaccess.northyorks.gov.uk/online-applications", 371),
+    ("Oxford City Council", "https://public.oxford.gov.uk/online-applications", 58),
+    ("Sandwell Metropolitan Borough Council", "https://webcaps.sandwell.gov.uk/publicaccess", 190),
+    ("Sevenoaks District Council", "https://pa.sevenoaks.gov.uk/online-applications", 271),
+    ("Sheffield City Council", "https://planningapps.sheffield.gov.uk/online-applications", 63),
+    ("Shropshire Council", "https://pa.shropshire.gov.uk/online-applications", 364),
+    ("Somerset Council (Mendip)", "https://publicaccess.mendip.gov.uk/online-applications", 370),
+    ("South Ayrshire Council", "https://publicaccess.south-ayrshire.gov.uk/online-applications", 339),
+    ("South Gloucestershire Council", "https://developments.southglos.gov.uk/online-applications", 262),
+    ("Southampton City Council", "https://planningpublicaccess.southampton.gov.uk/online-applications", 65),
+    ("St. Helens Metropolitan Borough Council", "https://publicaccess.sthelens.gov.uk/online-applications", 181),
+    ("Stafford Borough Council", "https://www12.staffordbc.gov.uk/online-applications", 476),
+    ("Sunderland City Council", "https://online-applications.sunderland.gov.uk/online-applications", 68),
+    ("Swansea Council", "https://property.swansea.gov.uk/online-applications", 373),
+    ("Tendring District Council", "https://idox.tendringdc.gov.uk/online-applications", 265),
+    ("Three Rivers District Council", "https://www3.threerivers.gov.uk/online-applications", 291),
+    ("Uttlesford District Council", "https://publicaccess.uttlesford.gov.uk/online-applications", 288),
+    ("West Berkshire Council", "https://publicaccess.westberks.gov.uk/online-applications", 258),
 ]
 DAYS_BACK = int(os.environ.get("DAYS_BACK", "14"))
 SLICE_DAYS = int(os.environ.get("SLICE_DAYS", "7"))
@@ -58,6 +98,11 @@ PROXIES = [x.strip() for x in os.environ.get("HTTP_PROXY_URLS", "").split(",") i
 DIRECT = {389, 390, 391, 362, 361, 355}
 # Portals that answer HTTP 429 at the normal pace (seen 2026-10-28): Westminster, Enfield, South Downs. Seconds between requests.
 SLOW = {267: 6.0, 242: 5.0, 257: 5.0}
+# Certificate chains these portals do not send in full (probe 2026-10-29: fine with verification off; public pages, no logins).
+INSECURE = {392, 176, 219, 58, 63, 181}
+# Proxy that got through to each council in the probes (index into HTTP_PROXY_URLS). Several councils block some of our proxy
+# addresses (timeouts on 0, 1, 2), so each council starts on a proxy known to work and falls back to the others.
+PROXY_HINT = {1: 3, 26: 7, 32: 3, 37: 7, 58: 3, 63: 3, 65: 5, 68: 3, 79: 3, 170: 0, 176: 7, 181: 3, 190: 3, 219: 3, 223: 3, 228: 3, 232: 3, 234: 5, 242: 3, 257: 7, 258: 3, 262: 2, 265: 5, 267: 7, 271: 3, 285: 5, 288: 3, 291: 3, 296: 7, 446: 3, 297: 7, 308: 3, 339: 3, 342: 3, 350: 3, 351: 3, 360: 3, 364: 5, 370: 3, 371: 3, 373: 3, 387: 7, 388: 3, 392: 3, 449: 3, 476: 6, 478: 3}
 ONLY = {int(x) for x in os.environ.get("HTTP_COUNCILS", "").replace(" ", "").split(",") if x}
 MAX_PAGES = 80
 START = time.monotonic()
@@ -107,13 +152,13 @@ class Portal:
         p = urlparse(self.base)
         self.root = f"{p.scheme}://{p.netloc}"
         self.session = None
-        self.pi = cid % len(PROXIES) if PROXIES else 0
+        self.pi = PROXY_HINT.get(cid, cid) % len(PROXIES) if PROXIES else 0
 
     def mk_session(self):
         if PROXIES and self.cid not in DIRECT:
             px = PROXIES[self.pi % len(PROXIES)]
-            return AsyncSession(impersonate="chrome", proxies={"http": px, "https": px})
-        return AsyncSession(impersonate="chrome")
+            return AsyncSession(impersonate="chrome", proxies={"http": px, "https": px}, verify=self.cid not in INSECURE)
+        return AsyncSession(impersonate="chrome", verify=self.cid not in INSECURE)
 
     @property
     def delay(self) -> float:
