@@ -97,7 +97,7 @@ DELAY = float(os.environ.get("REQUEST_DELAY_SECONDS", "1.5"))
 PROXIES = [x.strip() for x in os.environ.get("HTTP_PROXY_URLS", "").split(",") if x.strip()]
 DIRECT = {389, 390, 391, 362, 361, 355}
 # Portals that answer HTTP 429 at the normal pace (seen 2026-10-28): Westminster, Enfield, South Downs. Seconds between requests.
-SLOW = {267: 6.0, 242: 5.0, 257: 5.0, 364: 6.0, 37: 3.5, 223: 3.5, 32: 3.5, 271: 3.5, 228: 3.5}
+SLOW = {267: 6.0, 242: 5.0, 257: 5.0, 364: 10.0, 37: 3.5, 223: 3.5, 32: 3.5, 271: 3.5, 228: 3.5}
 # Portals whose detail pages never say what was decided (only 'Decided'): reading them is wasted requests, so decided stay 'closed'.
 NO_DETAIL = {351, 79, 181}
 # Certificate chains these portals do not send in full (probe 2026-10-29: fine with verification off; public pages, no logins).
@@ -227,6 +227,16 @@ class Portal:
                         raise
                     self.pi += 1
                     self.session = self.mk_session()
+            if r.status_code == 429 and use_proxy:
+                for _ in range(3):                     # rate limited on this address: try the form from the next proxy
+                    self.pi += 1
+                    self.log(f"search form HTTP 429: trying proxy {self.pi % len(PROXIES)}")
+                    await self.session.close()
+                    self.session = self.mk_session()
+                    await asyncio.sleep(15)
+                    r = await self.get("/search.do?action=advanced&searchType=Application", tries=1, timeout=25, fast=True)
+                    if r.status_code != 429:
+                        break
             if r.status_code != 200 or "just a moment" in r.text[:3000].lower():
                 raise Blocked(f"search form HTTP {r.status_code}")
             m = re.search(r'name="_csrf"\s+value="([^"]+)"', r.text) or re.search(r'value="([^"]+)"\s+name="_csrf"', r.text)
@@ -419,6 +429,7 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
     fixed = 0
     http = {}
     nodec = 0
+    strikes = 0
     try:
         for a in todo:
             if minutes() > MAX_MINUTES:
@@ -436,15 +447,30 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
                     r = None
                     break
                 if r.status_code == 429 and n < 2:
-                    http["429"] = http.get("429", 0) + 1
                     await asyncio.sleep(20 * (n + 1))
                     continue
                 break
             if r is None:
                 continue
+            if r.status_code == 429:
+                strikes += 1
+                http["429"] = http.get("429", 0) + 1
+                if strikes >= 8:
+                    problems.append(f"{p.name}: detail pages rate limited (HTTP 429 on every proxy); stopped reading, the next run continues")
+                    break
+                if strikes % 2 == 0 and PROXIES and p.cid not in DIRECT:     # blocked on this address: carry on from the next proxy
+                    p.pi += 1
+                    p.log(f"detail pages HTTP 429: switching to proxy {p.pi % len(PROXIES)}")
+                    try:
+                        await p.session.close()
+                    except Exception:
+                        pass
+                    p.session = p.mk_session()
+                continue
             if r.status_code != 200:
                 http[str(r.status_code)] = http.get(str(r.status_code), 0) + 1
                 continue
+            strikes = 0
             http["200"] = http.get("200", 0) + 1
             f = detail_fields(r.text)
             if p.name not in _DETAIL_SHOWN:
