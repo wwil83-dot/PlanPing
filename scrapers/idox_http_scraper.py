@@ -97,7 +97,9 @@ DELAY = float(os.environ.get("REQUEST_DELAY_SECONDS", "1.5"))
 PROXIES = [x.strip() for x in os.environ.get("HTTP_PROXY_URLS", "").split(",") if x.strip()]
 DIRECT = {389, 390, 391, 362, 361, 355}
 # Portals that answer HTTP 429 at the normal pace (seen 2026-10-28): Westminster, Enfield, South Downs. Seconds between requests.
-SLOW = {267: 6.0, 242: 5.0, 257: 5.0}
+SLOW = {267: 6.0, 242: 5.0, 257: 5.0, 364: 6.0, 37: 3.5, 223: 3.5, 32: 3.5, 271: 3.5, 228: 3.5}
+# Portals whose detail pages never say what was decided (only 'Decided'): reading them is wasted requests, so decided stay 'closed'.
+NO_DETAIL = {351, 79, 181}
 # Certificate chains these portals do not send in full (probe 2026-10-29: fine with verification off; public pages, no logins).
 INSECURE = {392, 176, 219, 58, 63, 181}
 # Proxy that got through to each council in the probes (index into HTTP_PROXY_URLS). Several councils block some of our proxy
@@ -257,7 +259,7 @@ class Portal:
                 if not has_next or not got or page >= MAX_PAGES:
                     break
                 page += 1
-                r = await self.get(f"/pagedSearchResults.do?action=page&searchCriteria.page={page}")
+                r = await self.get(f"/pagedSearchResults.do?action=page&searchCriteria.page={page}", tries=6)
             return apps
         finally:
             try:
@@ -393,7 +395,7 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
     """The result cards of these portals say 'decided' but not what was decided. For every such application read the detail page
     (Decision / Decision Issued Date) so approved / refused / withdrawn are right."""
     todo = [a for a in apps if (a.get("status") == "closed" or a.get("_dd_guess")) and a.get("council_url")]
-    if not todo:
+    if not todo or p.cid in NO_DETAIL:
         return
     known = await stored_outcomes(p)
     if known:
