@@ -100,6 +100,7 @@ DIRECT = {389, 390, 391, 362, 361, 355}
 SLOW = {267: 6.0, 242: 5.0, 257: 5.0, 364: 10.0, 37: 3.5, 223: 3.5, 32: 3.5, 271: 3.5, 228: 3.5}
 # Portals whose detail pages never say what was decided (only 'Decided'): reading them is wasted requests, so decided stay 'closed'.
 NO_DETAIL = {351, 79, 181}
+COOLDOWN = int(os.environ.get("DETAIL_COOLDOWN_SECONDS", "600"))
 # Certificate chains these portals do not send in full (probe 2026-10-29: fine with verification off; public pages, no logins).
 INSECURE = {392, 176, 219, 58, 63, 181}
 # Proxy that got through to each council in the probes (index into HTTP_PROXY_URLS). Several councils block some of our proxy
@@ -430,6 +431,8 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
     http = {}
     nodec = 0
     strikes = 0
+    waits = 0
+    ok_run = 0
     try:
         for a in todo:
             if minutes() > MAX_MINUTES:
@@ -455,22 +458,25 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
             if r.status_code == 429:
                 strikes += 1
                 http["429"] = http.get("429", 0) + 1
-                if strikes >= 8:
-                    problems.append(f"{p.name}: detail pages rate limited (HTTP 429 on every proxy); stopped reading, the next run continues")
-                    break
-                if strikes % 2 == 0 and PROXIES and p.cid not in DIRECT:     # blocked on this address: carry on from the next proxy
-                    p.pi += 1
-                    p.log(f"detail pages HTTP 429: switching to proxy {p.pi % len(PROXIES)}")
-                    try:
-                        await p.session.close()
-                    except Exception:
-                        pass
-                    p.session = p.mk_session()
+                if strikes >= 2:
+                    # These portals allow only about a dozen detail pages and then block our address for a while (every other
+                    # proxy we tried could not reach them). Wait it out, then carry on; the log shows how long the block lasts.
+                    waits += 1
+                    if waits > 6:
+                        problems.append(f"{p.name}: detail pages still blocked (HTTP 429) after {waits - 1} waits; stopped, the next run continues")
+                        break
+                    p.log(f"detail pages blocked after {ok_run} pages in a row (HTTP 429): waiting {COOLDOWN // 60} min (wait {waits})")
+                    await asyncio.sleep(COOLDOWN)
+                    strikes = 0
+                    ok_run = 0
                 continue
             if r.status_code != 200:
                 http[str(r.status_code)] = http.get(str(r.status_code), 0) + 1
                 continue
+            if waits and ok_run == 0:
+                p.log(f"detail pages open again after the wait ({waits} so far)")
             strikes = 0
+            ok_run += 1
             http["200"] = http.get("200", 0) + 1
             f = detail_fields(r.text)
             if p.name not in _DETAIL_SHOWN:
