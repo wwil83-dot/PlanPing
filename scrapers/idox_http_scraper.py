@@ -357,7 +357,7 @@ def outcome(raw: str) -> str:
         return "closed"
     if re.search(r"refus|unlawful|not lawful|invalid|reject|dismiss", t):
         return "refused"
-    if re.search(r"approv|grant|permit|permission|discharg|lawful|certificate|no objection|not required|no further|consent|"
+    if re.search(r"approv|grant|permit|permission|discharg|lawful|certificate|no obj|not required|no further|consent|"
                  r"section 106|split|agreed|conditional|outline|reserved|determined|acceptable|advertisement|non material|allow", t):
         return "approved"
     return "pending"
