@@ -286,12 +286,15 @@ class CivicaPortal:
                         whole = " ".join((await items.nth(i).inner_text()).split())
                     except Exception:
                         continue
-                    mr = re.search(r"\b\d{1,2}/\d{4}/\d{2,6}(?:/[A-Za-z0-9]+)?\b", whole)
+                    # After 2026-10-30 the items read "Planning Application 5/2026/1820 <address> <proposal>" with no "Valid From" date.
+                    # The reference is the first word after the title (5/2026/1820, TP/2026/0518 ...).
+                    mr = re.search(r"Planning Application\s+(\S+)", whole)
                     md = re.search(r"\d{2}/\d{2}/\d{4}", whole)
                     if not mr:
                         if i < 2:
                             print(f"    ⚠ [{self.council_name}] list item {i} not recognised: {whole[:300]!r}")
                         continue
+                    mr = re.match(r"(.+)", mr.group(1))
                     class _M:
                         def group(self, k, _r=mr.group(0), _d=md.group(0) if md else ""):
                             return _r if k == "ref" else _d
@@ -330,6 +333,11 @@ class CivicaPortal:
                     "source":           "civica_scraper",
                 })
 
+            if page_num == 1 and count:
+                try:
+                    print(f"    first item HTML: {(await items.first.evaluate('e => e.outerHTML'))[:1500]!r}")
+                except Exception:
+                    pass
             print(f"    [{self.council_name}] page {page_num}: {count} list items, {len(all_apps)} applications so far")
             if page_num == 1 and not all_apps:
                 try:
@@ -454,6 +462,10 @@ async def process_council(portal: CivicaPortal, browser: Browser, sem: asyncio.S
                 "source":           "civica_scraper",
             } for a in apps]
 
+            if not any(r.get("submitted_date") for r in records):
+                for r in records:                      # the portal showed no date: leave stored dates alone instead of overwriting with null
+                    r.pop("submitted_date", None)
+                print("    (no submitted dates on the page: submitted_date left untouched)")
             print(f"    Upserting {len(records)} records with council_id={cid}")
 
             BATCH = 20
