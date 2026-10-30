@@ -6275,7 +6275,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "60"
           SLICE_DAYS: "7"
           DETAIL_MAX: "400"
@@ -6299,7 +6299,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "30"
           SLICE_DAYS: "7"
           DETAIL_MAX: "300"
@@ -6323,7 +6323,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "14"
           SLICE_DAYS: "7"
           DETAIL_MAX: "150"
@@ -6347,7 +6347,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "14"
           SLICE_DAYS: "7"
           DETAIL_MAX: "120"
@@ -6370,7 +6370,7 @@ jobs:
       - run: pip install httpx curl_cffi beautifulsoup4 playwright
       - name: Dry run via proxies
         env:
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "21"
           SLICE_DAYS: "7"
           DETAIL_MAX: "40"
@@ -6394,7 +6394,7 @@ jobs:
       - run: pip install curl_cffi
       - name: Idox proxy probe (round 2)
         env:
-          PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
         run: cd scrapers && python idox_proxy_probe.py
 
   idox_http_proxy_dry2:
@@ -6411,7 +6411,7 @@ jobs:
       - run: pip install httpx curl_cffi beautifulsoup4 playwright
       - name: Dry run via proxies (round 2)
         env:
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "14"
           SLICE_DAYS: "7"
           DETAIL_MAX: "30"
@@ -6435,7 +6435,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "30"
           SLICE_DAYS: "7"
           DETAIL_MAX: "300"
@@ -6459,7 +6459,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "30"
           SLICE_DAYS: "7"
           DETAIL_MAX: "300"
@@ -6483,7 +6483,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "30"
           SLICE_DAYS: "7"
           DETAIL_MAX: "200"
@@ -6507,7 +6507,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "14"
           SLICE_DAYS: "7"
           DETAIL_MAX: "100"
@@ -6531,7 +6531,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "14"
           SLICE_DAYS: "7"
           DETAIL_MAX: "100"
@@ -6555,7 +6555,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "14"
           SLICE_DAYS: "7"
           DETAIL_MAX: "70"
@@ -6579,7 +6579,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "30"
           SLICE_DAYS: "7"
           DETAIL_MAX: "200"
@@ -6601,7 +6601,7 @@ jobs:
       - run: pip install httpx curl_cffi beautifulsoup4 playwright
       - name: Dry run South Kesteven and East Riding
         env:
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "14"
           SLICE_DAYS: "7"
           DETAIL_MAX: "30"
@@ -6625,7 +6625,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "30"
           SLICE_DAYS: "7"
           DETAIL_MAX: "200"
@@ -6649,7 +6649,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           DAYS_BACK: "14"
           SLICE_DAYS: "7"
           DETAIL_MAX: "80"
@@ -6673,5 +6673,5 @@ jobs:
       - run: pip install httpx curl_cffi
       - name: Idox blocked-council probe
         env:
-          PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
+          PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
         run: cd scrapers && python idox_blocked_probe.py
