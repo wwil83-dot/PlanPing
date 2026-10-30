@@ -230,6 +230,7 @@ class CivicaPortal:
     async def _scrape_one_query(self, page: Page, date_field: str,
                                  date_from: date, date_to: date) -> list[dict]:
         url = _build_search_url(self.base_url, date_field, date_from, date_to)
+        print(f"    [{self.council_name}] querying {url}")
 
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
@@ -266,19 +267,37 @@ class CivicaPortal:
                 except Exception:
                     pass
                 print(f"    ⚠ [{self.council_name}] No results for '{date_field}' "
-                      f"{date_from} to {date_to} — title: {title!r}, "
+                      f"{date_from} to {date_to} — final url: {page.url} title: {title!r}, "
                       f"body: {body_snippet!r}")
                 break
 
             count = await items.count()
+            parsed_here = 0
             for i in range(count):
                 try:
                     item_text = await items.nth(i).locator(".civica-pbdc-internetdesc").inner_text()
                 except Exception:
-                    continue
+                    item_text = ""
                 m = _ITEM_TEXT_RE.search(item_text)
                 if not m:
-                    continue
+                    # The portal may have changed its markup (2026-10-30: St Albans returned 0 with no message). Fall back to the
+                    # whole item text: a reference like 5/2026/1234 plus the first dd/mm/yyyy date.
+                    try:
+                        whole = " ".join((await items.nth(i).inner_text()).split())
+                    except Exception:
+                        continue
+                    mr = re.search(r"\b\d{1,2}/\d{4}/\d{2,6}(?:/[A-Za-z0-9]+)?\b", whole)
+                    md = re.search(r"\d{2}/\d{2}/\d{4}", whole)
+                    if not mr:
+                        if i < 2:
+                            print(f"    ⚠ [{self.council_name}] list item {i} not recognised: {whole[:300]!r}")
+                        continue
+                    class _M:
+                        def group(self, k, _r=mr.group(0), _d=md.group(0) if md else ""):
+                            return _r if k == "ref" else _d
+                    m = _M()
+                    if i < 2:
+                        print(f"    ⚠ [{self.council_name}] used fallback parse for item {i}: {whole[:200]!r}")
                 ref = m.group("ref").strip()
                 if ref in seen_refs_this_query:
                     continue
@@ -311,6 +330,14 @@ class CivicaPortal:
                     "source":           "civica_scraper",
                 })
 
+            print(f"    [{self.council_name}] page {page_num}: {count} list items, {len(all_apps)} applications so far")
+            if page_num == 1 and not all_apps:
+                try:
+                    print(f"    ⚠ [{self.council_name}] items found but none parsed. title={await page.title()!r} url={page.url}")
+                    print(f"    first item HTML: {(await items.first.evaluate('e => e.outerHTML'))[:600]!r}")
+                except Exception as e:
+                    print(f"    (could not print first item: {e})")
+
             # Try to paginate — real "Next" button confirmed via recon,
             # no URL page-number parameter confirmed so this clicks
             # through rather than guessing one.
@@ -331,6 +358,7 @@ class CivicaPortal:
             except Exception:
                 break
 
+        print(f"    [{self.council_name}] query finished: {len(all_apps)} applications")
         return all_apps
 
     async def scrape(self, browser: Browser) -> list[dict]:
