@@ -6471,7 +6471,7 @@ jobs:
     # BACKFILL (real writes) Group D (6 councils that block after about 12 detail pages; stops and switches proxy), 30 days, from the 2026-10-29 dry run. Safe to re-run.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_backfill_d'
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 150
+    timeout-minutes: 170
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -6486,7 +6486,7 @@ jobs:
           DAYS_BACK: "30"
           SLICE_DAYS: "7"
           DETAIL_MAX: "200"
-          MAX_MINUTES: "110"
+          MAX_MINUTES: "140"
           DRY_RUN: "0"
           HTTP_COUNCILS: "37,223,32,271,228,181"
         run: cd scrapers && python idox_http_scraper.py
@@ -6543,7 +6543,7 @@ jobs:
     # Nightly Idox HTTP scraper Group D, last 14 days. See idox_http_scraper.py.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_d' || github.event.schedule == '50 8'
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 90
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -6557,8 +6557,8 @@ jobs:
           HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
           DAYS_BACK: "14"
           SLICE_DAYS: "7"
-          DETAIL_MAX: "100"
-          MAX_MINUTES: "70"
+          DETAIL_MAX: "60"
+          MAX_MINUTES: "75"
           DRY_RUN: "0"
           HTTP_COUNCILS: "37,223,32,271,228,181"
         run: cd scrapers && python idox_http_scraper.py
@@ -6567,7 +6567,7 @@ jobs:
     # BACKFILL (real writes) Shropshire only, 30 days, 10 s between requests (it answered HTTP 429 at 6 s). Safe to re-run.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_backfill_shrop'
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 90
+    timeout-minutes: 170
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -6581,8 +6581,8 @@ jobs:
           HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }}
           DAYS_BACK: "30"
           SLICE_DAYS: "7"
-          DETAIL_MAX: "150"
-          MAX_MINUTES: "75"
+          DETAIL_MAX: "200"
+          MAX_MINUTES: "140"
           DRY_RUN: "0"
           HTTP_COUNCILS: "364"
         run: cd scrapers && python idox_http_scraper.py
