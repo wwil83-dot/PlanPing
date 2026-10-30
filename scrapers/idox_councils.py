@@ -2012,12 +2012,14 @@ IDOX_COUNCILS = [
     # Glasgow/Aberdeen (just in the opposite direction — they needed
     # monthly because their weekly search broke; East Riding needs
     # weekly because its monthly search is too broad).
-    ("East Riding of Yorkshire Council",
-     "https://newplanningaccess.eastriding.gov.uk/newplanningaccess",
-     "weekly"),
+    # MOVED: East Riding (475): detail pages 403 and timeouts from the runner; now run by idox_http_scraper.py through the UK proxies (2026-10-30).
+    # ("East Riding of Yorkshire Council",
+    # "https://newplanningaccess.eastriding.gov.uk/newplanningaccess",
+    # "weekly"),
 
-    ("Stafford Borough Council",
-     "https://www12.staffordbc.gov.uk/online-applications"),
+    # MOVED: Stafford (476): now run by idox_http_scraper.py through the UK proxies (2026-10-29).
+    # ("Stafford Borough Council",
+    # "https://www12.staffordbc.gov.uk/online-applications"),
 
     ("Lichfield District Council",
      "https://planning.lichfielddc.gov.uk/online-applications"),
@@ -2035,8 +2037,9 @@ IDOX_COUNCILS = [
     # ("North Kesteven District Council",
     #  "https://planningonline.n-kesteven.gov.uk/online-applications"),
 
-    ("South Kesteven District Council",
-     "https://prod.publicaccess.southkesteven.gov.uk/online-applications"),
+    # MOVED: South Kesteven (479): Cloudflare 'Just a moment' challenge in this scraper since 2026-10-20; now run by idox_http_scraper.py through the UK proxies (2026-10-30).
+    # ("South Kesteven District Council",
+    # "https://prod.publicaccess.southkesteven.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # ADDED 2026-08-22 — 3 more councils, real URLs supplied directly
