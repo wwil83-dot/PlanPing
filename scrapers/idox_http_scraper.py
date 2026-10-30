@@ -66,6 +66,8 @@ COUNCILS = [
     ("London Borough of Sutton", "https://planningregister.sutton.gov.uk/online-applications", 232),
     ("North East Lincolnshire Council", "https://planninganddevelopment.nelincs.gov.uk/online-applications", 388),
     ("North Kesteven District Council", "https://planningonline.n-kesteven.gov.uk/online-applications", 478),
+    ("South Kesteven District Council", "https://prod.publicaccess.southkesteven.gov.uk/online-applications", 479),
+    ("East Riding of Yorkshire Council", "https://newplanningaccess.eastriding.gov.uk/newplanningaccess", 475),
     ("North Lanarkshire Council", "https://eplanning.northlanarkshire.gov.uk/online-applications", 350),
     ("North Northamptonshire Council", "https://publicaccess.northnorthants.gov.uk/online-applications", 387),
     ("North Yorkshire Council", "https://publicaccess.northyorks.gov.uk/online-applications", 371),
