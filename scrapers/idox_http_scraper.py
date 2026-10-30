@@ -99,10 +99,10 @@ DELAY = float(os.environ.get("REQUEST_DELAY_SECONDS", "1.5"))
 PROXIES = [x.strip() for x in os.environ.get("HTTP_PROXY_URLS", "").split(",") if x.strip()]
 DIRECT = {389, 390, 391, 362, 361, 355}
 # Portals that answer HTTP 429 at the normal pace (seen 2026-10-28): Westminster, Enfield, South Downs. Seconds between requests.
-SLOW = {267: 6.0, 242: 5.0, 257: 5.0, 364: 10.0, 37: 3.5, 223: 3.5, 32: 3.5, 271: 3.5, 228: 3.5}
+SLOW = {267: 6.0, 242: 5.0, 257: 5.0, 364: 10.0, 475: 3.0, 37: 3.5, 223: 3.5, 32: 3.5, 271: 3.5, 228: 3.5}
 # Portals whose detail pages never say what was decided (only 'Decided'): reading them is wasted requests, so decided stay 'closed'.
 NO_DETAIL = {351, 79, 181}
-COOLDOWN = int(os.environ.get("DETAIL_COOLDOWN_SECONDS", "600"))
+COOLDOWN = int(os.environ.get("DETAIL_COOLDOWN_SECONDS", "300"))      # first wait after a block; grows by 2 min each time a wait was not enough
 # Certificate chains these portals do not send in full (probe 2026-10-29: fine with verification off; public pages, no logins).
 INSECURE = {392, 176, 219, 58, 63, 181}
 # Proxy that got through to each council in the probes (index into HTTP_PROXY_URLS). Several councils block some of our proxy
@@ -435,6 +435,7 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
     strikes = 0
     waits = 0
     ok_run = 0
+    cool = COOLDOWN
     try:
         for a in todo:
             if minutes() > MAX_MINUTES:
@@ -457,18 +458,20 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
                 break
             if r is None:
                 continue
-            if r.status_code == 429:
+            if r.status_code in (429, 403):
                 strikes += 1
-                http["429"] = http.get("429", 0) + 1
+                http[str(r.status_code)] = http.get(str(r.status_code), 0) + 1
                 if strikes >= 2:
-                    # These portals allow only about a dozen detail pages and then block our address for a while (every other
-                    # proxy we tried could not reach them). Wait it out, then carry on; the log shows how long the block lasts.
+                    # These portals allow only about a dozen detail pages and then block our address for a few minutes (a 10 minute
+                    # wait always worked; East Riding answers 403 instead of 429). Wait it out, then carry on.
+                    if ok_run == 0 and waits:
+                        cool += 120                    # the last wait was not long enough
                     waits += 1
-                    if waits > 6:
-                        problems.append(f"{p.name}: detail pages still blocked (HTTP 429) after {waits - 1} waits; stopped, the next run continues")
+                    if waits > 14:
+                        problems.append(f"{p.name}: detail pages still blocked (HTTP {r.status_code}) after {waits - 1} waits; stopped, the next run continues")
                         break
-                    p.log(f"detail pages blocked after {ok_run} pages in a row (HTTP 429): waiting {COOLDOWN // 60} min (wait {waits})")
-                    await asyncio.sleep(COOLDOWN)
+                    p.log(f"detail pages blocked after {ok_run} pages in a row (HTTP {r.status_code}): waiting {cool // 60} min (wait {waits})")
+                    await asyncio.sleep(cool)
                     strikes = 0
                     ok_run = 0
                 continue
