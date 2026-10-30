@@ -404,7 +404,28 @@ class CivicaPortal:
         # for decision_date — NOT independently confirmed itself. The
         # diagnostic in _scrape_one_query will surface it clearly on the
         # first real run if this guess is wrong.
-        apps = await self._scrape_one_query(page, "received_date", date_from, today)
+        # 2026-10-30: the list items no longer show a date, so a range query cannot tell us when each application was received.
+        # One query per day does: everything a single-day query returns was received that day.
+        apps, seen, day_counts = [], set(), []
+        d = date_from
+        while d <= today:
+            if should_stop():
+                print(f"    — time budget reached at {d}; days after this are left for the next run")
+                break
+            got = await self._scrape_one_query(page, "received_date", d, d)
+            day_counts.append(f"{d:%d/%m}:{len(got)}")
+            for a in got:
+                if a["reference"] in seen:
+                    continue
+                seen.add(a["reference"])
+                if not a.get("submitted_date"):
+                    a["submitted_date"] = d.isoformat()
+                apps.append(a)
+            d += timedelta(days=1)
+        print(f"    [{self.council_name}] applications per received day: {' '.join(day_counts)}")
+        if not apps:
+            print(f"    [{self.council_name}] no results day by day; trying the whole range in one query")
+            apps = await self._scrape_one_query(page, "received_date", date_from, today)
 
         await context.close()
         return apps
