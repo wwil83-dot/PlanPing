@@ -146,6 +146,9 @@ def parse_block(words: list, kind: str) -> Optional[dict]:
         ward = first[len(ref_w["text"]):].strip()
     idx = next((i for i, l in enumerate(lines) if l.startswith("Development Address")), None)
     app_type = " ".join(lines[1:idx]).strip() if idx is not None else ""
+    # overlapping lines in the PDF can interleave letters ("VThaorirantlieoyn"): drop that rather than store junk
+    if re.search(r"[a-z][A-Z]|[A-Z][A-Z][a-z]", app_type):
+        app_type = ""
     addr_parts, dt, officer, dec_type = [], None, "", ""
     phase = "addr"
     for l in lines[(idx + 1 if idx is not None else 1):]:
