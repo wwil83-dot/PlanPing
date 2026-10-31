@@ -35,6 +35,10 @@ DAYS_BACK    = int(os.environ.get("DAYS_BACK", "30"))
 
 COUNCIL_NAME = "Ribble Valley Borough Council"
 
+# 2026-10-31: the portal started timing out from the runner's datacenter address (ConnectTimeout). Same fix as the Idox councils:
+# if a direct connection fails, go through the UK proxies (PROXY_URLS, comma separated).
+PROXIES = [x.strip() for x in os.environ.get("PROXY_URLS", "").split(",") if x.strip()]
+
 HTTP_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -246,6 +250,21 @@ async def geocode(postcodes: list[str]) -> dict:
     return results
 
 
+async def pick_route():
+    """(True, None) if the portal answers directly, (True, proxy_url) for the first proxy that gets through, else (False, None)."""
+    for px in [None] + PROXIES:
+        kw = {"proxy": px} if px else {}
+        label = "direct" if not px else "proxy " + px.rsplit("@", 1)[-1]
+        try:
+            async with httpx.AsyncClient(headers=HTTP_HEADERS, timeout=20, follow_redirects=True, **kw) as c:
+                r = await c.get(BASE_URL)
+            _log(f"route: {label} reached the portal (HTTP {r.status_code})")
+            return True, px
+        except Exception as e:
+            _log(f"route: {label} failed: {type(e).__name__}")
+    return False, None
+
+
 async def scrape() -> list[dict]:
     today = date.today()
     start = today - timedelta(days=DAYS_BACK)
@@ -253,7 +272,12 @@ async def scrape() -> list[dict]:
     all_apps: list[dict] = []
     seen_refs: set[str] = set()
 
-    async with httpx.AsyncClient(headers=HTTP_HEADERS, timeout=30, follow_redirects=True) as client:
+    found, px = await pick_route()
+    if not found:
+        _log("⚠ portal unreachable directly and through every proxy")
+        return []
+    kw = {"proxy": px} if px else {}
+    async with httpx.AsyncClient(headers=HTTP_HEADERS, timeout=30, follow_redirects=True, **kw) as client:
         lower_limit = 0
         real_total = None
 
