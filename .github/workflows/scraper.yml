@@ -4054,7 +4054,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ribblevalley_scraper') ||
       (github.event_name == 'schedule' && github.event.schedule == '0 9 * * *')
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -4065,8 +4065,9 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          MAX_MINUTES: "15"
+          MAX_MINUTES: "20"
           DAYS_BACK: "30"
+          PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
         run: cd scrapers && python ribblevalley_scraper.py
 
   idox_candidate_verify:
