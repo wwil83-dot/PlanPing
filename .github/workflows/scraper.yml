@@ -4122,25 +4122,32 @@ jobs:
         run: cd scrapers && python ribblevalley_weekly_scraper.py
 
   ribblevalley_scraper:
+    # Nightly: Ribble Valley weekly registered/decided PDF lists (old web portal was switched off). Last 3 weeks, safe to re-run.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ribblevalley_scraper') ||
       (github.event_name == 'schedule' && github.event.schedule == '0 9 * * *')
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install httpx beautifulsoup4 curl_cffi
-      - name: Run Ribble Valley scraper
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+      - run: pip install playwright pdfplumber pyproj httpx
+      - run: playwright install --with-deps chromium
+      - name: Run Ribble Valley weekly-list scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          WEEKS_BACK: "3"
+          DRY_RUN: "0"
           MAX_MINUTES: "20"
-          DAYS_BACK: "30"
-          PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
-        run: cd scrapers && python ribblevalley_scraper.py
+        run: cd scrapers && python ribblevalley_weekly_scraper.py
 
   idox_candidate_verify:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_candidate_verify'
