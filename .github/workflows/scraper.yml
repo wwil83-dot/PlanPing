@@ -6589,7 +6589,7 @@ jobs:
 
   idox_http_nightly_c1:
     # Nightly Idox HTTP scraper Group C1, last 14 days. See idox_http_scraper.py.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_c1' || github.event.schedule == '44 8'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_c1' || github.event.schedule == '44 8 * * *'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 60
     steps:
@@ -6613,7 +6613,7 @@ jobs:
 
   idox_http_nightly_c2:
     # Nightly Idox HTTP scraper Group C2, last 14 days. See idox_http_scraper.py.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_c2' || github.event.schedule == '46 8'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_c2' || github.event.schedule == '46 8 * * *'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 60
     steps:
@@ -6637,7 +6637,7 @@ jobs:
 
   idox_http_nightly_d:
     # Nightly Idox HTTP scraper Group D, last 14 days. See idox_http_scraper.py.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_d' || github.event.schedule == '50 8'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_d' || github.event.schedule == '50 8 * * *'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 100
     steps:
