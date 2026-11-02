@@ -279,12 +279,39 @@ async def _read_page(page, rows: dict, en: dict):
         _log(f"⚠ Could not read map coordinates (non-fatal): {type(e).__name__}: {e}")
 
 
+async def _summary(page):
+    """('Showing a to b of N') as (a, b, N), taking the entry with the largest 'to'."""
+    text = await page.inner_text("body")
+    ms = re.findall(r"Showing (\d+) to (\d+) of ([\d,]+)", text)
+    if not ms:
+        return None
+    best = max(ms, key=lambda m: int(m[1]))
+    return int(best[0]), int(best[1]), int(best[2].replace(",", ""))
+
+
+async def _wait_stable(page, prev=None, timeout: float = 25.0):
+    """Poll until the result summary is the same 3 times in a row (and differs from prev, if given)."""
+    seen, last, t0 = 0, "unset", time.monotonic()
+    cur = None
+    while time.monotonic() - t0 < timeout:
+        await page.wait_for_timeout(1000)
+        cur = await _summary(page)
+        if cur == last:
+            seen += 1
+        else:
+            seen, last = 1, cur
+        if seen >= 3 and (prev is None or cur != prev):
+            return cur
+    return cur
+
+
 async def _run_pass(page, label: str, date_type: str, after_str: str, before_str: str, rows: dict, en: dict):
     await _no_cookie_banner(page)
     radio = await _visible(page, f"ui-radio[value='{date_type}']")
     if radio:
         await radio.click()
         await _settle(page, 2000)
+        _log(f"{label}: date-type switch clicked; checked={await radio.get_attribute('aria-checked')}")
     else:
         _log(f"⚠ {label}: date-type switch not found")
     sel = await _visible(page, "select[wire\\:model\\.live='datePreset']")
@@ -295,34 +322,33 @@ async def _run_pass(page, label: str, date_type: str, after_str: str, before_str
         await box.fill(val)
         await box.blur()
         await _settle(page, 2500)
+    s = await _wait_stable(page)
+    _log(f"{label}: after the date filter: {s}")
     try:
         pp = await _visible(page, "select[wire\\:model\\.live='perPage']")
         await pp.select_option("96")
-        await _settle(page, 3000)
+        s = await _wait_stable(page)
+        _log(f"{label}: after page size 96: {s}")
     except Exception as e:
         _log(f"⚠ {label}: could not set page size (non-fatal): {type(e).__name__}")
 
     before_count = len(rows)
-    total = None
+    total = s[2] if s else None
     for page_no in range(1, 80):
         await _read_page(page, rows, en)
-        text = await page.inner_text("body")
-        m = re.search(r"Showing (\d+) to (\d+) of ([\d,]+)", text)
-        if not m:
-            break
-        total = int(m.group(3).replace(",", ""))
-        if int(m.group(2)) >= total:
+        if not s or s[1] >= s[2]:
             break
         if elapsed_minutes() > MAX_MINUTES - 1:
             _log(f"⚠ {label}: time budget reached after page {page_no}")
             break
+        await _no_cookie_banner(page)
         nxt = await _visible(page, "button[wire\\:click=\"nextPage('page')\"]")
         if not nxt:
-            _log(f"⚠ {label}: no next-page button, stopped at {m.group(2)} of {total}")
+            _log(f"⚠ {label}: no next-page button, stopped at {s}")
             break
-        await _no_cookie_banner(page)
         await nxt.click()
-        await _settle(page, 2500)
+        s = await _wait_stable(page, prev=s)
+        _log(f"{label}: page {page_no + 1}: {s}")
     _log(f"{label}: site reports {total} applications; {len(rows) - before_count} new rows read")
 
 
