@@ -49,6 +49,22 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "15"))
 DAYS_BACK    = int(os.environ.get("DAYS_BACK", "30"))
+DRY_RUN      = os.environ.get("DRY_RUN", "0") == "1"
+
+try:
+    from pyproj import Transformer
+    _EN_TO_LL = Transformer.from_crs(27700, 4326, always_xy=True)
+except Exception:  # pyproj missing: fall back to postcodes
+    _EN_TO_LL = None
+
+
+def _en_to_latlng(e, n):
+    if not _EN_TO_LL or not e or not n:
+        return None, None
+    lng, lat = _EN_TO_LL.transform(float(e), float(n))
+    if 52.4 <= lat <= 53.3 and -2.3 <= lng <= -1.0:
+        return round(lat, 6), round(lng, 6)
+    return None, None
 
 COUNCIL_NAME = "South Derbyshire District Council"
 
@@ -82,10 +98,12 @@ def _parse_json_date(value) -> Optional[str]:
 _STATUS_DIAGNOSED = False
 
 
-def _normalise_south_derbyshire_status(status_text: str) -> str:
+def _normalise_south_derbyshire_status(status_text: str, decided: bool = False) -> str:
     if not status_text:
-        return "pending"
+        return "closed" if decided else "pending"
     key = status_text.lower()
+    if "not decided" in key:
+        return "pending"
     if any(x in key for x in ("approv", "grant", "permit")):
         return "approved"
     if any(x in key for x in ("refus", "reject")):
@@ -98,8 +116,8 @@ def _normalise_south_derbyshire_status(status_text: str) -> str:
     global _STATUS_DIAGNOSED
     if not _STATUS_DIAGNOSED:
         _STATUS_DIAGNOSED = True
-        _log(f"⚠ STATUS DIAGNOSTIC: unrecognised status {status_text!r} — filed as 'pending'")
-    return "pending"
+        _log(f"⚠ STATUS DIAGNOSTIC: unrecognised status {status_text!r} — filed as {'closed' if decided else 'pending'}")
+    return "closed" if decided else "pending"
 
 
 def _h():
@@ -160,100 +178,174 @@ async def geocode(postcodes: list[str]) -> dict:
     return results
 
 
+ROW_JS = """() => [...document.querySelectorAll('tr[data-flux-row]')].map(r => {
+  const tds = [...r.querySelectorAll('td')];
+  const a = r.querySelector('a[href*="/application/"]');
+  const badge = r.querySelector('span.inline-flex');
+  const type = r.querySelector('td:nth-child(2) p.mb-1');
+  const desc = r.querySelector('span.line-clamp-4');
+  const addr = r.querySelector('td:nth-child(2) p.font-medium');
+  return {
+    ref: a ? a.textContent.trim() : '',
+    url: a ? a.href : '',
+    status: badge ? badge.textContent.trim() : '',
+    type: type ? type.textContent.trim() : '',
+    desc: desc ? desc.textContent.trim() : '',
+    addr: addr ? addr.textContent.trim() : '',
+    valid: tds[2] ? tds[2].innerText.trim() : '',
+    decided: tds[3] ? tds[3].innerText.trim() : '',
+  };
+})"""
+
+EFFECTS_JS = """() => {
+  const out = [];
+  for (const el of document.querySelectorAll('[wire\\\\:effects]')) {
+    const raw = el.getAttribute('wire:effects');
+    if (raw && raw.includes('updateMap')) out.push(raw);
+  }
+  return out;
+}"""
+
+
+def _parse_ui_date(text: str) -> Optional[str]:
+    m = re.search(r"\b(\d{1,2} [A-Z][a-z]{2} \d{4})\b", text or "")
+    if not m:
+        return None
+    try:
+        return datetime.strptime(m.group(1), "%d %b %Y").date().isoformat()
+    except ValueError:
+        return None
+
+
+async def _settle(page, ms: int = 2500):
+    try:
+        await page.wait_for_load_state("networkidle", timeout=15_000)
+    except PlaywrightTimeout:
+        pass
+    await page.wait_for_timeout(ms)
+
+
+async def _visible(page, selector: str):
+    loc = page.locator(selector)
+    for i in range(await loc.count()):
+        if await loc.nth(i).is_visible():
+            return loc.nth(i)
+    return None
+
+
+async def _read_page(page, rows: dict, en: dict):
+    """Add this page's table rows to rows, and its map coordinates to en."""
+    for r in await page.evaluate(ROW_JS):
+        ref = (r.get("ref") or "").strip()
+        if not ref:
+            continue
+        old = rows.get(ref)
+        # keep whichever copy carries a decision
+        if old and _parse_ui_date(old.get("decided", "")) and not _parse_ui_date(r.get("decided", "")):
+            continue
+        rows[ref] = r
+    try:
+        for raw in await page.evaluate(EFFECTS_JS):
+            for d in json.loads(raw).get("dispatches", []):
+                if d.get("name") != "updateMap":
+                    continue
+                params = d.get("params") or {}
+                for x in params.get("applications", []) or []:
+                    if x.get("reference") and x.get("easting") and x.get("northing"):
+                        en[x["reference"]] = (x["easting"], x["northing"])
+    except Exception as e:
+        _log(f"⚠ Could not read map coordinates (non-fatal): {type(e).__name__}: {e}")
+
+
+async def _run_pass(page, label: str, date_type: str, after_str: str, before_str: str, rows: dict, en: dict):
+    radio = await _visible(page, f"ui-radio[value='{date_type}']")
+    if radio:
+        await radio.click()
+        await _settle(page, 2000)
+    else:
+        _log(f"⚠ {label}: date-type switch not found")
+    sel = await _visible(page, "select[wire\\:model\\.live='datePreset']")
+    await sel.select_option("custom")
+    await _settle(page, 2000)
+    for name, val in (("afterDate", after_str), ("beforeDate", before_str)):
+        box = await _visible(page, f"input[wire\\:model\\.live='{name}']")
+        await box.fill(val)
+        await box.blur()
+        await _settle(page, 2500)
+    try:
+        pp = await _visible(page, "select[wire\\:model\\.live='perPage']")
+        await pp.select_option("96")
+        await _settle(page, 3000)
+    except Exception as e:
+        _log(f"⚠ {label}: could not set page size (non-fatal): {type(e).__name__}")
+
+    before_count = len(rows)
+    total = None
+    for page_no in range(1, 80):
+        await _read_page(page, rows, en)
+        text = await page.inner_text("body")
+        m = re.search(r"Showing (\d+) to (\d+) of ([\d,]+)", text)
+        if not m:
+            break
+        total = int(m.group(3).replace(",", ""))
+        if int(m.group(2)) >= total:
+            break
+        if elapsed_minutes() > MAX_MINUTES - 1:
+            _log(f"⚠ {label}: time budget reached after page {page_no}")
+            break
+        nxt = await _visible(page, "button[wire\\:click=\"nextPage('page')\"]")
+        if not nxt:
+            _log(f"⚠ {label}: no next-page button, stopped at {m.group(2)} of {total}")
+            break
+        await nxt.click()
+        await _settle(page, 2500)
+    _log(f"{label}: site reports {total} applications; {len(rows) - before_count} new rows read")
+
+
 async def scrape() -> list[dict]:
     today = date.today()
-    start = today - timedelta(days=DAYS_BACK)
-    after_str = start.isoformat()
+    after_str = (today - timedelta(days=DAYS_BACK)).isoformat()
     before_str = today.isoformat()
+    rows: dict = {}
+    en: dict = {}
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
         _log(f"Chromium launched: {browser.version}")
         context = await browser.new_context(**CONTEXT_OPTIONS)
         page = await context.new_page()
-
         try:
             await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=45_000)
-            try:
-                await page.wait_for_load_state("networkidle", timeout=15_000)
-            except PlaywrightTimeout:
-                pass
-
-            # Real, confirmed: dateType=1 is "Validation Date". Selecting
-            # it fires a real Livewire round-trip that enables the
-            # otherwise disabled="" afterDate/beforeDate fields.
-            await page.select_option("select[wire\\:model\\.live='dateType']", "1", timeout=10_000)
-            await asyncio.sleep(2)
-
-            await page.fill("input[wire\\:model\\.live='afterDate']", after_str, timeout=5_000)
-            await page.fill("input[wire\\:model\\.live='beforeDate']", before_str, timeout=5_000)
-            await asyncio.sleep(2)
-
-            # Real, confirmed: perPage select supports up to 100 —
-            # platform's own maximum, set here to minimise the chance
-            # of needing pagination (not yet implemented).
-            try:
-                await page.select_option("select[wire\\:model\\.live='perPage']", "100", timeout=5_000)
-                await asyncio.sleep(2)
-            except Exception as e:
-                _log(f"⚠ Could not set perPage=100 (non-fatal): {e}")
-
+            await _settle(page, 3000)
+            # pass 1: validated in the window (new applications); pass 2: decided in the window
+            await _run_pass(page, "validated", "1", after_str, before_str, rows, en)
+            await _run_pass(page, "decided", "2", after_str, before_str, rows, en)
         except Exception as e:
-            _log(f"⚠ Livewire interaction failed: {type(e).__name__}: {e!r}")
+            _log(f"⚠ Search interaction failed: {type(e).__name__}: {e!r}")
+        finally:
             await context.close()
             await browser.close()
-            return []
 
-        # Real, confirmed: the actual application data lives in the
-        # wire:effects DOM attribute (a Livewire event dispatch used to
-        # update the Leaflet map), NOT wire:snapshot. Reading it via
-        # page.evaluate() gets it HTML-unescaped automatically.
-        # REAL FIX (2026-08-31) — validating this approach against the
-        # actual recon4 capture found TWO elements with a wire:effects
-        # attribute on this page (one an empty list, one the real data).
-        # querySelector() alone grabs whichever comes first in the DOM,
-        # which in testing was the EMPTY one. Iterate all of them and
-        # pick the one that actually contains real dispatch data.
-        try:
-            effects_raw = await page.evaluate(
-                """() => {
-                    const els = document.querySelectorAll('[wire\\\\:effects]');
-                    for (const el of els) {
-                        const raw = el.getAttribute('wire:effects');
-                        if (raw && raw.includes('"dispatches"') && raw.includes('"data"')) {
-                            return raw;
-                        }
-                    }
-                    return null;
-                }"""
-            )
-        except Exception as e:
-            _log(f"⚠ Could not read wire:effects: {e}")
-            effects_raw = None
-
-        await context.close()
-        await browser.close()
-
-    if not effects_raw:
-        _log("⚠ No wire:effects data found — nothing to parse")
-        return []
-
-    try:
-        effects = json.loads(effects_raw)
-        apps = effects["dispatches"][0]["params"][0][0]["data"]
-        real_total = effects["dispatches"][0]["params"][0][0].get("total")
-        _log(f"Parsed {len(apps)} applications from real wire:effects JSON "
-             f"(real total for this window: {real_total})")
-        if real_total and real_total > 100:
-            _log(f"⚠ PAGINATION DIAGNOSTIC: real total ({real_total}) exceeds "
-                 f"the 100-per-page cap — only the first 100 were captured. "
-                 f"Pagination not yet implemented.")
-    except (KeyError, IndexError, json.JSONDecodeError) as e:
-        _log(f"⚠ Could not parse wire:effects structure (real structure may "
-             f"have changed): {type(e).__name__}: {e!r}. Raw (first 500 "
-             f"chars): {effects_raw[:500]!r}")
-        return []
-
+    apps = []
+    for ref, r in rows.items():
+        decided_date = _parse_ui_date(r.get("decided", ""))
+        decision = ""
+        if decided_date:
+            decision = re.sub(r"\b\d{1,2} [A-Z][a-z]{2} \d{4}\b", "", r.get("decided", ""))
+            decision = re.sub(r"[—\-\s]+", " ", decision).strip()
+        e_n = en.get(ref)
+        apps.append({
+            "Name": ref,
+            "Site_Address__c": r.get("addr") or "",
+            "Short_Proposal__c": r.get("desc") or None,
+            "Type__c": r.get("type") or None,
+            "Status__c": decision or r.get("status") or "",
+            "Validated_Date__c": _parse_ui_date(r.get("valid", "")),
+            "Current_Decision_Date__c": decided_date,
+            "url": r.get("url") or None,
+            "easting": e_n[0] if e_n else None,
+            "northing": e_n[1] if e_n else None,
+        })
     return apps
 
 
@@ -285,16 +377,15 @@ async def main():
 
     addresses = [a.get("Site_Address__c") or "" for a in raw_apps]
     postcodes = [_extract_postcode(a) for a in addresses]
-    valid_postcodes = [p for p in postcodes if p]
-    coords = await geocode(valid_postcodes) if valid_postcodes else {}
-    if valid_postcodes:
-        _log(f"Geocoding {len(valid_postcodes)} postcodes…")
+    ll = [_en_to_latlng(a.get("easting"), a.get("northing")) for a in raw_apps]
+    need = [p for p, (la, _) in zip(postcodes, ll) if p and la is None]
+    coords = await geocode(need) if need else {}
+    _log(f"{sum(1 for la, _ in ll if la is not None)} located from the map data, {len(need)} need a postcode lookup")
 
     fallback_count = 0
     records = []
-    for a, address, postcode in zip(raw_apps, addresses, postcodes):
-        lat, lng = None, None
-        if postcode:
+    for a, address, postcode, (lat, lng) in zip(raw_apps, addresses, postcodes, ll):
+        if lat is None and postcode:
             key = postcode.upper().replace(" ", "")
             if key in coords:
                 lat, lng = coords[key]
@@ -305,26 +396,38 @@ async def main():
         if not reference:
             continue
 
-        detail_url = a.get("url")
-
-        records.append({
+        decision_date = a.get("Current_Decision_Date__c")
+        rec = {
             "council_id": cid,
             "reference": reference,
-            "submitted_date": _parse_json_date(a.get("Validated_Date__c")),
-            "decision_date": _parse_json_date(a.get("Current_Decision_Date__c")),
+            "decision_date": decision_date,
             "address": address or None,
             "postcode": postcode,
             "description": a.get("Short_Proposal__c") or None,
             "application_type": a.get("Type__c") or None,
-            "status": _normalise_south_derbyshire_status(a.get("Status__c", "")),
-            "council_url": detail_url,
+            "status": _normalise_south_derbyshire_status(a.get("Status__c", ""), decided=bool(decision_date)),
+            "council_url": a.get("url"),
             "lat": lat,
             "lng": lng,
             "source": "south_derbyshire_scraper",
-        })
+        }
+        if a.get("Validated_Date__c"):  # never overwrite a stored date with nothing
+            rec["submitted_date"] = a["Validated_Date__c"]
+        records.append(rec)
+
+    from collections import Counter
+    _log(f"{len(records)} applications; status {dict(Counter(r['status'] for r in records))}; "
+         f"with decision date {sum(1 for r in records if r['decision_date'])}")
+    for r in [x for x in records if x["decision_date"]][:3] + [x for x in records if not x["decision_date"]][:2]:
+        _log(f"sample: {r['reference']} | {r.get('submitted_date')} | {r['decision_date']} | {r['status']} | "
+             f"{r['application_type']!r} | {r['address']!r} | {r['lat']},{r['lng']}")
 
     if fallback_count:
         _log(f"Council centroid fallback for {fallback_count} apps")
+
+    if DRY_RUN:
+        print(f"\nDRY RUN: nothing saved ({len(records)} applications read)")
+        return
 
     if records:
         _log(f"Upserting {len(records)} records with council_id={cid}")
