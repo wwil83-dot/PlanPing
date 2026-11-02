@@ -307,6 +307,12 @@ async def _wait_stable(page, prev=None, timeout: float = 25.0):
 
 async def _run_pass(page, label: str, date_type: str, after_str: str, before_str: str, rows: dict, en: dict):
     await _no_cookie_banner(page)
+    try:  # page size first: changing it after the filter leaves the table showing the old page
+        pp = await _visible(page, "select[wire\\:model\\.live='perPage']")
+        await pp.select_option("96")
+        await _settle(page, 3000)
+    except Exception as e:
+        _log(f"⚠ {label}: could not set page size (non-fatal): {type(e).__name__}")
     radio = await _visible(page, f"ui-radio[value='{date_type}']")
     if radio:
         await radio.click()
@@ -323,20 +329,12 @@ async def _run_pass(page, label: str, date_type: str, after_str: str, before_str
         await box.blur()
         await _settle(page, 2500)
     s = await _wait_stable(page)
-    _log(f"{label}: after the date filter: {s}")
-    try:
-        pp = await _visible(page, "select[wire\\:model\\.live='perPage']")
-        await pp.select_option("96")
-        s = await _wait_stable(page)
-        _log(f"{label}: after page size 96: {s}")
-    except Exception as e:
-        _log(f"⚠ {label}: could not set page size (non-fatal): {type(e).__name__}")
-
+    _log(f"{label}: after the date filter and page size 96: {s}")
     before_count = len(rows)
     total = s[2] if s else None
     for page_no in range(1, 80):
         await _read_page(page, rows, en)
-        if not s or s[1] >= s[2]:
+        if not s or s[1] >= s[2] or s[1] == 0:
             break
         if elapsed_minutes() > MAX_MINUTES - 1:
             _log(f"⚠ {label}: time budget reached after page {page_no}")
@@ -350,6 +348,8 @@ async def _run_pass(page, label: str, date_type: str, after_str: str, before_str
         s = await _wait_stable(page, prev=s)
         _log(f"{label}: page {page_no + 1}: {s}")
     _log(f"{label}: site reports {total} applications; {len(rows) - before_count} new rows read")
+    if total and s and s[1] < total:
+        _log(f"⚠ {label}: only reached {s[1]} of {total}")
 
 
 async def scrape() -> list[dict]:
@@ -390,7 +390,7 @@ async def scrape() -> list[dict]:
             "Site_Address__c": r.get("addr") or "",
             "Short_Proposal__c": r.get("desc") or None,
             "Type__c": r.get("type") or None,
-            "Status__c": decision or r.get("status") or "",
+            "Status__c": (decision if decision and decision.lower() != "decided" else (r.get("status") or decision)) or "",
             "Validated_Date__c": _parse_ui_date(r.get("valid", "")),
             "Current_Decision_Date__c": decided_date,
             "url": r.get("url") or None,
@@ -467,6 +467,7 @@ async def main():
         records.append(rec)
 
     from collections import Counter
+    _log("raw outcome labels: " + str(Counter(a.get("Status__c") for a in raw_apps if a.get("Current_Decision_Date__c")).most_common(12)))
     _log(f"{len(records)} applications; status {dict(Counter(r['status'] for r in records))}; "
          f"with decision date {sum(1 for r in records if r['decision_date'])}")
     for r in [x for x in records if x["decision_date"]][:3] + [x for x in records if not x["decision_date"]][:2]:
