@@ -313,6 +313,7 @@ async def _run_pass(page, label: str, date_type: str, after_str: str, before_str
         await _settle(page, 3000)
     except Exception as e:
         _log(f"⚠ {label}: could not set page size (non-fatal): {type(e).__name__}")
+    s0 = await _summary(page)
     radio = await _visible(page, f"ui-radio[value='{date_type}']")
     if radio:
         await radio.click()
@@ -328,7 +329,17 @@ async def _run_pass(page, label: str, date_type: str, after_str: str, before_str
         await box.fill(val)
         await box.blur()
         await _settle(page, 2500)
-    s = await _wait_stable(page)
+    s = await _wait_stable(page, prev=s0)
+    for _ in range(3):  # a previous pass can leave the table on a later page
+        if not s or s[0] <= 1:
+            break
+        first = await _visible(page, "button[wire\\:click=\"gotoPage(1, 'page')\"]")
+        if not first:
+            break
+        await _no_cookie_banner(page)
+        await first.click()
+        s = await _wait_stable(page, prev=s)
+        _log(f"{label}: back to page 1: {s}")
     _log(f"{label}: after the date filter and page size 96: {s}")
     before_count = len(rows)
     total = s[2] if s else None
