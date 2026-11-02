@@ -426,6 +426,7 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
         todo = left
         if not todo:
             return
+    todo.sort(key=lambda a: a.get("decision_date") or "", reverse=True)   # newest decisions first
     todo = todo[:DETAIL_MAX]
     p.log(f"reading {len(todo)} decision detail pages")
     p.session = p.mk_session()
@@ -434,6 +435,7 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
     nodec = 0
     strikes = 0
     waits = 0
+    no_gain = 0
     ok_run = 0
     cool = COOLDOWN
     try:
@@ -466,7 +468,13 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
                     # wait always worked; East Riding answers 403 instead of 429). Wait it out, then carry on.
                     if ok_run == 0 and waits:
                         cool += 120                    # the last wait was not long enough
+                        no_gain += 1
+                    else:
+                        no_gain = 0
                     waits += 1
+                    if no_gain >= 3:
+                        problems.append(f"{p.name}: detail pages still blocked (HTTP {r.status_code}) after {waits - 1} waits with no page gained; stopped, the next run continues")
+                        break
                     if waits > 14:
                         problems.append(f"{p.name}: detail pages still blocked (HTTP {r.status_code}) after {waits - 1} waits; stopped, the next run continues")
                         break
