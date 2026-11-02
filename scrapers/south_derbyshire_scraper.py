@@ -130,19 +130,30 @@ def _h():
 
 async def _supa_upsert(records: list) -> bool:
     headers = {**_h(), "Prefer": "resolution=merge-duplicates,return=minimal"}
-    try:
-        async with httpx.AsyncClient(timeout=60) as c:
-            r = await c.post(
-                f"{SUPABASE_URL}/rest/v1/planning_applications?on_conflict=council_id,reference",
-                json=records, headers=headers,
-            )
-            if r.status_code not in (200, 201, 204):
-                print(f"    ✗ Upsert HTTP {r.status_code}: {r.text[:300]}")
-                return False
-            return True
-    except Exception as e:
-        print(f"    ✗ Upsert exception: {e}")
-        return False
+    # PostgREST wants every row in a request to have the same keys: group rows by key set, 50 at a time
+    groups: dict = {}
+    for rec in records:
+        groups.setdefault(tuple(sorted(rec)), []).append(rec)
+    ok_all = True
+    async with httpx.AsyncClient(timeout=90) as c:
+        for rows in groups.values():
+            for i in range(0, len(rows), 50):
+                chunk = rows[i:i + 50]
+                for attempt in range(1, 4):
+                    try:
+                        r = await c.post(
+                            f"{SUPABASE_URL}/rest/v1/planning_applications?on_conflict=council_id,reference",
+                            json=chunk, headers=headers,
+                        )
+                        if r.status_code in (200, 201, 204):
+                            break
+                        print(f"    ✗ Upsert HTTP {r.status_code}: {r.text[:300]}")
+                    except Exception as e:
+                        print(f"    ✗ Upsert attempt {attempt} failed: {type(e).__name__}: {e!r}")
+                    await asyncio.sleep(3 * attempt)
+                else:
+                    ok_all = False
+    return ok_all
 
 
 async def _supa_patch_council(council_id: int, data: dict):
@@ -181,12 +192,14 @@ async def geocode(postcodes: list[str]) -> dict:
 ROW_JS = """() => [...document.querySelectorAll('tr[data-flux-row]')].map(r => {
   const tds = [...r.querySelectorAll('td')];
   const a = r.querySelector('a[href*="/application/"]');
+  const shown = r.offsetParent !== null;
   const badge = r.querySelector('span.inline-flex');
   const type = r.querySelector('td:nth-child(2) p.mb-1');
   const desc = r.querySelector('span.line-clamp-4');
   const addr = r.querySelector('td:nth-child(2) p.font-medium');
   return {
     ref: a ? a.textContent.trim() : '',
+    shown: shown,
     url: a ? a.href : '',
     status: badge ? badge.textContent.trim() : '',
     type: type ? type.textContent.trim() : '',
@@ -217,6 +230,13 @@ def _parse_ui_date(text: str) -> Optional[str]:
         return None
 
 
+async def _no_cookie_banner(page):
+    try:
+        await page.evaluate("() => { document.querySelectorAll('#cookies-policy, .cookies').forEach(e => e.remove()); }")
+    except Exception:
+        pass
+
+
 async def _settle(page, ms: int = 2500):
     try:
         await page.wait_for_load_state("networkidle", timeout=15_000)
@@ -240,8 +260,10 @@ async def _read_page(page, rows: dict, en: dict):
         if not ref:
             continue
         old = rows.get(ref)
-        # keep whichever copy carries a decision
-        if old and _parse_ui_date(old.get("decided", "")) and not _parse_ui_date(r.get("decided", "")):
+        # the same reference can appear more than once (hidden copies): keep the fullest one
+        def richness(x):
+            return sum(1 for k in ("addr", "desc", "valid", "type", "decided") if (x.get(k) or "").strip()) + (2 if x.get("shown") else 0)
+        if old and richness(old) >= richness(r):
             continue
         rows[ref] = r
     try:
@@ -258,6 +280,7 @@ async def _read_page(page, rows: dict, en: dict):
 
 
 async def _run_pass(page, label: str, date_type: str, after_str: str, before_str: str, rows: dict, en: dict):
+    await _no_cookie_banner(page)
     radio = await _visible(page, f"ui-radio[value='{date_type}']")
     if radio:
         await radio.click()
@@ -297,6 +320,7 @@ async def _run_pass(page, label: str, date_type: str, after_str: str, before_str
         if not nxt:
             _log(f"⚠ {label}: no next-page button, stopped at {m.group(2)} of {total}")
             break
+        await _no_cookie_banner(page)
         await nxt.click()
         await _settle(page, 2500)
     _log(f"{label}: site reports {total} applications; {len(rows) - before_count} new rows read")
@@ -317,6 +341,7 @@ async def scrape() -> list[dict]:
         try:
             await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=45_000)
             await _settle(page, 3000)
+            await _no_cookie_banner(page)
             # pass 1: validated in the window (new applications); pass 2: decided in the window
             await _run_pass(page, "validated", "1", after_str, before_str, rows, en)
             await _run_pass(page, "decided", "2", after_str, before_str, rows, en)
