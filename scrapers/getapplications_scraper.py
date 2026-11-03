@@ -148,6 +148,9 @@ RECHECK_LIMIT = int(os.environ.get("RECHECK_LIMIT", "100"))  # bounded detail-pa
                                                                 # each is a separate
                                                                 # real HTTP request,
                                                                 # keep this modest
+DRY_RUN = os.environ.get("DRY_RUN", "0") == "1"     # read everything, write nothing
+ONLY = [x.strip().lower() for x in os.environ.get("ONLY", "").split(",") if x.strip()]   # council-name fragments, e.g. "gwynedd,ceredigion"
+_DRY_SHOWN = {"n": 0}
 COUNCIL_DELAY_SECONDS = int(os.environ.get("COUNCIL_DELAY_SECONDS", "60"))  # REAL FIX
     # (2026-09-10, round 2) — real evidence from the 45s version's first
     # production run: Newcastle and Blackburn with Darwen both fully
@@ -432,6 +435,14 @@ async def _supa_get(table: str, **params) -> list:
 
 
 async def _supa_upsert(records: list) -> bool:
+    if DRY_RUN:
+        from collections import Counter
+        print(f"    DRY RUN: would save {len(records)} records; status {dict(Counter(r.get('status') for r in records))}")
+        for r in records[:2] if _DRY_SHOWN["n"] < 6 else []:
+            _DRY_SHOWN["n"] += 1
+            print(f"      sample: {r.get('reference')} | {r.get('submitted_date')} | {r.get('decision_date')} | {r.get('status')} | "
+                  f"{r.get('application_type')!r} | {r.get('address')!r} | {r.get('lat')},{r.get('lng')} | {str(r.get('description'))[:60]!r}")
+        return True
     headers = {**_h(), "Prefer": "resolution=merge-duplicates,return=minimal"}
     try:
         async with httpx.AsyncClient(timeout=60) as c:
@@ -451,6 +462,8 @@ async def _supa_upsert(records: list) -> bool:
 
 
 async def _supa_patch_council(council_id: int, data: dict):
+    if DRY_RUN:
+        return
     async with httpx.AsyncClient(timeout=10) as c:
         await c.patch(
             f"{SUPABASE_URL}/rest/v1/councils",
@@ -461,6 +474,8 @@ async def _supa_patch_council(council_id: int, data: dict):
 
 
 async def _supa_increment_empty_runs(council_id: int):
+    if DRY_RUN:
+        return
     async with httpx.AsyncClient(timeout=10) as c:
         try:
             await c.post(
@@ -831,7 +846,13 @@ async def main():
     to_scrape = [
         GetApplicationsPortal(name, base_url, COUNCIL_DB_IDS[name])
         for name, base_url in GETAPPLICATIONS_COUNCILS
+        if not ONLY or any(o in name.lower() for o in ONLY)
     ]
+    if ONLY:
+        print(f"ONLY: {[p.council_name for p in to_scrape]}   DRY_RUN: {DRY_RUN}")
+        if not to_scrape:
+            print("ERROR: ONLY matched no council in getapplications_councils.py")
+            sys.exit(1)
     council_ids = [p.db_council_id for p in to_scrape]
 
     pending_by_council: dict[int, list[dict]] = {cid: [] for cid in council_ids}
