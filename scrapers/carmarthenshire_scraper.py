@@ -131,11 +131,13 @@ def read_workbook(data: bytes, kind: str, label: str) -> list:
     ws = wb.worksheets[0]
     hdr_row = None
     for r_i, row in enumerate(ws.iter_rows(min_row=1, max_row=15, values_only=True), start=1):
-        if any(c and "applic" in str(c).lower() and "no" in str(c).lower() for c in row):
+        cells = [re.sub(r"\s+", " ", str(c)).strip().lower() for c in row if c not in (None, "")]
+        # the real header row has several short cells, one of them "... applic no"; the title rows have one long cell
+        if len(cells) >= 4 and any(re.search(r"applic\w*\.? ?no\b", c) and len(c) < 60 for c in cells):
             hdr_row = r_i
             break
     if hdr_row is None:
-        log(f"⚠ {label}: no header row ('Applic No') found in the first 15 rows")
+        log(f"⚠ {label}: no header row ('Applic No' with several columns) found in the first 15 rows")
         return []
     headers = [re.sub(r"\s+", " ", str(c)).strip().lower() if c else "" for c in next(ws.iter_rows(min_row=hdr_row, max_row=hdr_row, values_only=True))]
     n = max((i for i, h in enumerate(headers) if h), default=-1) + 1
@@ -152,7 +154,7 @@ def read_workbook(data: bytes, kind: str, label: str) -> list:
         "ddate": _col(headers, "decision", "date") if _col(headers, "decision", "date") is not None else _col(headers, "decided", "date"),
         "decision": _col(headers, "decision", avoid=("date",)),
     }
-    if kind == "decided" or label.startswith("DEBUG"):
+    if True:
         log(f"{label}: header row {hdr_row}; columns {[h[:40] for h in headers]}")
     out = []
     for r_i, row in enumerate(ws.iter_rows(min_row=hdr_row + 1, max_row=ws.max_row), start=hdr_row + 1):
@@ -160,7 +162,7 @@ def read_workbook(data: bytes, kind: str, label: str) -> list:
             i = ix.get(k)
             return row[i].value if i is not None and i < len(row) else None
         ref = str(val("ref") or "").strip()
-        if not ref or "/" not in ref or ref.lower().startswith(("rhif", "applic")):
+        if not re.fullmatch(r"[A-Za-z]{1,4}/[\w/.\-]{1,24}", ref):
             continue
         link = None
         if ix["link"] is not None and ix["link"] < len(row):
@@ -288,6 +290,8 @@ async def main() -> int:
             log(f"⚠ cannot read {label}: {type(e).__name__}: {e}")
             continue
         log(f"{kind} list {wr[0] + '..' + wr[1] if wr else label[:20]}: {len(rows)} applications")
+        if rows and len(wb.worksheets) > 1:
+            log(f"note: workbook has {len(wb.worksheets)} sheets, read the first ({wb.worksheets[0].title!r})")
         (decided if kind == "decided" else registered).extend(rows)
 
     if not registered and not decided:
