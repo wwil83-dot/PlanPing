@@ -350,7 +350,7 @@ def _parse_weekly_list(html: str, base_url: str, council_name: str,
         # possible; fall back to positional guessing only as a last
         # resort, and always keep the raw cell texts too so nothing is
         # silently lost if the mapping is wrong.
-        field = {"id": app_id, "council_url": urljoin(base_url, href.replace("&amp;", "&"))}
+        field = {"id": app_id, "council_url": f"{base_url.rstrip('/')}/planning/index.html?fa=getApplication&id={app_id}"}
         matched_any = False
         if header_texts and cell_texts and len(header_texts) == len(cell_texts):
             lower_headers = [h.lower() for h in header_texts]
