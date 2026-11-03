@@ -417,6 +417,41 @@ def _parse_detail_page(html: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Gwynedd / Ceredigion: detail pages answer 403 to a GET or a navigation, but a POST (fa=getApplication&id=N) sent from
+# inside a page that has already opened the search page returns the full application page (confirmed by recon 2026-11-03).
+# ---------------------------------------------------------------------------
+POST_DETAIL_COUNCILS = {"Gwynedd Council", "Ceredigion County Council"}
+RECHECK_DELAY = float(os.environ.get("RECHECK_DELAY", "4"))
+_FETCH_POST_JS = """async ({u, body}) => {
+    const r = await fetch(u, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                              body: body, credentials: 'same-origin'});
+    return {status: r.status, text: await r.text()};
+}"""
+
+
+def _welsh_outcome(fields: dict):
+    """(status, decision_date, label) when the application has been decided, else None."""
+    issued = _parse_uk_date(fields.get("Decision Issued Date", ""))
+    raw = (fields.get("Decision") or "").strip()
+    first = next((l.strip() for l in raw.split("\n") if l.strip()), "")
+    if first.lower().startswith("consultation end date"):
+        first = ""
+    app_status = (fields.get("Application Status") or "").strip().lower()
+    if "withdraw" in app_status or "withdraw" in first.lower():
+        return "withdrawn", issued, first or "Withdrawn"
+    if not issued and not first and app_status != "decision issued":
+        return None
+    low = first.lower()
+    if any(x in low for x in ("refus", "reject", "dismiss", "not permit", "not approved", "not granted", "not discharged", "not lawful")):
+        return "refused", issued, first
+    if any(x in low for x in ("approv", "grant", "permit", "allow", "no objection", "discharged", "not required", "lawful", "split", "consent")):
+        return "approved", issued, first
+    if issued or app_status == "decision issued":
+        return "closed", issued, first or "(no decision text)"
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Supabase REST API — identical to every other scraper in this project
 # ---------------------------------------------------------------------------
 def _h():
@@ -634,10 +669,62 @@ class GetApplicationsPortal:
             pass
         return await page.content()
 
+    async def _recheck_pending_post(self, browser: Browser, pending: list[dict]) -> list[dict]:
+        updates, labels = [], {}
+        tried = ok = blocked = 0
+        context = await browser.new_context(**CONTEXT_OPTIONS)
+        page = await context.new_page()
+        try:
+            await page.goto(f"{self.base_url}/planning/index.html?fa=getApplications", wait_until="domcontentloaded", timeout=45_000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=15_000)
+            except PlaywrightTimeout:
+                pass
+            await page.wait_for_timeout(3000)
+        except Exception as e:
+            self._log(f"⚠ Recheck: could not open the search page: {e}")
+            await context.close()
+            return []
+        for p in pending:
+            if should_stop():
+                self._log("⚠ Time budget reached mid-recheck, stopping")
+                break
+            app_id = _extract_id_from_url(p.get("council_url", "") or "")
+            if not app_id:
+                continue
+            try:
+                res = await page.evaluate(_FETCH_POST_JS, {"u": f"{self.base_url}/planning/index.html",
+                                                          "body": f"fa=getApplication&id={app_id}"})
+            except Exception as e:
+                self._log(f"⚠ Recheck request failed: {type(e).__name__}")
+                continue
+            tried += 1
+            if res["status"] != 200 or "Human Verification" in res["text"][:4000]:
+                blocked += 1
+                self._log(f"⚠ Recheck blocked (HTTP {res['status']}) after {ok} pages; {blocked} of 3 allowed")
+                if blocked >= 3:
+                    self._log("⚠ Recheck stopped: the site is asking for human verification; the next run continues")
+                    break
+                await asyncio.sleep(60)
+                continue
+            ok += 1
+            out = _welsh_outcome(_parse_detail_page(res["text"]))
+            if out:
+                status, dd, label = out
+                labels[label] = labels.get(label, 0) + 1
+                updates.append({"reference": p["reference"], "status": status, "decision_date": dd})
+            await asyncio.sleep(RECHECK_DELAY)
+        await context.close()
+        top = sorted(labels.items(), key=lambda kv: -kv[1])[:10]
+        self._log(f"Recheck: read {ok} of {len(pending)} pending pages ({tried} requests); {len(updates)} now decided; labels {top}")
+        return updates
+
     async def recheck_pending(self, browser: Browser,
                                pending: list[dict]) -> list[dict]:
         if not pending:
             return []
+        if self.council_name in POST_DETAIL_COUNCILS:
+            return await self._recheck_pending_post(browser, pending)
         updates = []
         context = await browser.new_context(**CONTEXT_OPTIONS)
         page = await context.new_page()
