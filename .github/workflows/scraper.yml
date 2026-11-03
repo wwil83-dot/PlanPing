@@ -4404,48 +4404,6 @@ jobs:
           COUNCIL_DELAY_SECONDS: "30"
         run: cd scrapers && python getapplications_scraper.py
 
-  carmarthenshire_weekly_dry:
-    # Dry run (writes nothing): Carmarthenshire weekly Excel lists, registered and decided.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'carmarthenshire_weekly_dry'
-    runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install httpx curl_cffi beautifulsoup4 openpyxl
-      - name: Run Carmarthenshire weekly-list scraper
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
-          WEEKS_BACK: "4"
-          DRY_RUN: "1"
-          MAX_MINUTES: "10"
-        run: cd scrapers && python carmarthenshire_scraper.py
-
-  carmarthenshire_weekly_backfill:
-    # Real run: everything the page still carries (4 weeks). Safe to re-run.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'carmarthenshire_weekly_backfill'
-    runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install httpx curl_cffi beautifulsoup4 openpyxl
-      - name: Run Carmarthenshire weekly-list scraper
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
-          WEEKS_BACK: "6"
-          DRY_RUN: "0"
-          MAX_MINUTES: "10"
-        run: cd scrapers && python carmarthenshire_scraper.py
-
   idox_candidate_verify:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_candidate_verify'
     runs-on: [self-hosted, uk-runner]
