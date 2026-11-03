@@ -4376,10 +4376,10 @@ jobs:
         run: cd scrapers && python carmarthenshire_scraper.py
 
   getapplications_welsh_recheck:
-    # Outcome recheck (real writes): reads the detail pages of up to 300 pending Gwynedd/Ceredigion applications to pick up decisions. Safe to re-run.
+    # Outcome recheck (real writes): reads the detail pages of up to 150 pending (oldest first, 4 s apart) Gwynedd/Ceredigion applications to pick up decisions. Safe to re-run.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'getapplications_welsh_recheck'
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 55
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -4398,10 +4398,11 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           ONLY: "gwynedd,ceredigion"
           DRY_RUN: "0"
-          MAX_MINUTES: "40"
+          MAX_MINUTES: "45"
           CONCURRENCY: "1"
           WEEKS_BACK: "1"
-          RECHECK_LIMIT: "300"
+          RECHECK_LIMIT: "150"
+          RECHECK_DELAY: "4"
           COUNCIL_DELAY_SECONDS: "30"
         run: cd scrapers && python getapplications_scraper.py
 
