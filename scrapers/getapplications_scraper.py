@@ -421,6 +421,7 @@ def _parse_detail_page(html: str) -> dict:
 # inside a page that has already opened the search page returns the full application page (confirmed by recon 2026-11-03).
 # ---------------------------------------------------------------------------
 POST_DETAIL_COUNCILS = {"Gwynedd Council", "Ceredigion County Council"}
+RECHECK_ORDER = os.environ.get("RECHECK_ORDER", "oldest")   # "oldest" (default) or "random"
 RECHECK_DELAY = float(os.environ.get("RECHECK_DELAY", "4"))
 _FETCH_POST_JS = """async ({u, body}) => {
     const r = await fetch(u, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -960,14 +961,27 @@ async def main():
     pending_by_council: dict[int, list[dict]] = {cid: [] for cid in council_ids}
     try:
         ids_csv = ",".join(str(i) for i in council_ids)
-        pending_rows = await _supa_get(
-            "planning_applications",
-            select="council_id,reference,council_url",
-            status="eq.pending",
-            council_id=f"in.({ids_csv})",
-            order="submitted_date.asc",
-            limit=str(RECHECK_LIMIT),
-        )
+        if RECHECK_ORDER == "random":
+            # oldest-first keeps re-reading applications that really are still undecided; a random sample reaches them all in turn
+            import random
+            all_pending = await _supa_get(
+                "planning_applications",
+                select="council_id,reference,council_url",
+                status="eq.pending",
+                council_id=f"in.({ids_csv})",
+                limit="3000",
+            )
+            pending_rows = random.sample(all_pending, min(RECHECK_LIMIT, len(all_pending)))
+            print(f"Pending recheck order: random sample of {len(pending_rows)} from {len(all_pending)} pending")
+        else:
+            pending_rows = await _supa_get(
+                "planning_applications",
+                select="council_id,reference,council_url",
+                status="eq.pending",
+                council_id=f"in.({ids_csv})",
+                order="submitted_date.asc",
+                limit=str(RECHECK_LIMIT),
+            )
         for row in pending_rows:
             pending_by_council.setdefault(row["council_id"], []).append(row)
         print(f"Pending recheck: {len(pending_rows)} applications across "
