@@ -442,6 +442,8 @@ def _welsh_outcome(fields: dict):
     if not issued and not first and app_status != "decision issued":
         return None
     low = first.lower()
+    if "partial" in low:
+        return "closed", issued, first
     if any(x in low for x in ("refus", "reject", "dismiss", "not permit", "not approved", "not granted", "not discharged", "not lawful")):
         return "refused", issued, first
     if any(x in low for x in ("approv", "grant", "permit", "allow", "no objection", "discharged", "not required", "lawful", "split", "consent")):
@@ -470,6 +472,19 @@ async def _supa_get(table: str, **params) -> list:
 
 
 async def _supa_upsert(records: list) -> bool:
+    """PostgREST needs every row in one request to carry the same keys: full application rows and decision-only
+    updates are therefore posted as separate groups."""
+    groups: dict = {}
+    for rec in records:
+        groups.setdefault(tuple(sorted(rec)), []).append(rec)
+    ok = True
+    for rows in groups.values():
+        if not await _supa_upsert_group(rows):
+            ok = False
+    return ok
+
+
+async def _supa_upsert_group(records: list) -> bool:
     if DRY_RUN:
         from collections import Counter
         print(f"    DRY RUN: would save {len(records)} records; status {dict(Counter(r.get('status') for r in records))}")
