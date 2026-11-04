@@ -2,230 +2,27 @@ name: PlanPing scraper
 
 on:
   schedule:
-    - cron: '0 3 * * *'   # open data scrape
-    # CHANGED — split each of the original 4 idox batches in half (8
-    # total), alternating odd/even calendar days via cron's
-    # day-of-month step syntax. Real evidence: batch 1 alone (56
-    # councils) ran out of its 75-minute budget with 13 councils still
-    # unreached (confirmed via real log — North Tyneside, Leeds and
-    # others explicitly skipped with "time budget reached"). Halving
-    # council count per run to ~28 gives real headroom back, at the
-    # cost of each council only being checked every 2 nights instead
-    # of nightly — same trade-off already accepted for Highland
-    # (~3 days) and the Idox targeted group (~5 days) elsewhere in
-    # this file. Validated with a real cron parser before use: odd
-    # pattern fires only on 1,3,5,7...; even pattern only on
-    # 2,4,6,8...; zero overlap between them.
-    - cron: '0 4 1-31/2 * *'    # idox scrape — batch 1 of 8 (odd days)
-    - cron: '0 4 2-30/2 * *'    # idox scrape — batch 2 of 8 (even days)
-    - cron: '50 4 1-31/2 * *'   # idox scrape — batch 3 of 8 (odd days)
-    - cron: '50 4 2-30/2 * *'   # idox scrape — batch 4 of 8 (even days)
-    - cron: '40 5 1-31/2 * *'   # idox scrape — batch 5 of 8 (odd days)
-    - cron: '40 5 2-30/2 * *'   # idox scrape — batch 6 of 8 (even days)
-    - cron: '30 6 1-31/2 * *'   # idox scrape — batch 7 of 8 (odd days)
-    - cron: '30 6 2-30/2 * *'   # idox scrape — batch 8 of 8 (even days)
-    - cron: '20 7 * * *'  # arcus nightly scrape
-    - cron: '35 7 * * *'  # civica nightly scrape (St Albans)
-    - cron: '50 7 * * *'  # northgate nightly scrape (Runnymede)
-    - cron: '55 7 * * *'  # northgate servlet-family nightly scrape (Hartlepool, High Peak, Staffordshire Moorlands)
-    - cron: '0 8 * * *'   # northgate South Tyneside nightly scrape
-    - cron: '5 8 * * *'   # NI Planning Portal nightly scrape
-    - cron: '8 8 * * *'   # agileapplications.co.uk nightly scrape (Middlesbrough, Flintshire, Cannock)
-    - cron: '12 8 * * *'  # statmap.co.uk/horizoNext nightly scrape (West Lindsey, East Staffordshire)
-    - cron: '13 8 * * *'  # Mole Valley nightly scrape (Statmap open JSON API, httpx only, ~4 requests a run)
-    - cron: '14 8 * * *'  # Waverley nightly scrape (Civica W2 open JSON API, httpx only, ~4 requests a run)
-    - cron: '16 8 * * *'  # Eastbourne nightly scrape (Civica W2 open JSON API on the gtest host, httpx + pyproj, ~4 requests a run)
-    - cron: '18 8 * * *'  # North Devon nightly scrape (server-rendered portal over plain HTTP, ~200 requests a run, ~5 min)
-    - cron: '30 8 * * *'  # Arun District Council nightly scrape (OcellaWeb, 14-day window received + decided, ~5 min)
-    - cron: '10 7 * * *'   # Idox HTTP scraper nightly (NE Derbyshire, Bolsover, Derbyshire Dales, Blaby, Hinckley)
-    - cron: '25 7 * * *'   # Idox HTTP scraper nightly B, UK proxies (Aberdeen, Bury, Hart, Scottish Borders, Watford, Wolverhampton, Dumfries)
-    - cron: '40 7 * * *'   # Idox HTTP scraper nightly C, UK proxies, slow portals (Westminster, Enfield, South Downs)
-    - cron: '26 8 * * *'  # Dorset Council nightly scrape (custom ASP.NET register over plain HTTP, 14-day window + recheck of older pending applications, ~20 min)
-    - cron: '24 8 * * *'  # South Hams / West Devon / Wealden nightly scrape (Planning Register engine over plain HTTP, 14-day window, ~25 min in total)
-    - cron: '20 8 * * *'  # Wokingham nightly scrape (classic ASP FastWebPL via headless Chromium, ~40 page loads, ~2-4 min)
-    - cron: '15 8 * * *'  # "Search/Advanced" family nightly scrape (Westmorland and Furness, Cherwell, Wychavon, Malvern Hills)
-    - cron: '22 8 * * *'  # Barrow (Westmorland and Furness Council) nightly scrape — shares council_id with esl_scraper.py above, deliberately scheduled after it clears
-    - cron: '28 8 * * *'  # OcellaWeb nightly scrape (Great Yarmouth, South Holland, Havering, Hillingdon)
-    - cron: '32 8 * * *'  # Walsall (Swift/APAS) nightly scrape
-    - cron: '35 8 * * *'  # Stratford-on-Avon (E-Planning v2.11) nightly scrape
-    - cron: '40 8 * * *'  # Herefordshire nightly scrape
-    - cron: '48 8 * * *'  # Ipswich (plain-ASP, httpx-only) nightly scrape
-    - cron: '52 8 * * *'  # Central Bedfordshire (AcolNet) nightly scrape
-    - cron: '54 8 * * *'  # West Dunbartonshire nightly scrape
-    - cron: '55 8 * * *'  # Redcar and Cleveland nightly scrape
-    - cron: '56 8 * * *'  # Kirklees nightly scrape
-    - cron: '57 8 * * *'  # Amber Valley nightly scrape
-    - cron: '58 8 * * *'  # South Derbyshire (Livewire) nightly scrape
-    - cron: '59 8 * * *'  # Fylde (Planning + Building Control) nightly scrape
-    - cron: '0 9 * * *'   # Ribble Valley nightly scrape
-    - cron: '1 9 * * *'   # ODP Register nightly scrape (Barnet + Buckinghamshire)
-    - cron: '2 9 * * *'   # Fife Council nightly scrape (ArcGIS, genuinely syncs nightly)
-    - cron: '3 9 * * *'   # alerts
-    - cron: '10 9 * * *'  # Charnwood nightly scrape — promoted after a confirmed
-                          # clean production run (2026-09-10): 151 real
-                          # applications saved across 8 pages, matching the
-                          # real total exactly, plus 8 real recheck decision
-                          # updates, zero errors
-    - cron: '15 9 * * *'  # Edinburgh nightly scrape — promoted after a
-                          # confirmed clean production run (2026-09-10): 111
-                          # real applications saved across both weekly layers,
-                          # zero errors (two decision-text variants still file
-                          # as 'pending' rather than a positive outcome — see
-                          # edinburgh_scraper.py's STATUS DIAGNOSTIC, a real
-                          # but non-blocking limitation worth revisiting)
-    - cron: '20 9 * * *'  # Telford and Wrekin nightly scrape — promoted
-                          # after a confirmed clean production run
-                          # (2026-09-10): 143 real applications saved
-                          # (58 Registered + 85 Determined across both
-                          # status tabs, real pagination confirmed exact),
-                          # matching the real "Planning Applications (143)"
-                          # total exactly, zero errors, 1.4 minutes total.
-                          # Real fix needed a 4-round diagnostic trail: the
-                          # aspxerrorpath redirect was ultimately a date
-                          # format issue (dash, not slash), and the
-                          # Determined tab's 85 applications were
-                          # completely invisible under the old code —
-                          # see telford_scraper.py's module docstring.
-    - cron: '25 9 * * *'  # planning-register platform nightly scrape
-                          # (Worcester, Vale of Glamorgan) — promoted
-                          # after two confirmed clean production runs
-                          # (2026-09-11): 136 real applications saved
-                          # both times (52 Worcester + 84 Vale of
-                          # Glamorgan), zero errors, real pagination
-                          # confirmed exact on both councils, 0.5
-                          # minutes total. Both councils confirmed via
-                          # fylde_cluster_recon.py to run the exact same
-                          # underlying platform as Fylde Council — see
-                          # planning_register_scraper.py's module
-                          # docstring for the full evidence trail.
-    - cron: '30 9 * * *'   # Bridgend nightly scrape — promoted after two
-                          # confirmed clean production runs (2026-09-13):
-                          # 47 real applications saved both times, zero
-                          # errors, real reference format P/YY/NNN/TYPE,
-                          # resultsPerPage=50 shortcut confirmed working.
-                          # HONEST LIMITATION: geocoding hit rate is
-                          # lower than most scrapers (16 of 47 got a
-                          # real postcode) — plausibly genuine given
-                          # site-description-style addresses seen in
-                          # the real data, not yet confirmed as a bug.
-    - cron: '35 9 * * *'  # Vale of White Horse / South Oxfordshire nightly
-                          # scrape — promoted after two confirmed clean
-                          # production runs (2026-09-17): 225 real
-                          # applications saved both times (84 Vale of
-                          # White Horse + 141 South Oxfordshire), zero
-                          # errors. REPLACES the earlier search-form
-                          # approach entirely — that council's own site
-                          # banner confirms its search feature is
-                          # genuinely broken. Uses the Weekly List CSV
-                          # export instead, triggered via a real button
-                          # click rather than a plain link. HONEST
-                          # LIMITATION: this is a "Received" report with
-                          # no decision/status column — everything from
-                          # this source files as 'pending'.
-    - cron: '40 9 * * *'  # Boston nightly (lincs_shared_scraper: date-only sweep of the shared South & East Lincolnshire Idox portal, filed to Boston by address, ~5 min)
-                          # promoted after a confirmed clean production
-                          # run (2026-09-27): 19 real applications
-                          # saved across 6 real wards, only 1 centroid
-                          # fallback. Uses the shared "South & East
-                          # Lincolnshire Councils Partnership" Idox
-                          # portal, filtered by Boston's 15 confirmed
-                          # real wards (not address text — UK postal
-                          # towns and district boundaries don't always
-                          # align, confirmed via Stickney/Stickford
-                          # both having "Boston" as their postal town
-                          # while genuinely sitting in East Lindsey).
-                          # HONEST LIMITATION: uses a 60-day window
-                          # rather than the usual 30, since splitting
-                          # the search 15 ways by ward dilutes
-                          # per-search volume given Boston's overall
-                          # low application count.
-    - cron: '0 6 * * 1'  # Biodiversity gain sites register — weekly,
-                          # not nightly, since the register only grows
-                          # by a handful of sites at a time. See
-                          # bng_scraper.py's own module docstring for
-                          # the full evidence trail and honest
-                          # limitations (council matching is best-
-                          # effort, allocations rarely match a real
-                          # planning_applications row given the
-                          # historical gap confirmed for Durham).
-    - cron: '45 9 * * *'  # East Lindsey District Council nightly scrape —
-                          # promoted after a confirmed clean production
-                          # run (2026-09-30): 162 real applications saved
-                          # across 38 real wards, zero genuine mislabeling
-                          # on recheck. Uses the same shared "South & East
-                          # Lincolnshire Councils Partnership" Idox portal
-                          # as Boston, filtered by East Lindsey's own 38
-                          # confirmed wards. Replaces the old, unfiltered
-                          # entry previously in idox_councils.py, which
-                          # was confirmed saving Boston's applications
-                          # mislabeled as East Lindsey's own.
-    - cron: '50 9 * * *'  # West Northamptonshire Council nightly scrape —
-                          # promoted after two confirmed clean production
-                          # runs (2026-09-30): 299-300 real applications
-                          # saved each time, pagination fully understood
-                          # and working correctly. Previously parked as
-                          # "reCAPTCHA blocked" — that block was real but
-                          # only affected a different part of the same
-                          # planning-register.co.uk vendor site; this
-                          # Weekly List page is genuinely clear. HONEST
-                          # LIMITATION: the platform itself caps search
-                          # results at 300 (30 pages of 10) — confirmed
-                          # across two separate runs stopping at the same
-                          # natural end point even after raising the
-                          # scraper's own page limit. If a 30-day window
-                          # ever has more than 300 genuine applications,
-                          # the excess isn't reachable through this
-                          # search interface at all.
-    - cron: '55 9 */3 * *'  # Broxbourne Borough Council — every 3 days,
-                            # not nightly, given this scraper runs 4
-                            # separate searches per month (Validated +
-                            # Decided, each with real pagination) —
-                            # genuinely more load than a typical single-
-                            # search scraper, and this data doesn't move
-                            # fast enough to need nightly checks. HONEST
-                            # NOTE: cron's day-of-month step resets at
-                            # each month boundary, so the gap between the
-                            # last run of one month and the first of the
-                            # next can be as short as 1 day rather than a
-                            # full 3 — a known, harmless cron quirk, not
-                            # a bug. MONTHS_BACK must be "2" here, not
-                            # the "7" used for the one-off historical
-                            # backfill — see broxbourne_scraper.py's own
-                            # module docstring for the full evidence
-                            # trail behind this scraper.
-    - cron: '0 10 */3 * *'  # Hyndburn Borough Council — same every-3-
-                            # days cadence as Broxbourne, 5 minutes
-                            # later to avoid both competing for the one
-                            # runner at the same instant. Same platform
-                            # as Broxbourne (Northgate, confirmed
-                            # identical to LPAssure at the form level),
-                            # confirmed working with real results and
-                            # genuine pagination across two pages on its
-                            # first production run. MONTHS_BACK must be
-                            # "2" here, same reasoning as Broxbourne —
-                            # see hyndburn_scraper.py's own module
-                            # docstring for the full evidence trail.
-    - cron: '5 10 */3 * *'  # Bath & North East Somerset — every 3 days,
-                            # 10:05, after Broxbourne (9:55) and Hyndburn
-                            # (10:00). 3 weeks x Validated/Decided = 6
-                            # searches per run. WEEKS_BACK must be "3" here,
-                            # not the "9" used for the one-off backfill.
-                            # Cron's */3 resets each month, so the gap can
-                            # be 1 day across a month boundary — harmless.
-    - cron: '0 8 * * 1'   # council health digest — weekly, Monday 8am
-    - cron: '0 10 */5 * *'   # Idox targeted group (WAF-sensitive) — every ~5 days
-    - cron: '20 10 */3 * *'  # getApplications family (Liverpool, Warrington, Newcastle, Blackburn & Darwen, Waltham Forest) — every ~3 days
-    - cron: '40 10 */3 * *'  # Highland Council — weekly-list PDFs, checked every ~3 days (real data only changes weekly)
-    - cron: '50 10 * * *'  # Aberdeenshire + East Lothian weekly lists — daily (lists are weekly, but a daily run keeps "updated within 3 days" honest)
-    - cron: '30 16 * * *'  # Medway Idox scrape — NIGHTLY, Medway only (it sits in odd-day batch 3, so the batches alone refresh it every second night). Runs before the 17:00 decisions job, which re-applies outcomes.
-    - cron: '0 17 * * *'  # Medway decisions
-    - cron: '44 8 * * *'  # Idox HTTP nightly C1
-    - cron: '46 8 * * *'  # Idox HTTP nightly C2
-    - cron: '50 8 * * *'  # Idox HTTP nightly D (rate-limited portals)
-    - cron: '38 8 * * *'  # Idox HTTP nightly E (South Kesteven, East Riding)
-    - cron: '36 8 * * *'  # Idox HTTP nightly Shropshire (morning)
-    - cron: '36 20 * * *'  # Idox HTTP nightly Shropshire (evening)
-    - cron: '5 9 * * *'   # Carmarthenshire nightly scrape (weekly Excel lists)
+    # Consolidated: 73 separate crons were being dropped by GitHub (only ~5 runs/day fired).
+    # Each anchor now starts a group of jobs; the single runner works through them in turn.
+    - cron: '17 3 * * *'   # open data scrape
+    - cron: '3 4 1-31/2 * *'   # idox batches A+C (odd days)
+    - cron: '3 4 2-30/2 * *'   # idox batches B+D (even days)
+    - cron: '41 5 1-31/2 * *'   # idox batches E+G (odd days)
+    - cron: '41 5 2-30/2 * *'   # idox batches F+H (even days)
+    - cron: '9 6 * * 1'   # BNG weekly (Mon)
+    - cron: '13 7 * * *'   # arcus, civica, northgate, idox HTTP nightlies A-C
+    - cron: '7 8 * * *'   # morning group 1
+    - cron: '21 8 * * *'   # morning group 2
+    - cron: '37 8 * * *'   # morning group 3 (idox HTTP nightlies C1/C2/D/E, Shropshire, others)
+    - cron: '41 8 * * 1'   # council health (Mon)
+    - cron: '3 9 * * *'   # morning group 4 (Ribble Valley, Carmarthenshire, others)
+    - cron: '54 9 * * *'   # alerts
+    - cron: '17 10 */3 * *'   # every-3-days group
+    - cron: '47 10 */5 * *'   # idox targeted (every 5 days)
+    - cron: '53 10 * * *'   # Scottish council lists
+    - cron: '33 16 * * *'   # Medway
+    - cron: '36 20 * * *'   # Shropshire evening
+
   workflow_dispatch:
     inputs:
       job:
@@ -269,7 +66,7 @@ jobs:
   scrape:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 3 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '17 3 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -317,7 +114,7 @@ jobs:
   scrape_idox_a:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_a') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 4 1-31/2 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 4 1-31/2 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 85
     steps:
@@ -345,7 +142,7 @@ jobs:
   scrape_idox_b:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_b') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 4 2-30/2 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 4 2-30/2 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 85
     steps:
@@ -373,7 +170,7 @@ jobs:
   scrape_idox_c:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_c') ||
-      (github.event_name == 'schedule' && github.event.schedule == '50 4 1-31/2 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 4 1-31/2 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 85
     steps:
@@ -401,7 +198,7 @@ jobs:
   scrape_idox_d:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_d') ||
-      (github.event_name == 'schedule' && github.event.schedule == '50 4 2-30/2 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 4 2-30/2 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 85
     steps:
@@ -429,7 +226,7 @@ jobs:
   scrape_idox_e:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_e') ||
-      (github.event_name == 'schedule' && github.event.schedule == '40 5 1-31/2 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '41 5 1-31/2 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 85
     steps:
@@ -457,7 +254,7 @@ jobs:
   scrape_idox_f:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_f') ||
-      (github.event_name == 'schedule' && github.event.schedule == '40 5 2-30/2 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '41 5 2-30/2 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 85
     steps:
@@ -485,7 +282,7 @@ jobs:
   scrape_idox_g:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_g') ||
-      (github.event_name == 'schedule' && github.event.schedule == '30 6 1-31/2 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '41 5 1-31/2 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 85
     steps:
@@ -513,7 +310,7 @@ jobs:
   scrape_idox_h:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_h') ||
-      (github.event_name == 'schedule' && github.event.schedule == '30 6 2-30/2 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '41 5 2-30/2 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 85
     steps:
@@ -541,7 +338,7 @@ jobs:
   scrape_idox_targeted:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_targeted') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 10 */5 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '47 10 */5 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 90
     steps:
@@ -574,7 +371,7 @@ jobs:
     # 'pending' and medway_decisions then restores the real outcomes.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_idox_medway') ||
-      (github.event_name == 'schedule' && github.event.schedule == '30 16 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '33 16 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 30
     steps:
@@ -626,7 +423,7 @@ jobs:
   scrape_arcus:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_arcus') ||
-      (github.event_name == 'schedule' && github.event.schedule == '20 7 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '13 7 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 40
     steps:
@@ -677,7 +474,7 @@ jobs:
   scrape_civica:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_civica') ||
-      (github.event_name == 'schedule' && github.event.schedule == '35 7 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '13 7 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 20
     steps:
@@ -800,7 +597,7 @@ jobs:
   alerts:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'alerts') ||
-      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '54 9 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -821,7 +618,7 @@ jobs:
   council_health:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'council_health') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1')
+      (github.event_name == 'schedule' && github.event.schedule == '41 8 * * 1')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -1001,7 +798,7 @@ jobs:
   scrape_northgate:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_northgate') ||
-      (github.event_name == 'schedule' && github.event.schedule == '50 7 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '13 7 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 20
     steps:
@@ -1027,7 +824,7 @@ jobs:
   scrape_ni:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_ni') ||
-      (github.event_name == 'schedule' && github.event.schedule == '5 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '7 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 25
     steps:
@@ -1101,7 +898,7 @@ jobs:
     # "time-budget-skipped councils" instead.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_getapplications') ||
-      (github.event_name == 'schedule' && github.event.schedule == '20 10 */3 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '17 10 */3 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 35
     steps:
@@ -1280,7 +1077,7 @@ jobs:
   northgate_servlet_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_servlet_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '55 7 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '13 7 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 20
     steps:
@@ -1307,7 +1104,7 @@ jobs:
   northgate_south_tyneside_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northgate_south_tyneside_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '7 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -1385,7 +1182,7 @@ jobs:
   odp_register_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'odp_register_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '1 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -1584,7 +1381,7 @@ jobs:
     # mapped to 'approved'), but doesn't block real data from saving.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'edinburgh_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '15 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -1698,7 +1495,7 @@ jobs:
   highland_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'highland_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '40 10 */3 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '17 10 */3 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -1749,7 +1546,7 @@ jobs:
   fife_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'fife_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '2 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -1887,7 +1684,7 @@ jobs:
   agileapplications_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'agileapplications_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '8 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '7 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -1914,7 +1711,7 @@ jobs:
   statmap_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'statmap_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '12 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '7 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -2201,7 +1998,7 @@ jobs:
   esl_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'esl_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '15 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '7 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -2305,7 +2102,7 @@ jobs:
   barrow_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'barrow_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '22 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '21 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -2505,7 +2302,7 @@ jobs:
   ocellaweb_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ocellaweb_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '28 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '21 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -2708,7 +2505,7 @@ jobs:
   walsall_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'walsall_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '32 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '21 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -2846,7 +2643,7 @@ jobs:
   stratford_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'stratford_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '35 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '21 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -2947,7 +2744,7 @@ jobs:
   herefordshire_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'herefordshire_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '40 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '37 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -3124,7 +2921,7 @@ jobs:
     # current month is the right behavior, not a bug.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'charnwood_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '10 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 20
     steps:
@@ -3150,7 +2947,7 @@ jobs:
   ipswich_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ipswich_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '48 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '37 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -3170,7 +2967,7 @@ jobs:
   central_beds_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'central_beds_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '52 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '37 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 20
     steps:
@@ -3387,7 +3184,7 @@ jobs:
   west_dunbarton_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'west_dunbarton_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '54 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '37 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -3407,7 +3204,7 @@ jobs:
   redcar_cleveland_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'redcar_cleveland_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '55 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '37 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -3433,7 +3230,7 @@ jobs:
   kirklees_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'kirklees_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '56 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '37 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -3469,7 +3266,7 @@ jobs:
     # original code).
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'telford_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '20 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -3495,7 +3292,7 @@ jobs:
   amber_valley_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'amber_valley_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '57 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '37 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -3726,7 +3523,7 @@ jobs:
     # "Determined" status doesn't reveal approved vs refused.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'planning_register_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '25 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -3847,7 +3644,7 @@ jobs:
     # yet.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'bridgend_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '30 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -3977,7 +3774,7 @@ jobs:
   south_derbyshire_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'south_derbyshire_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '58 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '37 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -4055,7 +3852,7 @@ jobs:
   fylde_scraper:
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'fylde_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '59 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '37 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -4180,7 +3977,7 @@ jobs:
     # Nightly: Ribble Valley weekly registered/decided PDF lists (old web portal was switched off). Last 3 weeks, safe to re-run.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ribblevalley_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 30
     steps:
@@ -4411,7 +4208,7 @@ jobs:
     # Nightly: Carmarthenshire weekly Excel lists (registered + decided). The page keeps four weeks; safe to re-run.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'carmarthenshire_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '5 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -4572,7 +4369,7 @@ jobs:
     # DELIBERATELY manual-trigger only for now — never run live yet.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'vowh_soxon_weeklylist_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '35 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -4831,7 +4628,7 @@ jobs:
     # bng_schema.sql to have been run in Supabase first.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'bng_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1')
+      (github.event_name == 'schedule' && github.event.schedule == '9 6 * * 1')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 40
     steps:
@@ -4871,7 +4668,7 @@ jobs:
     # run live yet.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'east_lindsey_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '45 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 60
     steps:
@@ -4934,7 +4731,7 @@ jobs:
     # yet.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'west_northants_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '50 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 20
     steps:
@@ -4996,7 +4793,7 @@ jobs:
     # run live yet.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'broxbourne_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '55 9 */3 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '17 10 */3 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 30
     steps:
@@ -5082,7 +4879,7 @@ jobs:
     # DELIBERATELY manual-trigger only for now — never run live yet.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'hyndburn_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 10 */3 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '17 10 */3 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 30
     steps:
@@ -5147,7 +4944,7 @@ jobs:
     # overlapping weeks every run is plenty and keeps the load tiny.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'bathnes_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '5 10 */3 * *')
+      (github.event_name == 'schedule' && github.event.schedule == '17 10 */3 * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 30
     steps:
@@ -5364,7 +5161,7 @@ jobs:
     # the last 14 days of Medway applications as 'pending'). About 2-4 minutes.
     # BACKFILL settings if ever needed again: MONTHS_BACK "7", MAX_DETAIL "1200",
     # MAX_MINUTES "120", timeout-minutes 150 (re-run until 0 remain).
-    if: (github.event_name == 'schedule' && github.event.schedule == '0 17 * * *') || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'medway_decisions')
+    if: (github.event_name == 'schedule' && github.event.schedule == '33 16 * * *') || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'medway_decisions')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 45
     steps:
@@ -5577,7 +5374,7 @@ jobs:
     # (re-saving is harmless). One-off backfill: run manually with DAYS_BACK "120".
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scottish_council_lists') ||
-      (github.event_name == 'schedule' && github.event.schedule == '50 10 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '53 10 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 20
     steps:
@@ -5635,7 +5432,7 @@ jobs:
     # WINDOW_DAYS: "14" for the nightly run. Use "60" for a one-off backfill.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'mole_valley_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '13 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '7 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -5696,7 +5493,7 @@ jobs:
     # WINDOW_DAYS: "14" for the nightly run. Use "60" for a one-off backfill.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'waverley_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '14 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '7 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -5764,7 +5561,7 @@ jobs:
     # WINDOW_DAYS: "14" for the nightly run. Use "60" for a one-off backfill.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'eastbourne_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '16 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '7 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 15
     steps:
@@ -5844,7 +5641,7 @@ jobs:
     # 10.5 minutes, zero failures. Still manually triggerable. WINDOW_DAYS "14" nightly; "60" for a backfill.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'northdevon_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '18 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '7 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 30
     steps:
@@ -5972,7 +5769,7 @@ jobs:
     # WINDOW_DAYS "14" nightly; "60" for a backfill. Exits red if a sweep ends short.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'wokingham_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '20 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '21 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 30
     steps:
@@ -6040,7 +5837,7 @@ jobs:
     # unique cron).
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'register_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '24 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '21 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 75
     strategy:
@@ -6116,7 +5913,7 @@ jobs:
     # NIGHTLY (40 9 * * *) from 2026-10-23: 60-day backfill saved 169 Boston applications in 12.7 minutes.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'lincs_shared_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '40 9 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 75
     steps:
@@ -6176,7 +5973,7 @@ jobs:
     # NIGHTLY (26 8 * * *) from 2026-10-24: 60-day backfill saved 1453 applications in 34 minutes.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'dorset_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '26 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '21 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 80
     steps:
@@ -6215,7 +6012,7 @@ jobs:
     # failures). 60-day backfill saved 416 on 2026-10-25; now NIGHTLY (14-day window, received + decided sweeps).
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'arun_scraper') ||
-      (github.event_name == 'schedule' && github.event.schedule == '30 8 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '21 8 * * *')
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 60
     steps:
@@ -6602,7 +6399,7 @@ jobs:
   idox_http_nightly:
     # Nightly run of idox_http_scraper.py: last 14 days (received + decided) for NE Derbyshire, Bolsover, Derbyshire Dales,
     # Blaby and Hinckley & Bosworth. These five are no longer in the Playwright batches (see idox_councils.py).
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly' || github.event.schedule == '10 7 * * *'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly' || github.event.schedule == '13 7 * * *'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 45
     steps:
@@ -6694,7 +6491,7 @@ jobs:
 
   idox_http_nightly_b:
     # Nightly Idox HTTP scraper B: the 7 faster councils reached through the UK proxies, last 14 days. See idox_http_scraper.py.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_b' || github.event.schedule == '25 7 * * *'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_b' || github.event.schedule == '13 7 * * *'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 60
     steps:
@@ -6718,7 +6515,7 @@ jobs:
 
   idox_http_nightly_c:
     # Nightly Idox HTTP scraper C: Westminster, Enfield, South Downs (slow, rate-limited), last 14 days. Detail pages already stored are not re-read.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_c' || github.event.schedule == '40 7 * * *'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_c' || github.event.schedule == '13 7 * * *'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 100
     steps:
@@ -6878,7 +6675,7 @@ jobs:
 
   idox_http_nightly_c1:
     # Nightly Idox HTTP scraper Group C1, last 14 days. See idox_http_scraper.py.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_c1' || github.event.schedule == '44 8 * * *'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_c1' || github.event.schedule == '37 8 * * *'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 60
     steps:
@@ -6902,7 +6699,7 @@ jobs:
 
   idox_http_nightly_c2:
     # Nightly Idox HTTP scraper Group C2, last 14 days. See idox_http_scraper.py.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_c2' || github.event.schedule == '46 8 * * *'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_c2' || github.event.schedule == '37 8 * * *'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 60
     steps:
@@ -6926,7 +6723,7 @@ jobs:
 
   idox_http_nightly_d:
     # Nightly Idox HTTP scraper Group D, last 14 days. See idox_http_scraper.py.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_d' || github.event.schedule == '50 8 * * *'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_d' || github.event.schedule == '37 8 * * *'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 100
     steps:
@@ -6998,7 +6795,7 @@ jobs:
     # Shropshire (364): its detail pages allow only ~12 reads and then block for hours, so twice a day, 12 detail pages each, newest decisions first.
     if: >
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_shrop') ||
-      (github.event_name == 'schedule' && (github.event.schedule == '36 8 * * *' || github.event.schedule == '36 20 * * *'))
+      (github.event_name == 'schedule' && (github.event.schedule == '37 8 * * *' || github.event.schedule == '36 20 * * *'))
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 60
     steps:
@@ -7046,7 +6843,7 @@ jobs:
 
   idox_http_nightly_e:
     # Nightly Idox HTTP scraper E: South Kesteven and East Riding, last 14 days.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_e' || github.event.schedule == '38 8 * * *'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'idox_http_nightly_e' || github.event.schedule == '37 8 * * *'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 90
     steps:
