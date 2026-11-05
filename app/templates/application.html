@@ -68,7 +68,7 @@
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;flex-wrap:wrap">
         <div style="flex:1;min-width:200px">
           <div style="font-size:.85rem;font-weight:500">{{ n.address }}</div>
-          <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem">{{ n.description | truncate(90) }}</div>
+          <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem">{{ (n.description or '') | truncate(90) }}</div>
         </div>
         <span class="badge badge-status badge-{{ n.status_class }}" style="flex-shrink:0">{{ n.status | title }}</span>
       </div>
