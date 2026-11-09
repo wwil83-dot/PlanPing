@@ -107,7 +107,10 @@ COOLDOWN = int(os.environ.get("DETAIL_COOLDOWN_SECONDS", "300"))      # first wa
 INSECURE = {392, 176, 219, 58, 63, 181}
 # Proxy that got through to each council in the probes (index into HTTP_PROXY_URLS). Several councils block some of our proxy
 # addresses (timeouts on 0, 1, 2), so each council starts on a proxy known to work and falls back to the others.
-PROXY_HINT = {1: 3, 26: 7, 32: 3, 37: 7, 58: 3, 63: 3, 65: 5, 68: 3, 79: 3, 170: 0, 176: 7, 181: 3, 190: 3, 219: 3, 223: 3, 228: 3, 232: 3, 234: 5, 242: 3, 257: 7, 258: 3, 262: 2, 265: 5, 267: 7, 271: 3, 285: 5, 288: 3, 291: 3, 296: 7, 446: 3, 297: 7, 308: 3, 339: 3, 342: 3, 350: 3, 351: 3, 360: 3, 364: 5, 370: 3, 371: 3, 373: 3, 387: 7, 388: 3, 392: 3, 449: 3, 476: 6, 478: 3}
+# Rebuilt 2026-11-09 from idox_proxy_probe after Webshare replaced the proxy list (195.40.x.x again). The numbers are positions in
+# HTTP_PROXY_URLS (PROBE_PROXY_URLS then PROBE_PROXY_URLS_2): 0 195.40.138.54, 1 195.40.129.81, 2 195.40.137.249, 3 195.40.128.199,
+# 4 195.40.137.154, 7 195.40.137.181, 8 195.40.129.202, 9/10 195.40.129.181. If the secrets are reordered, re-run the probe and update this.
+PROXY_HINT = {0: 1, 1: 1, 26: 4, 32: 10, 37: 4, 58: 4, 63: 8, 65: 10, 68: 2, 79: 4, 170: 7, 176: 1, 181: 7, 190: 4, 219: 10, 223: 4, 228: 8, 232: 1, 234: 4, 242: 10, 257: 8, 258: 7, 262: 9, 265: 1, 267: 2, 271: 7, 285: 10, 288: 2, 291: 7, 296: 10, 297: 9, 308: 1, 339: 9, 342: 1, 350: 9, 351: 7, 360: 8, 364: 1, 370: 7, 371: 8, 373: 10, 387: 2, 388: 4, 392: 7, 446: 1, 449: 4, 476: 3, 478: 7}
 ONLY = {int(x) for x in os.environ.get("HTTP_COUNCILS", "").replace(" ", "").split(",") if x}
 MAX_PAGES = 80
 START = time.monotonic()
