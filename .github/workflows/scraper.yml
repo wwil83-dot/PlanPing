@@ -1,28 +1,10 @@
 name: PlanPing scraper
 
 on:
-  schedule:
-    # Consolidated: 73 separate crons were being dropped by GitHub (only ~5 runs/day fired).
-    # Each anchor now starts a group of jobs; the single runner works through them in turn.
-    - cron: '17 3 * * *'   # open data scrape
-    - cron: '3 4 1-31/2 * *'   # idox batches A+C (odd days)
-    - cron: '3 4 2-30/2 * *'   # idox batches B+D (even days)
-    - cron: '41 5 1-31/2 * *'   # idox batches E+G (odd days)
-    - cron: '41 5 2-30/2 * *'   # idox batches F+H (even days)
-    - cron: '9 6 * * 1'   # BNG weekly (Mon)
-    - cron: '13 7 * * *'   # arcus, civica, northgate, idox HTTP nightlies A-C
-    - cron: '7 8 * * *'   # morning group 1
-    - cron: '21 8 * * *'   # morning group 2
-    - cron: '37 8 * * *'   # morning group 3 (idox HTTP nightlies C1/C2/D/E, Shropshire, others)
-    - cron: '41 8 * * 1'   # council health (Mon)
-    - cron: '3 9 * * *'   # morning group 4 (Ribble Valley, Carmarthenshire, others)
-    - cron: '54 9 * * *'   # alerts
-    - cron: '17 10 */3 * *'   # every-3-days group
-    - cron: '47 10 */5 * *'   # idox targeted (every 5 days)
-    - cron: '53 10 * * *'   # Scottish council lists
-    - cron: '33 16 * * *'   # Medway
-    - cron: '36 20 * * *'   # Shropshire evening
-
+  # Scheduling is done by cron-job.org, which starts each named group with a workflow_dispatch call
+  # (group_* options below). GitHub's own cron triggers were removed on 2026-11-09 because they fired
+  # late and in bursts, which made groups run twice. The job-level if: conditions still mention the old
+  # schedule strings; they are harmless and can stay.
   workflow_dispatch:
     inputs:
       job:
