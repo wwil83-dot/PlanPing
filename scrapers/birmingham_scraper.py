@@ -102,7 +102,9 @@ MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "30"))
 MONTHS_BACK  = int(os.environ.get("MONTHS_BACK", "2"))  # current + N-1 previous months
 MAX_PAGES    = int(os.environ.get("MAX_PAGES", "20"))
 BIRMINGHAM_COUNCIL_ID = int(os.environ.get("BIRMINGHAM_COUNCIL_ID", "0"))
-DRY_RUN = os.environ.get("DRY_RUN", "0") == "1"   # parse and report only; nothing written, no council id needed
+DRY_RUN = os.environ.get("DRY_RUN", "0") == "1"
+# ONLY_SEARCHES: optional comma list like "July 2026/Validated,March 2026/Decided"; only those are run (for re-running failed ones)
+ONLY_SEARCHES = {x.strip() for x in os.environ.get("ONLY_SEARCHES", "").split(",") if x.strip()}   # parse and report only; nothing written, no council id needed
 
 START_TIME = time.monotonic()
 
@@ -450,7 +452,20 @@ async def scrape_month_status(page, month_label: str, status_id: str,
                 if 'name="hidSearchResultsJson"' in html:
                     break
             if 'name="hidSearchResultsJson"' not in html:
-                raise RuntimeError("results never arrived (no results data on the page)")
+                diag = ""
+                try:
+                    r = LAST_RESP.get("resp")
+                    if r is not None:
+                        body = await r.text()
+                        diag = f" | search response HTTP {r.status}, {len(body)} bytes, starts {re.sub(r'\\s+', ' ', body)[:260]!r}"
+                    else:
+                        diag = " | no search response was seen (the click may not have submitted)"
+                    vis = await page.evaluate("() => [...document.querySelectorAll('.error, .errorRed, .field-validation-error')].filter(e => e.offsetWidth || e.offsetHeight).map(e => e.innerText.trim()).filter(Boolean).slice(0, 4).join(' / ')")
+                    if vis:
+                        diag += f" | page errors: {vis[:200]}"
+                except Exception as _e:
+                    diag += f" | (diagnostic failed: {type(_e).__name__})"
+                raise RuntimeError("results never arrived (no results data on the page)" + diag)
             apps = _parse_results_json(html)
             m = re.search(r"(\d+)\s+Results", re.sub(r"\s+", " ", BeautifulSoup(html, "html.parser").get_text(" ")))
             claimed = int(m.group(1)) if m else None
@@ -460,13 +475,14 @@ async def scrape_month_status(page, month_label: str, status_id: str,
                 raise RuntimeError(f"page claims {claimed} results but none were read")
             return apps
         except Exception as e:
-            print(f"    [{month_label}/{status_name}] ⚠ attempt {attempt} failed: {type(e).__name__}: {str(e)[:160]}")
+            print(f"    [{month_label}/{status_name}] ⚠ attempt {attempt} failed: {type(e).__name__}: {str(e)[:520]}")
             await asyncio.sleep(10 * attempt)
     FAILED.append(f"{month_label}/{status_name}")
     return []
 
 
 FAILED: list = []
+LAST_RESP: dict = {}
 
 
 async def scrape() -> list[dict]:
@@ -480,12 +496,15 @@ async def scrape() -> list[dict]:
         print(f"Chromium launched: {browser.version}")
         context = await browser.new_context(**CONTEXT_OPTIONS)
         page = await context.new_page()
+        page.on("response", lambda r: LAST_RESP.update(resp=r) if "OnlinePlanningSearchResults" in r.url else None)
 
         for month_label in months:
             for status_id, status_name in [
                 ("ValidatedThisMonth", "Validated"),
                 ("DecidedThisMonth", "Decided"),
             ]:
+                if ONLY_SEARCHES and f"{month_label}/{status_name}" not in ONLY_SEARCHES:
+                    continue
                 if should_stop():
                     print(f"⚠ Time budget reached, stopping before {month_label}/{status_name}")
                     break
