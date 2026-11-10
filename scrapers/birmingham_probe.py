@@ -67,6 +67,37 @@ async def dump(page, tag):
     print("parse_results_page ->", len(B._parse_results_page(html)), "rows")
 
 
+async def netdump(page, reqs, tag):
+    print(f"\n----- {tag}: network after clicking Search -----")
+    for r in reqs[:25]:
+        print("  ", r)
+    state = await page.evaluate("""() => {
+      const d = document.querySelector('#divOnlinePlanningSearchResults');
+      const vis = e => !!(e.offsetWidth || e.offsetHeight);
+      return {resultsLen: d ? d.innerHTML.length : -1,
+              resultsHead: d ? d.innerText.replace(/\\s+/g,' ').slice(0, 600) : null,
+              resultsHtml: d ? d.innerHTML.replace(/\\s+/g,' ').slice(0, 1500) : null,
+              loadingVisible: [...document.querySelectorAll('#divLoading')].map(vis),
+              errors: [...document.querySelectorAll('.error, .errorRed, .field-validation-error, .validation-summary-errors')].filter(vis).map(e => e.innerText.trim()).filter(Boolean).slice(0, 8),
+              month: (document.querySelector('#SelectedMonth')||{}).value,
+              status: [...document.querySelectorAll('input.MonthlyListStatus')].map(i => i.id + ':' + i.checked)};
+    }""")
+    for k, v in state.items():
+        print(f"   {k}: {v}")
+
+
+async def jsdump(page):
+    try:
+        r = await page.request.get("https://planning.birmingham.gov.uk/NECSWS/ES/Presentation/Scripts/Planning/OnlinePlanningWeeklyMonthlySearch.js")
+        js = await r.text()
+        open("/tmp/birmingham_probe_WeeklyMonthlySearch.js", "w").write(js)
+        i = js.find("SubmitWeeklyMonthlyForm")
+        print("\n----- OnlinePlanningWeeklyMonthlySearch.js", r.status, len(js), "bytes; SubmitWeeklyMonthlyForm: -----")
+        print(js[i:i + 2500] if i >= 0 else js[:1500])
+    except Exception as e:
+        print("js fetch failed", type(e).__name__, e)
+
+
 async def run(page, status_id, tag):
     await load(page)
     for t in (1, 2, 3):
@@ -89,12 +120,16 @@ async def run(page, status_id, tag):
     if btn is None:
         await dump(page, tag + "_nobtn")
         return
+    reqs = []
+    page.on("response", lambda r: reqs.append(f"{r.request.method} {r.status} {r.url[-110:]}") if "planning.birmingham" in r.url and not re.search(r"\.(png|gif|css|js|woff2?|ico)(\?|$)", r.url) else None)
     await btn.click()
-    try:
-        await page.wait_for_load_state("networkidle", timeout=20000)
-    except PWT:
-        pass
-    await asyncio.sleep(4)
+    for i in range(18):                      # up to 90 s for the AJAX results to arrive
+        await asyncio.sleep(5)
+        n = await page.evaluate("() => { const d = document.querySelector('#divOnlinePlanningSearchResults'); return d ? d.innerHTML.length : -1 }")
+        if n > 50:
+            print(f"  results div filled after ~{(i + 1) * 5}s ({n} chars)")
+            break
+    await netdump(page, reqs, tag)
     await dump(page, tag)
 
 
@@ -103,6 +138,7 @@ async def main():
         br = await pw.chromium.launch(headless=True, args=getattr(B, "BROWSER_ARGS", []) or [])
         ctx = await br.new_context()
         page = await ctx.new_page()
+        await jsdump(page)
         await run(page, "DecidedThisMonth", "decided")
         await run(page, "ValidatedThisMonth", "validated")
         await br.close()
