@@ -4910,10 +4910,10 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MAX_MINUTES: "40"
-          MONTHS_BACK: "1"
+          MONTHS_BACK: "3"
           MAX_PAGES: "60"
           DRY_RUN: "1"
-          BIRMINGHAM_COUNCIL_ID: "0"
+          BIRMINGHAM_COUNCIL_ID: "14"
         run: cd scrapers && python birmingham_scraper.py
 
   bathnes_diagnostic:
