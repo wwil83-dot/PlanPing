@@ -357,7 +357,15 @@ async def scrape_month_status(page, month_label: str, status_id: str,
     """One real search: a given month + one of the two mutually
     exclusive status radios."""
     try:
-        await page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=45_000)
+        for _try in (1, 2, 3):          # Birmingham's portal is slow to answer the first request at times
+            try:
+                await page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=90_000)
+                break
+            except PlaywrightTimeout:
+                if _try == 3:
+                    raise
+                print(f"    [{month_label}/{status_name}] page load {_try} timed out, retrying")
+                await asyncio.sleep(10 * _try)
         try:
             await page.wait_for_load_state("networkidle", timeout=15_000)
         except PlaywrightTimeout:
