@@ -4915,13 +4915,16 @@ jobs:
           retention-days: 7
 
   birmingham_scraper:
+    # NIGHTLY from 2026-11-10 (group_0713_early, 07:13 UTC): the 13-month backfill is done (~430 applications a month in the DB).
     # Birmingham City Council runs the same NEC "ES/Presentation/Planning/OnlinePlanning" platform as Broxbourne
     # (LPAssure) and Hyndburn (Northgate); only the path segment differs (/NECSWS/). Cloned from hyndburn_scraper.py.
     # Dry run 2026-11-10 was clean (1,477 applications over Oct+Sep). Now the LIVE 13-MONTH BACKFILL (portal goes back to
     # Nov 2025). After it: MONTHS_BACK "2" and add to a nightly group. Manual trigger only until then.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'birmingham_scraper'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'birmingham_scraper') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'group_0713_early')
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -4938,11 +4941,10 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          MAX_MINUTES: "40"
-          MONTHS_BACK: "13"
+          MAX_MINUTES: "20"
+          MONTHS_BACK: "2"
           MAX_PAGES: "60"
           DRY_RUN: "0"
-          ONLY_SEARCHES: "July 2026/Validated,June 2026/Validated,April 2026/Validated,March 2026/Validated,March 2026/Decided,December 2025/Decided"
           BIRMINGHAM_COUNCIL_ID: "14"
         run: cd scrapers && python birmingham_scraper.py
 
