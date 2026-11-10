@@ -352,147 +352,119 @@ async def find_real_search_button(page):
     return None
 
 
-async def scrape_month_status(page, month_label: str, status_id: str,
-                               status_name: str) -> list[dict]:
-    """One real search: a given month + one of the two mutually
-    exclusive status radios."""
-    try:
-        for _try in (1, 2, 3):          # Birmingham's portal is slow to answer the first request at times
-            try:
-                await page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=90_000)
-                break
-            except PlaywrightTimeout:
-                if _try == 3:
-                    raise
-                print(f"    [{month_label}/{status_name}] page load {_try} timed out, retrying")
-                await asyncio.sleep(10 * _try)
-        try:
-            await page.wait_for_load_state("networkidle", timeout=15_000)
-        except PlaywrightTimeout:
-            pass
+_DECISION_UNMAPPED: set = set()
 
-        await open_monthly_panel(page)
 
-        month_select = page.locator("select#SelectedMonth")
-        if await month_select.count() == 0:
-            print(f"    [{month_label}/{status_name}] ⚠ No real month select found")
-            return []
+def _birmingham_status(status: str, decision_type: str) -> str:
+    """Status from Birmingham's own Status + DecisionType fields (both present in the results JSON)."""
+    st, dt = (status or "").strip().lower(), (decision_type or "").strip().lower()
+    if "withdraw" in st:
+        return "withdrawn"
+    if dt:
+        if "refus" in dt:
+            return "refused"
+        if any(x in dt for x in ("approv", "no prior approval", "not required", "permission not required",
+                                 "grant", "no objection", "certificate issued", "consent")):
+            return "approved"
+        if dt not in _DECISION_UNMAPPED:
+            _DECISION_UNMAPPED.add(dt)
+            print(f"    ⚠ UNMAPPED DECISION TYPE {decision_type!r} (status {status!r}): filed as 'closed'")
+        return "closed"
+    if st in ("registered", "appeal lodged", ""):
+        return "pending"
+    if "final decision" in st:
+        return "closed"
+    return _normalise_status(status)
 
-        # REAL, CONFIRMED FIX — a production run showed the current
-        # calendar month ("October 2026") genuinely isn't offered as a
-        # selectable option yet (the council's system appears to only
-        # add it a few days into the month, or once its first real
-        # application exists) — select_option() threw a confusing
-        # 5-second timeout for what's actually an expected, calm case.
-        # Checking the real available options first and skipping
-        # gracefully with a clear message, rather than treating this
-        # as a genuine error each time it happens.
-        available_months = await month_select.locator("option").all_text_contents()
-        if month_label not in available_months:
-            print(f"    [{month_label}/{status_name}] month not yet offered by the "
-                  f"council's own system (real available months: {available_months}) "
-                  f"— skipping, not an error")
-            return []
 
-        await month_select.select_option(label=month_label, timeout=5_000)
+def _iso_date(v) -> Optional[str]:
+    return v[:10] if isinstance(v, str) and re.match(r"\d{4}-\d{2}-\d{2}", v) else None
 
-        status_radio = page.locator(f"input#{status_id}")
-        await status_radio.check(timeout=5_000, force=True)
 
-        search_btn = await find_real_search_button(page)
-        if search_btn is None:
-            print(f"    [{month_label}/{status_name}] ⚠ No real Search button found")
-            return []
-
-        await search_btn.click(timeout=5_000)
-        try:
-            await page.wait_for_load_state("networkidle", timeout=15_000)
-        except PlaywrightTimeout:
-            pass
-        await asyncio.sleep(2)
-    except Exception as e:
-        print(f"    [{month_label}/{status_name}] ⚠ Search failed: {type(e).__name__}: {e!r}")
+def _parse_results_json(html: str) -> list[dict]:
+    """Birmingham returns EVERY result of a monthly search in one response: the hidden input hidSearchResultsJson
+    holds {SearchResultsAll: [...all rows...]} (confirmed 2026-11-10: 456 decided / 210 validated for October,
+    the visible table only shows 20 of them). No pagination needed."""
+    import html as _html, json
+    m = re.search(r'name="hidSearchResultsJson"\s+value="([^"]*)"', html)
+    if not m:
         return []
+    try:
+        data = json.loads(_html.unescape(m.group(1)))
+    except ValueError:
+        return []
+    rows = data.get("SearchResultsAll") or data.get("SearchResults") or []
+    apps = []
+    for r in rows:
+        ref = (r.get("ApplicationId") or r.get("PrimaryKey") or "").strip()
+        if len(ref) < 3:
+            continue
+        address = (r.get("DisplayAddressWithoutHTML") or "").strip()
+        decision = _iso_date(r.get("DecisionDate"))
+        status = _birmingham_status(r.get("Status"), r.get("DecisionType"))
+        apps.append({
+            "reference": ref,
+            "address": address,
+            "postcode": _extract_postcode(address),
+            "description": (r.get("Description") or "").strip(),
+            "application_type": (r.get("ApplicationType") or "").strip() or "Planning",
+            "status": status,
+            "submitted_date": _iso_date(r.get("DateRegistered")) or _iso_date(r.get("DateReceived")),   # registered = when it appears publicly; received can be months earlier
+            "decision_date": decision if status != "pending" else None,
+            "council_url": f"{BASE_URL}/NECSWS/ES/Presentation/Planning/OnlinePlanning/OnlinePlanningOverview?applicationNumber="
+                           + ref.replace("/", "%2F"),
+        })
+    return apps
 
-    # REAL, CONFIRMED FIX — a production run showed every search
-    # returning exactly 20 applications regardless of the real total
-    # (September 2026 alone has 79 Validated / 97 Decided), because
-    # the real pagination is a Knockout.js-driven numbered page list
-    # (ul.pagination, "1 2 3..."), not a "Next" text link at all — the
-    # previous selector never matched anything. A real page-size
-    # dropdown (PagingParameters_PageSize, options 10/20/50) was also
-    # confirmed — setting it to 50 up front cuts the number of pages
-    # needed roughly in half or better, before falling back to
-    # clicking real numbered page links for whatever remains.
-    page_size_select = page.locator("select#PagingParameters_PageSize")
-    if await page_size_select.count() > 0:
+
+async def scrape_month_status(page, month_label: str, status_id: str,
+                              status_name: str) -> list[dict]:
+    """One real monthly search (month + Validated/Decided). The portal is slow (10-15 s) and its panel sometimes
+    fails to open, so the whole setup is retried; results are read from the JSON in the response."""
+    for attempt in (1, 2, 3):
         try:
-            await page_size_select.select_option(value="50", timeout=5_000)
+            await page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=90_000)
             try:
-                await page.wait_for_load_state("networkidle", timeout=10_000)
+                await page.wait_for_load_state("networkidle", timeout=15_000)
             except PlaywrightTimeout:
                 pass
-            await asyncio.sleep(1.5)
+            await open_monthly_panel(page)
+            month_select = page.locator("select#SelectedMonth")
+            if await month_select.count() == 0:
+                raise RuntimeError("month select not on page")
+            available = await month_select.locator("option").all_text_contents()
+            if month_label not in available:
+                print(f"    [{month_label}/{status_name}] month not yet offered by the council's own system "
+                      f"(newest: {available[1] if len(available) > 1 else '?'}) — skipping, not an error")
+                return []
+            await month_select.select_option(label=month_label, timeout=5_000)
+            await page.locator(f"input#{status_id}").check(timeout=5_000, force=True)
+            btn = await find_real_search_button(page)
+            if btn is None:
+                raise RuntimeError("search button not found")
+            await btn.click(timeout=5_000)
+            html = ""
+            for _ in range(24):                      # up to 2 minutes for the results
+                await asyncio.sleep(5)
+                html = await page.content()
+                if 'name="hidSearchResultsJson"' in html:
+                    break
+            apps = _parse_results_json(html)
+            m = re.search(r"(\d+)\s+Results", re.sub(r"\s+", " ", BeautifulSoup(html, "html.parser").get_text(" ")))
+            claimed = int(m.group(1)) if m else None
+            note = "" if claimed is None or claimed == len(apps) else f"   ⚠ page says {claimed}"
+            print(f"    [{month_label}/{status_name}] {len(apps)} applications{note}")
+            if not apps and claimed:
+                raise RuntimeError(f"page claims {claimed} results but none were read")
+            return apps
         except Exception as e:
-            print(f"    [{month_label}/{status_name}] ⚠ Could not set page size to 50: "
-                  f"{type(e).__name__} — continuing with whatever size is active")
+            print(f"    [{month_label}/{status_name}] ⚠ attempt {attempt} failed: {type(e).__name__}: {str(e)[:160]}")
+            await asyncio.sleep(10 * attempt)
+    FAILED.append(f"{month_label}/{status_name}")
+    return []
 
-    all_apps: list[dict] = []
-    seen_refs: set[str] = set()
-    previous_refs: frozenset = frozenset()
-    page_num = 1
 
-    while page_num <= MAX_PAGES:
-        if should_stop():
-            print(f"    [{month_label}/{status_name}] ⚠ Time budget reached at page {page_num}")
-            break
-
-        html = await page.content()
-        page_apps = _parse_results_page(html)
-
-        current_refs = frozenset(a["reference"] for a in page_apps)
-        if page_num > 1 and current_refs and current_refs == previous_refs:
-            print(f"    [{month_label}/{status_name}] Page {page_num} identical to "
-                  f"previous — pagination not advancing, stopping")
-            break
-        previous_refs = current_refs
-
-        new_count = 0
-        for a in page_apps:
-            if a["reference"] not in seen_refs:
-                seen_refs.add(a["reference"])
-                all_apps.append(a)
-                new_count += 1
-
-        if page_num == 1:
-            print(f"    [{month_label}/{status_name}] Page 1: {len(page_apps)} real applications")
-
-        if not page_apps:
-            break
-
-        # Real, confirmed numbered pagination — click the link for the
-        # specific next page number, inside the real ul.pagination
-        # container, rather than a generic "Next" text match.
-        next_page_link = page.locator(
-            f"ul.pagination a:text-is('{page_num + 1}'), "
-            f"ul.pagination span:text-is('{page_num + 1}')"
-        )
-        if await next_page_link.count() == 0:
-            break
-        try:
-            await next_page_link.first.click(timeout=10_000)
-            try:
-                await page.wait_for_load_state("networkidle", timeout=10_000)
-            except PlaywrightTimeout:
-                pass
-            await asyncio.sleep(1.5)
-        except Exception:
-            break
-        page_num += 1
-
-    print(f"    [{month_label}/{status_name}] Total: {len(all_apps)} real applications "
-          f"across {page_num} page(s)")
-    return all_apps
+FAILED: list = []
 
 
 async def scrape() -> list[dict]:
@@ -520,6 +492,10 @@ async def scrape() -> list[dict]:
                     if a["reference"] not in seen_refs:
                         seen_refs.add(a["reference"])
                         all_apps.append(a)
+                    elif a["status"] != "pending":      # same application in both lists: keep the one with the decision
+                        k = next(n for n, x in enumerate(all_apps) if x["reference"] == a["reference"])
+                        if all_apps[k]["status"] == "pending":
+                            all_apps[k] = a
 
         await context.close()
         await browser.close()
@@ -544,7 +520,7 @@ async def main():
         from collections import Counter
         print(f"\nDRY_RUN: {len(raw_apps)} applications parsed, nothing written.")
         print("  by status:", dict(Counter(a["status"] for a in raw_apps)))
-        print("  with postcode:", sum(1 for a in raw_apps if a.get("postcode")), " with submitted_date:", sum(1 for a in raw_apps if a.get("submitted_date")))
+        print("  with postcode:", sum(1 for a in raw_apps if a.get("postcode")), " with decision_date:", sum(1 for a in raw_apps if a.get("decision_date")), " with submitted_date:", sum(1 for a in raw_apps if a.get("submitted_date")))
         for a in raw_apps[:10]:
             print("   ", a["reference"], "|", (a.get("address") or "")[:60], "|", a["status"], "|", a.get("submitted_date"), "|", (a.get("description") or "")[:50])
         return
@@ -581,6 +557,7 @@ async def main():
             "application_type": a.get("application_type"),
             "status": a["status"],
             "submitted_date": a.get("submitted_date"),
+            "decision_date": a.get("decision_date"),
             "council_url": a.get("council_url"),
             "lat": lat,
             "lng": lng,
@@ -601,6 +578,8 @@ async def main():
 
     print(f"\n{'=' * 50}")
     print(f"Finished in {elapsed_minutes():.1f} minutes")
+    if FAILED:
+        print(f"⚠ {len(FAILED)} search(es) failed after retries: {', '.join(FAILED)}")
     print(f"Applications saved: {len(records) if ok else 0}")
 
 
