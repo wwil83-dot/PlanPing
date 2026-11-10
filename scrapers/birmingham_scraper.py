@@ -446,11 +446,22 @@ async def scrape_month_status(page, month_label: str, status_id: str,
                 raise RuntimeError("search button not found")
             await btn.click(timeout=5_000)
             html = ""
+            LAST_RESP.pop("resp", None)
             for _ in range(36):                      # up to 3 minutes for the results
                 await asyncio.sleep(5)
                 html = await page.content()
                 if 'name="hidSearchResultsJson"' in html:
                     break
+                r = LAST_RESP.get("resp")
+                if r is not None:                    # the portal answered; a short reply without a result set means "nothing listed"
+                    try:
+                        body = await r.text()
+                    except Exception:
+                        continue
+                    if 'hidSearchResultsJson' not in body and len(body) < 20000:
+                        txt = re.sub(r"\s+", " ", BeautifulSoup(body, "html.parser").get_text(" ")).strip()
+                        print(f"    [{month_label}/{status_name}] portal returned no result set (HTTP {r.status}, {len(body)} bytes): {txt[:240]!r} — treated as empty")
+                        return []
             if 'name="hidSearchResultsJson"' not in html:
                 diag = ""
                 try:
