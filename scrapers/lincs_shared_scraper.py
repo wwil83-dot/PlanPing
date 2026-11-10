@@ -128,8 +128,17 @@ async def run_window(page, f_start: str, f_end: str, a: date, b: date) -> tuple:
     """Date-only advanced search; returns (rows, total_claimed)."""
     for attempt in (1, 2, 3):
         try:
-            await page.goto(f"{BASE}/search.do?action=advanced", wait_until="domcontentloaded", timeout=45000)
+            resp = await page.goto(f"{BASE}/search.do?action=advanced", wait_until="domcontentloaded", timeout=60000)
             await settle(page)
+            try:
+                await page.wait_for_selector(f"input[name='{f_start}']", timeout=20000)
+            except PWTimeout:
+                try:
+                    title = (await page.title())[:80]
+                    body = re.sub(r"\s+", " ", (await page.inner_text("body")))[:160]
+                except Exception:
+                    title, body = "?", "?"
+                raise RuntimeError(f"search form not on page (HTTP {resp.status if resp else '?'}, title {title!r}, body {body!r})")
             await page.fill(f"input[name='{f_start}']", a.strftime("%d/%m/%Y"))
             await page.fill(f"input[name='{f_end}']", b.strftime("%d/%m/%Y"))
             async with page.expect_navigation(wait_until="domcontentloaded", timeout=30000):
@@ -137,10 +146,10 @@ async def run_window(page, f_start: str, f_end: str, a: date, b: date) -> tuple:
             await settle(page)
             break
         except Exception as e:
-            print(f"    ⚠ search {a:%d/%m}-{b:%d/%m} attempt {attempt} failed: {type(e).__name__}")
+            print(f"    ⚠ search {a:%d/%m}-{b:%d/%m} attempt {attempt} failed: {type(e).__name__}: {str(e)[:220]}")
             if attempt == 3:
-                raise
-            await asyncio.sleep(5 * attempt)
+                return None, None
+            await asyncio.sleep(20 * attempt)
     rows, total, pages = [], None, 0
     while True:
         pages += 1
@@ -174,6 +183,11 @@ async def sweep(page, kind: str, d_from: date, d_to: date) -> dict:
             break
         end = min(start + timedelta(days=SLICE_DAYS - 1), d_to)
         rows, total = await run_window(page, f_start, f_end, start, end)
+        if rows is None:
+            FAILED_WINDOWS.append(f"{kind} {start:%d/%m}-{end:%d/%m}")
+            print(f"    ✗ {kind} {start:%d/%m/%Y}-{end:%d/%m/%Y}: portal search unreachable, slice skipped")
+            start = end + timedelta(days=1)
+            continue
         for r in rows:
             out[r["reference"]] = r
         flag = "" if total is None or total == len(rows) else f"   ⚠ page said {total}, read {len(rows)}"
@@ -184,6 +198,7 @@ async def sweep(page, kind: str, d_from: date, d_to: date) -> dict:
 
 
 _UNMAPPED: set = set()
+FAILED_WINDOWS: list = []
 
 
 def decision_to_status(text: str) -> Optional[str]:
@@ -332,6 +347,10 @@ async def main():
             print(f"[{who}] ✗ save failed")
             sys.exit(1)
     print(f"\nFinished in {minutes():.1f} minutes")
+    if FAILED_WINDOWS:
+        print(f"⚠ {len(FAILED_WINDOWS)} slice(s) could not be read (portal unreachable): {', '.join(FAILED_WINDOWS)}")
+        if not received and not decided:
+            sys.exit(1)
 
 
 if __name__ == "__main__":
