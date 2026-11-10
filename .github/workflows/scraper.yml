@@ -4917,8 +4917,8 @@ jobs:
   birmingham_scraper:
     # Birmingham City Council runs the same NEC "ES/Presentation/Planning/OnlinePlanning" platform as Broxbourne
     # (LPAssure) and Hyndburn (Northgate); only the path segment differs (/NECSWS/). Cloned from hyndburn_scraper.py.
-    # FIRST RUN: DRY_RUN "1" (manual trigger only): parses and reports, writes nothing, needs no council id.
-    # Then set BIRMINGHAM_COUNCIL_ID, DRY_RUN "0", and raise MONTHS_BACK for a backfill. Not scheduled yet.
+    # Dry run 2026-11-10 was clean (1,477 applications over Oct+Sep). Now the LIVE 13-MONTH BACKFILL (portal goes back to
+    # Nov 2025). After it: MONTHS_BACK "2" and add to a nightly group. Manual trigger only until then.
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'birmingham_scraper'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 45
@@ -4939,9 +4939,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MAX_MINUTES: "40"
-          MONTHS_BACK: "3"
+          MONTHS_BACK: "13"
           MAX_PAGES: "60"
-          DRY_RUN: "1"
+          DRY_RUN: "0"
           BIRMINGHAM_COUNCIL_ID: "14"
         run: cd scrapers && python birmingham_scraper.py
 
