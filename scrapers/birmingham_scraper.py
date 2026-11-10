@@ -444,11 +444,13 @@ async def scrape_month_status(page, month_label: str, status_id: str,
                 raise RuntimeError("search button not found")
             await btn.click(timeout=5_000)
             html = ""
-            for _ in range(24):                      # up to 2 minutes for the results
+            for _ in range(36):                      # up to 3 minutes for the results
                 await asyncio.sleep(5)
                 html = await page.content()
                 if 'name="hidSearchResultsJson"' in html:
                     break
+            if 'name="hidSearchResultsJson"' not in html:
+                raise RuntimeError("results never arrived (no results data on the page)")
             apps = _parse_results_json(html)
             m = re.search(r"(\d+)\s+Results", re.sub(r"\s+", " ", BeautifulSoup(html, "html.parser").get_text(" ")))
             claimed = int(m.group(1)) if m else None
