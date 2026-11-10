@@ -161,6 +161,7 @@ class Portal:
         self.root = f"{p.scheme}://{p.netloc}"
         self.session = None
         self.pi = PROXY_HINT.get(cid, cid) % len(PROXIES) if PROXIES else 0
+        self.partial = None                  # set when a results list was cut short by a failing page; the pages already read are kept
 
     def mk_session(self):
         if PROXIES and self.cid not in DIRECT:
@@ -219,6 +220,7 @@ class Portal:
     async def search(self, kind: str, a: date, b: date) -> list:
         """kind: 'received' | 'decided'. Returns parsed applications for the window, or raises TooMany / Blocked."""
         self.session = self.mk_session()
+        self.partial = None
         try:
             r = None
             use_proxy = bool(PROXIES) and self.cid not in DIRECT
@@ -275,7 +277,14 @@ class Portal:
                 if not has_next or not got or page >= MAX_PAGES:
                     break
                 page += 1
-                r = await self.get(f"/pagedSearchResults.do?action=page&searchCriteria.page={page}", tries=6)
+                try:
+                    r = await self.get(f"/pagedSearchResults.do?action=page&searchCriteria.page={page}", tries=6)
+                except (RuntimeError, Blocked) as e:
+                    if not apps:
+                        raise
+                    self.partial = f"page {page} failed after {len(apps)} results were read ({type(e).__name__}: {str(e)[:80]}); kept those"
+                    self.log(f"⚠ {kind} {a}..{b}: {self.partial}")
+                    break
             return apps
         finally:
             try:
@@ -290,6 +299,9 @@ async def sweep(p: Portal, kind: str, a: date, b: date, out: dict, problems: lis
         return
     try:
         apps = await p.search(kind, a, b)
+        if p.partial:
+            problems.append(f"{p.name}: {kind} {a}..{b}: {p.partial}")
+            p.partial = None
     except TooMany:
         if a < b:
             mid = a + (b - a) // 2
