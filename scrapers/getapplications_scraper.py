@@ -269,6 +269,26 @@ _HEADER_KEYWORDS = {
 
 _EMPTY_RESPONSE_DIAGNOSED: set[str] = set()
 
+# ADDED 2026-11-11 — vendor outage guard. On 2026-11-11 the platform vendor
+# shipped a broken page template ("Syntax error in template .../header.tpl")
+# that every getApplications council served for a while. The old code treated
+# each council as merely "empty", waited out three 30-second form timeouts per
+# council plus the 60-second pacing delay, and burned the whole 54-minute budget
+# saving nothing. Now: recognise that exact error page, stop reading further
+# weeks for that council, and after VENDOR_ERROR_STOP_AFTER councils in a row
+# show it, skip the rest of the run quickly. Not a failure of ours, so the run
+# stays green and prints an info line.
+VENDOR_ERROR_STOP_AFTER = int(os.environ.get("VENDOR_ERROR_STOP_AFTER", "2"))
+_vendor_error_streak = 0
+_platform_down = False
+
+
+def _is_vendor_error(html: str) -> bool:
+    if not html or len(html) > 4000:
+        return False
+    return ("An error occurred" in html
+            and ("Syntax error in template" in html or "council-direct/templates" in html))
+
 
 def _diagnose_empty_response(council_name: str, week_str: str, html: str):
     """Real evidence, once per council per run — a week with ZERO
@@ -579,6 +599,7 @@ class GetApplicationsPortal:
     async def scrape_weekly_lists(self, browser: Browser, weeks_back: int) -> list[dict]:
         all_apps: list[dict] = []
         seen_ids: set[str] = set()
+        self.vendor_error = False
 
         context = await browser.new_context(**CONTEXT_OPTIONS)
         page = await context.new_page()
@@ -626,6 +647,12 @@ class GetApplicationsPortal:
             if status is not None and status >= 400:
                 self._log(f"⚠ HTTP {status} for week {week_str}: {html[:200]}")
                 continue
+
+            if _is_vendor_error(html):
+                self.vendor_error = True
+                self._log(f"ℹ Portal is serving the vendor's template-error page "
+                          f"(platform-side outage) — not reading further weeks")
+                break
 
             week_apps = _parse_weekly_list(html, self.base_url, self.council_name, week_str)
             via = "POST"
@@ -784,7 +811,13 @@ class GetApplicationsPortal:
 async def process_council(portal: GetApplicationsPortal, browser: Browser,
                            sem: asyncio.Semaphore, weeks_back: int,
                            pending_recheck: Optional[list[dict]] = None) -> int:
+    global _vendor_error_streak, _platform_down
     async with sem:
+        if _platform_down:
+            print(f"\n[{portal.council_name}] — skipped: platform-wide vendor error "
+                  f"seen on {VENDOR_ERROR_STOP_AFTER} councils in a row")
+            return "PLATFORM_DOWN_SKIP"
+
         await asyncio.sleep(COUNCIL_DELAY_SECONDS)
 
         cid = portal.db_council_id
@@ -800,6 +833,15 @@ async def process_council(portal: GetApplicationsPortal, browser: Browser,
         except Exception as e:
             print(f"    [{portal.council_name}] ✗ Error: {e}")
             return 0
+
+        if getattr(portal, "vendor_error", False):
+            _vendor_error_streak += 1
+            if _vendor_error_streak >= VENDOR_ERROR_STOP_AFTER and not _platform_down:
+                _platform_down = True
+                print(f"    ℹ PLATFORM DOWN: {_vendor_error_streak} councils in a row returned the "
+                      f"vendor's error page — skipping the rest of this run")
+            return "VENDOR_ERROR"
+        _vendor_error_streak = 0
 
         recheck_updates = []
         if pending_recheck:
@@ -1010,6 +1052,8 @@ async def main():
 
     total = sum(r for r in results if isinstance(r, int))
     time_skipped = sum(1 for r in results if r == "TIME_BUDGET_SKIP")
+    vendor_errors = sum(1 for r in results if r == "VENDOR_ERROR")
+    platform_skipped = sum(1 for r in results if r == "PLATFORM_DOWN_SKIP")
     zero_result = sum(1 for r in results if r == 0)
     errors = sum(1 for r in results if isinstance(r, Exception))
 
@@ -1020,6 +1064,11 @@ async def main():
         print(f"Saved 0 (other reason — see per-council log lines above): {zero_result} councils")
     if time_skipped:
         print(f"Skipped (time budget): {time_skipped} councils")
+    if vendor_errors or platform_skipped:
+        print(f"ℹ PLATFORM OUTAGE (vendor template error, not our scraper): "
+              f"{vendor_errors} councils showed the error page, "
+              f"{platform_skipped} skipped. Nothing was changed in the database. "
+              f"Re-run once the portals load normally.")
     if errors:
         print(f"Errors: {errors}")
         for r in results:
