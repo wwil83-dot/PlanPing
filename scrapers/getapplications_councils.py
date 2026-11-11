@@ -85,10 +85,18 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     # ADDED 2026-11-03 — both Welsh, same platform (Tascomi/getApplications, ?fa=search pages), no earlier DB rows.
     "Gwynedd Council":                            574,
     "Ceredigion County Council":                  575,
+    # ADDED 2026-11-11 — three getApplications-format portals that already had real rows (and a one-off save on 2026-11-01) but were never in this nightly list, so they went stale and showed red on the map.
+    "London Borough of Barking and Dagenham":     226,
+    "London Borough of Hackney":                  218,
+    "Rother District Council":                    276,
 }
 
 # (council_name_as_in_supabase_db, base_url — host only, no path)
 GETAPPLICATIONS_COUNCILS = [
+    # ADDED 2026-11-11 — first in the list on purpose, so the time budget can never skip them.
+    ("London Borough of Barking and Dagenham", "https://online-befirst.lbbd.gov.uk"),
+    ("London Borough of Hackney",             "https://developmentandhousing.hackney.gov.uk"),
+    ("Rother District Council",               "https://online.rother.gov.uk"),
     ("Liverpool City Council",               "https://lar.liverpool.gov.uk"),
     ("Warrington Borough Council",           "https://online.warrington.gov.uk"),
     ("Newcastle City Council",               "https://portal.newcastle.gov.uk"),
