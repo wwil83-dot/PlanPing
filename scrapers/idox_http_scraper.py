@@ -88,9 +88,16 @@ COUNCILS = [
     ("Three Rivers District Council", "https://www3.threerivers.gov.uk/online-applications", 291),
     ("Uttlesford District Council", "https://publicaccess.uttlesford.gov.uk/online-applications", 288),
     ("West Berkshire Council", "https://publicaccess.westberks.gov.uk/online-applications", 258),
+    # Durham: nightly browser scraper only has 618 rows since 20 Jul (about a third of the volume), so it gets the HTTP sweep too.
+    ("Durham County Council", "https://publicaccess.durham.gov.uk/online-applications", 201),
 ]
 DAYS_BACK = int(os.environ.get("DAYS_BACK", "14"))
 SLICE_DAYS = int(os.environ.get("SLICE_DAYS", "7"))
+# Councils whose deep result pages keep timing out (North Yorkshire, pages 7-10, 2026-11-10/11): smaller windows mean fewer pages each.
+SLICE_BY = {371: 3}
+# Lists cut short by a failing page: what was read is kept and the 14-day window is re-read every night, so these heal themselves.
+# Reported in the log but they do not turn the run red (only slices that lost everything do).
+PARTIALS: list = []
 MAX_MINUTES = float(os.environ.get("MAX_MINUTES", "25"))
 DRY_RUN = os.environ.get("DRY_RUN", "1") == "1"
 DELAY = float(os.environ.get("REQUEST_DELAY_SECONDS", "1.5"))
@@ -300,7 +307,7 @@ async def sweep(p: Portal, kind: str, a: date, b: date, out: dict, problems: lis
     try:
         apps = await p.search(kind, a, b)
         if p.partial:
-            problems.append(f"{p.name}: {kind} {a}..{b}: {p.partial}")
+            PARTIALS.append(f"{p.name}: {kind} {a}..{b}: {p.partial}")
             p.partial = None
     except TooMany:
         if a < b:
@@ -347,14 +354,15 @@ async def run_council(name: str, base: str, cid: int) -> tuple:
     out, problems = {}, []
     today = datetime.now(timezone.utc).date()
     start = today - timedelta(days=DAYS_BACK)
+    sl = SLICE_BY.get(cid, SLICE_DAYS)
     a = start
     while a <= today:
-        b = min(a + timedelta(days=SLICE_DAYS - 1), today)
+        b = min(a + timedelta(days=sl - 1), today)
         await sweep(p, "received", a, b, out, problems)
         a = b + timedelta(days=1)
     a = start
     while a <= today:
-        b = min(a + timedelta(days=SLICE_DAYS - 1), today)
+        b = min(a + timedelta(days=sl - 1), today)
         await sweep(p, "decided", a, b, out, problems)
         a = b + timedelta(days=1)
     return p, list(out.values()), problems
@@ -636,6 +644,10 @@ async def main() -> int:
             total += r[0]
             all_problems += r[1]
     print(f"\nHTTP requests: {CALLS['n']}   applications saved: {total}   {minutes():.1f} min")
+    if PARTIALS:
+        print("ℹ PARTIAL lists (what was read is saved; the window is re-read every night, so the rest follows):")
+        for x in PARTIALS:
+            print(f"    {x}")
     if all_problems:
         print("⚠ PROBLEMS:")
         for x in all_problems:
