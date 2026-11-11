@@ -949,3 +949,17 @@ h1 em { font-style: normal; color: #5FE3A1; background: linear-gradient(90deg, #
   .how-it-works .steps::before { display: none; }
   #coverage-map { height: 420px !important; }
 }
+
+/* ══ PAGE HERO — full-width street scene behind the search (postcode search; reusable on other search pages) ══ */
+.page-hero { position: relative; overflow: hidden; background: #2f9bdf url(/static/img/postcode-hero.webp) no-repeat center bottom / cover; min-height: 520px; padding: 2.75rem 1.5rem 0; margin-bottom: 0; }
+.page-hero::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 110px; background: linear-gradient(180deg, rgba(245,248,252,0) 0%, rgba(245,248,252,.85) 55%, var(--page) 100%); pointer-events: none; }
+.page-hero-inner { position: relative; z-index: 1; max-width: 1130px; margin: 0 auto; }
+.page-hero h1 { font-family: Inter, system-ui, sans-serif; font-weight: 800; font-size: 2.3rem; letter-spacing: -.03em; color: #fff; margin: 0 0 .45rem; text-shadow: 0 2px 16px rgba(8,40,90,.35); }
+.page-hero-sub { color: rgba(255,255,255,.95); font-size: 1.05rem; max-width: 620px; margin: 0 0 1.6rem; text-shadow: 0 1px 10px rgba(8,40,90,.35); }
+.page-hero .search-form { max-width: 640px; margin: 0; box-shadow: 0 18px 44px rgba(10,40,90,.28); }
+.page-hero .hero-trust { margin-top: 1.1rem; display: flex; flex-wrap: wrap; gap: .5rem; }
+.page-hero .hero-trust span { background: rgba(255,255,255,.92); color: var(--blue-dark); border-radius: 999px; padding: .3rem .8rem; font-size: .84rem; font-weight: 600; box-shadow: 0 4px 12px rgba(10,40,90,.15); }
+@media (max-width: 768px) {
+  .page-hero { min-height: 440px; padding-top: 2rem; background-position: 62% bottom; }
+  .page-hero h1 { font-size: 1.8rem; }
+}
