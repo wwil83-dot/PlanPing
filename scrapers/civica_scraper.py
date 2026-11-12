@@ -82,6 +82,11 @@ MAX_PAGES    = int(os.environ.get("MAX_PAGES", "20"))  # safety cap — 10/page,
                                                          # so 200 results max
                                                          # per council per run
 
+# ADDED 2026-11-12 — councils that have left Civica Portal360 for another platform and are now covered by a different scraper.
+# St Albans (440) moved to a new Idox Public Access system on 2026-11-02 (pa.stalbans.gov.uk/online-applications); the old Civica portal
+# returns nothing now, so running it only adds an empty run. Idox HTTP scraper job: idox_http_*_stalbans.
+RETIRED_COUNCIL_IDS = {440}
+
 START_TIME = time.monotonic()
 
 
@@ -557,6 +562,9 @@ async def main():
                 if name.lower() in db_name or db_name in name.lower():
                     council_id = db_id
                     break
+        if council_id in RETIRED_COUNCIL_IDS:
+            print(f"  [RETIRED] {name} (id={council_id}) now covered by the Idox scraper — skipped here")
+            continue
         if council_id:
             id_source = "HARDCODED" if name in COUNCIL_DB_IDS else "db-lookup"
             if id_source == "HARDCODED":
