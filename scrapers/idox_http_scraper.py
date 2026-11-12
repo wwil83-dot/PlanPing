@@ -237,6 +237,7 @@ class Portal:
         """kind: 'received' | 'decided'. Returns parsed applications for the window, or raises TooMany / Blocked."""
         self.session = self.mk_session()
         self.partial = None
+        self.suspect = False
         try:
             r = None
             use_proxy = bool(PROXIES) and self.cid not in DIRECT
@@ -297,6 +298,8 @@ class Portal:
                     raise TooMany()
                 fields = card_fields(r.text)
                 if not fields:
+                    if page == 1 and "no results" not in low and "no applications" not in low and "0 results" not in low:
+                        self.suspect = True        # neither results nor a "no results" message: probably a bad proxy / throttled reply, not a genuinely empty window
                     break                          # the form page again / no results: nothing to parse (and no noisy diagnostic)
                 got, has_next = I.parse_results_page(r.text, self.base, self.root, self.name)
                 for g in got:
@@ -330,7 +333,20 @@ async def sweep(p: Portal, kind: str, a: date, b: date, out: dict, problems: lis
         problems.append(f"{p.name}: MAX_MINUTES reached before {kind} {a}..{b}")
         return
     try:
-        apps = await p.search(kind, a, b)
+        apps = []
+        for attempt in range(3):                       # a 404 / throttled blank reply is usually one bad address: switch proxy and ask again
+            try:
+                apps = await p.search(kind, a, b)
+                if apps or not getattr(p, "suspect", False):
+                    break
+                why = "blank reply (no results and no 'no results' message)"
+            except Blocked as e:
+                why = str(e)[:80]
+                if attempt >= 2:
+                    raise
+            p.pi += 1
+            p.log(f"{kind} {a}..{b}: {why}; retrying on another address ({attempt + 1}/2)")
+            await asyncio.sleep(15)
         if p.partial:
             PARTIALS.append(f"{p.name}: {kind} {a}..{b}: {p.partial}")
             p.partial = None
