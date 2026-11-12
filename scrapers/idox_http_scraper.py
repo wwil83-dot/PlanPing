@@ -424,8 +424,10 @@ def outcome(raw: str) -> str:
         return "pending"
     if "withdraw" in t:
         return "withdrawn"
+    if re.search(r"refus", t) and not re.search(r"not discharged|further discharge|not refus", t):
+        return "refused"                           # e.g. 'Prior Approval Required and Refused' (must be checked before 'approval required')
     if re.search(r"not discharged|further discharge|details required|approval required|permission required|determine not|"
-                 r"recommendation only|request responded|unknown|not to make", t):
+                 r"recommendation only|request responded|unknown|not to make|exempt", t):
         return "closed"
     if re.search(r"refus|unlawful|not lawful|invalid|reject|dismiss", t):
         return "refused"
