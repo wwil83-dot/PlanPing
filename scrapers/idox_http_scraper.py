@@ -345,8 +345,10 @@ async def sweep(p: Portal, kind: str, a: date, b: date, out: dict, problems: lis
                 why = str(e)[:80]
                 if attempt >= 2:
                     raise
+            if attempt >= 2 or (attempt >= 1 and "blank reply" in why):
+                break                                  # blank twice on different addresses: this portal words a genuinely empty window differently; accept it as empty
             p.pi += 1
-            p.log(f"{kind} {a}..{b}: {why}; retrying on another address ({attempt + 1}/2)")
+            p.log(f"{kind} {a}..{b}: {why}; retrying on another address (try {attempt + 2} of 3)")
             await asyncio.sleep(15)
         if p.partial:
             PARTIALS.append(f"{p.name}: {kind} {a}..{b}: {p.partial}")
