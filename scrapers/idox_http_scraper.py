@@ -74,6 +74,7 @@ COUNCILS = [
     ("Oxford City Council", "https://public.oxford.gov.uk/online-applications", 58),
     ("Sandwell Metropolitan Borough Council", "https://webcaps.sandwell.gov.uk/publicaccess", 190),
     ("Sevenoaks District Council", "https://pa.sevenoaks.gov.uk/online-applications", 271),
+    ("St Albans City & District Council", "https://pa.stalbans.gov.uk/online-applications", 440),   # moved from Civica to Idox on 2026-11-02
     ("Sheffield City Council", "https://planningapps.sheffield.gov.uk/online-applications", 63),
     ("Shropshire Council", "https://pa.shropshire.gov.uk/online-applications", 364),
     ("Somerset Council (Mendip)", "https://publicaccess.mendip.gov.uk/online-applications", 370),
@@ -155,6 +156,14 @@ class TooMany(Exception):
 
 class Blocked(Exception):
     pass
+
+
+class CouncilDown(Exception):
+    """ADDED 2026-11-12 — the council's own server answers the search form with a 5xx error (Sandwell: HTTP 500 on every proxy, every night). That is their outage, not a block and not a scraper bug: retried across proxies, then reported as information, not a red failure."""
+    pass
+
+
+DOWN: list = []
 
 
 def fmt(d: date) -> str:
@@ -252,6 +261,20 @@ class Portal:
                     r = await self.get("/search.do?action=advanced&searchType=Application", tries=1, timeout=25, fast=True)
                     if r.status_code != 429:
                         break
+            if r.status_code >= 500:
+                code = r.status_code
+                for _ in range(2):                     # a 5xx can be one bad proxy or a passing hiccup: wait, switch address, ask again
+                    await asyncio.sleep(20)
+                    if use_proxy:
+                        self.pi += 1
+                    await self.session.close()
+                    self.session = self.mk_session()
+                    r = await self.get("/search.do?action=advanced&searchType=Application", tries=1,
+                                       timeout=25 if use_proxy else 60, fast=use_proxy)
+                    if r.status_code < 500:
+                        break
+                if r.status_code >= 500:
+                    raise CouncilDown(f"search form HTTP {r.status_code} (after 3 tries on different addresses)")
             if r.status_code != 200 or "just a moment" in r.text[:3000].lower():
                 raise Blocked(f"search form HTTP {r.status_code}")
             m = re.search(r'name="_csrf"\s+value="([^"]+)"', r.text) or re.search(r'value="([^"]+)"\s+name="_csrf"', r.text)
@@ -301,6 +324,8 @@ class Portal:
 
 
 async def sweep(p: Portal, kind: str, a: date, b: date, out: dict, problems: list):
+    if getattr(p, "down", False):
+        return                                         # council server already shown to be erroring this run: don't hammer it for every window
     if minutes() > MAX_MINUTES:
         problems.append(f"{p.name}: MAX_MINUTES reached before {kind} {a}..{b}")
         return
@@ -309,6 +334,11 @@ async def sweep(p: Portal, kind: str, a: date, b: date, out: dict, problems: lis
         if p.partial:
             PARTIALS.append(f"{p.name}: {kind} {a}..{b}: {p.partial}")
             p.partial = None
+    except CouncilDown as e:
+        p.down = True
+        DOWN.append(f"{p.name}: {str(e)[:120]}")
+        p.log(f"ℹ council server error, skipping the rest of this run: {str(e)[:120]}")
+        return
     except TooMany:
         if a < b:
             mid = a + (b - a) // 2
@@ -647,6 +677,10 @@ async def main() -> int:
     if PARTIALS:
         print("ℹ PARTIAL lists (what was read is saved; the window is re-read every night, so the rest follows):")
         for x in PARTIALS:
+            print(f"    {x}")
+    if DOWN:
+        print("ℹ COUNCIL SERVER ERRORS (the council's own portal returned a 5xx on the search form; nothing wrong on our side, retried every night — check it in a browser if it lasts days):")
+        for x in DOWN:
             print(f"    {x}")
     if all_problems:
         print("⚠ PROBLEMS:")
