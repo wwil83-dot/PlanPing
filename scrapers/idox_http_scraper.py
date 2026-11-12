@@ -75,6 +75,7 @@ COUNCILS = [
     ("Sandwell Metropolitan Borough Council", "https://webcaps.sandwell.gov.uk/publicaccess", 190),
     ("Sevenoaks District Council", "https://pa.sevenoaks.gov.uk/online-applications", 271),
     ("St Albans City & District Council", "https://pa.stalbans.gov.uk/online-applications", 440),   # moved from Civica to Idox on 2026-11-02
+    ("West Dunbartonshire Council", "https://publicportal.west-dunbarton.gov.uk/online-applications", 530),   # moved from its old ASP system to Idox; certificate chain is invalid (council-side), so 530 is in INSECURE
     ("Sheffield City Council", "https://planningapps.sheffield.gov.uk/online-applications", 63),
     ("Shropshire Council", "https://pa.shropshire.gov.uk/online-applications", 364),
     ("Somerset Council (Mendip)", "https://publicaccess.mendip.gov.uk/online-applications", 370),
@@ -112,7 +113,7 @@ SLOW = {267: 6.0, 242: 5.0, 257: 5.0, 364: 10.0, 475: 3.0, 37: 3.5, 223: 3.5, 32
 NO_DETAIL = {351, 79, 181}
 COOLDOWN = int(os.environ.get("DETAIL_COOLDOWN_SECONDS", "300"))      # first wait after a block; grows by 2 min each time a wait was not enough
 # Certificate chains these portals do not send in full (probe 2026-10-29: fine with verification off; public pages, no logins).
-INSECURE = {392, 176, 219, 58, 63, 181}
+INSECURE = {392, 176, 219, 58, 63, 181, 530}
 # Proxy that got through to each council in the probes (index into HTTP_PROXY_URLS). Several councils block some of our proxy
 # addresses (timeouts on 0, 1, 2), so each council starts on a proxy known to work and falls back to the others.
 # Rebuilt 2026-11-09 from idox_proxy_probe after Webshare replaced the proxy list (195.40.x.x again). The numbers are positions in
