@@ -530,9 +530,11 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
                 break
             if r is None:
                 continue
-            if r.status_code in (429, 403):
+            soft = r.status_code == 200 and not detail_fields(r.text)     # HTTP 200 but an empty page: the portal's quiet way of throttling us (St Albans did this after ~1 page)
+            if r.status_code in (429, 403) or soft:
                 strikes += 1
-                http[str(r.status_code)] = http.get(str(r.status_code), 0) + 1
+                key = "empty-200" if soft else str(r.status_code)
+                http[key] = http.get(key, 0) + 1
                 if strikes >= 2:
                     # These portals allow only about a dozen detail pages and then block our address for a few minutes (a 10 minute
                     # wait always worked; East Riding answers 403 instead of 429). Wait it out, then carry on.
@@ -543,12 +545,12 @@ async def add_outcomes(p: Portal, apps: list, problems: list):
                         no_gain = 0
                     waits += 1
                     if no_gain >= 3:
-                        problems.append(f"{p.name}: detail pages still blocked (HTTP {r.status_code}) after {waits - 1} waits with no page gained; stopped, the next run continues")
+                        problems.append(f"{p.name}: detail pages still blocked ({'empty page' if soft else 'HTTP ' + str(r.status_code)}) after {waits - 1} waits with no page gained; stopped, the next run continues")
                         break
                     if waits > 14:
                         problems.append(f"{p.name}: detail pages still blocked (HTTP {r.status_code}) after {waits - 1} waits; stopped, the next run continues")
                         break
-                    p.log(f"detail pages blocked after {ok_run} pages in a row (HTTP {r.status_code}): waiting {cool // 60} min (wait {waits})")
+                    p.log(f"detail pages blocked after {ok_run} pages in a row ({'empty page' if soft else 'HTTP ' + str(r.status_code)}): waiting {cool // 60} min (wait {waits})")
                     await asyncio.sleep(cool)
                     strikes = 0
                     ok_run = 0
