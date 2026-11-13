@@ -76,6 +76,7 @@ COUNCILS = [
     ("Sevenoaks District Council", "https://pa.sevenoaks.gov.uk/online-applications", 271),
     ("St Albans City & District Council", "https://pa.stalbans.gov.uk/online-applications", 440),   # moved from Civica to Idox on 2026-11-02
     ("West Dunbartonshire Council", "https://publicportal.west-dunbarton.gov.uk/online-applications", 530),   # moved from its old ASP system to Idox; certificate chain is invalid (council-side), so 530 is in INSECURE
+    ("Winchester City Council", "https://planningapps.winchester.gov.uk/online-applications", 412),   # Playwright scraper gets 429-throttled here; trying the proxy/HTTP route (dry run first)
     ("Sheffield City Council", "https://planningapps.sheffield.gov.uk/online-applications", 63),
     ("Shropshire Council", "https://pa.shropshire.gov.uk/online-applications", 364),
     ("Somerset Council (Mendip)", "https://publicaccess.mendip.gov.uk/online-applications", 370),
