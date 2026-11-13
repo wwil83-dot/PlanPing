@@ -232,7 +232,7 @@ jobs:
           DAYS_BACK: "14"
           CONCURRENCY: "2"
           REQUEST_DELAY_SECONDS: "0"
-        run: cd scrapers && python idox_scraper.py "--only=Welwyn Hatfield Borough Council,Cambridge City Council,Cambridgeshire County Council,Huntingdonshire District Council,Fenland District Council,Winchester City Council,Test Valley Borough Council,Basingstoke and Deane Borough Council"
+        run: cd scrapers && python idox_scraper.py "--only=Cambridge City Council,Huntingdonshire District Council,Fenland District Council,Winchester City Council,Test Valley Borough Council,Basingstoke and Deane Borough Council"
 
   scrape_idox_e2:
     if: >
