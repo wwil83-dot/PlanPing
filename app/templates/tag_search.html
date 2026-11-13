@@ -1,41 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ title }} — PlanFind{% endblock %}
 {% block content %}
-{% if tag in ('large_site', 'farm_diversification') %}
-<section class="page-hero page-hero--{{ tag }} page-hero--short">
-  <div class="page-hero-art" aria-hidden="true"></div>
-  <div class="page-hero-inner">
-    <h1>{{ title }}</h1>
-    <p class="page-hero-sub">{{ intro }}</p>
-  </div>
-</section>
-{% else %}
-<header class="hero hero-compact">
-  <div class="hero-inner">
-    <h1 style="margin:0 0 .4rem">{{ title }}</h1>
-    <p class="hero-sub" style="margin:0">{{ intro }}</p>
-  </div>
-</header>
-{% endif %}
-<main class="main">
-  <p style="font-size:.8rem;color:var(--muted);margin-bottom:1rem">
-    Tagged automatically from each application's description using keyword
-    matching — a reasonable first pass, not a guarantee. Some genuine
-    matches may be missed if a council's wording is unusual, and
-    occasional false positives are possible. Showing the {{ applications|length }}
-    most recent matches nationally.
-  </p>
-  <div class="results-header">
-    <div>
-      <h2 class="results-title">
-        {% if total > 0 %}
-          {{ total }} application{{ 's' if total != 1 }} matched
-        {% else %}
-          No matching applications found yet
-        {% endif %}
-      </h2>
-    </div>
-  </div>
+{% macro filter_form() %}
   {# Filter bar — status, council, keyword, sort, and date-range
      refinement; this is a national search, not a postcode/radius one,
      so it deliberately doesn't carry those params.  Council options
@@ -90,6 +56,45 @@
     <a href="?" class="btn-link" style="font-size:.8rem">Clear filters</a>
     {% endif %}
   </form>
+{% endmacro %}
+{% set has_art = tag in ('large_site', 'farm_diversification') %}
+{% if has_art %}
+<section class="page-hero page-hero--{{ tag }} page-hero--short page-hero--tools">
+  <div class="page-hero-art" aria-hidden="true"></div>
+  <div class="page-hero-inner">
+    <h1>{{ title }}</h1>
+    <p class="page-hero-sub">{{ intro }}</p>
+    {{ filter_form() }}
+  </div>
+</section>
+{% else %}
+<header class="hero hero-compact">
+  <div class="hero-inner">
+    <h1 style="margin:0 0 .4rem">{{ title }}</h1>
+    <p class="hero-sub" style="margin:0">{{ intro }}</p>
+  </div>
+</header>
+{% endif %}
+<main class="main">
+  <p style="font-size:.8rem;color:var(--muted);margin-bottom:1rem">
+    Tagged automatically from each application's description using keyword
+    matching — a reasonable first pass, not a guarantee. Some genuine
+    matches may be missed if a council's wording is unusual, and
+    occasional false positives are possible. Showing the {{ applications|length }}
+    most recent matches nationally.
+  </p>
+  <div class="results-header">
+    <div>
+      <h2 class="results-title">
+        {% if total > 0 %}
+          {{ total }} application{{ 's' if total != 1 }} matched
+        {% else %}
+          No matching applications found yet
+        {% endif %}
+      </h2>
+    </div>
+  </div>
+  {% if not has_art %}{{ filter_form() }}{% endif %}
   {% if total == 0 %}
   <div class="banner banner-amber">
     {% if keyword %}
