@@ -52,6 +52,11 @@ PLANNING_REGISTER_COUNCILS = [
     ("Worcester City Council", "https://plan.worcester.gov.uk", False, False, False, False),
     ("Vale of Glamorgan Council", "https://vogonline.planning-register.co.uk", True, False, False, False),
     ("Welwyn Hatfield Borough Council", "https://planning.welhat.gov.uk", False, True, True, True),
+    # Added 2026-11-13: Cambridgeshire County Council (minerals & waste / county matters) left Idox for this same platform
+    # (planning.cambridgeshire.gov.uk/Search/Advanced + /Search/Results, "Planning (6840)" tab, table results with
+    # Application Number / Location / Proposal / Status columns). Flags are a best guess from the screenshots: date inputs are
+    # type=date like Welwyn Hatfield (iso dates), results are a table not a list. First run's log will confirm.
+    ("Cambridgeshire County Council", "https://planning.cambridgeshire.gov.uk", False, True, True, False),
 ]
 
 # Fill these in with the real Supabase-assigned council ids after
@@ -61,6 +66,7 @@ COUNCIL_DB_IDS = {
     "Worcester City Council": 554,
     "Vale of Glamorgan Council": 555,
     "Welwyn Hatfield Borough Council": 292,
+    "Cambridgeshire County Council": 416,
 }
 
 INSERT_SQL = """
