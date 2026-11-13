@@ -1002,9 +1002,12 @@ h1 em { font-style: normal; color: #5FE3A1; background: linear-gradient(90deg, #
 .page-hero--farm_diversification .page-hero-art { background-image: url(/static/img/farm-hero.webp); }
 .page-hero--large_site { min-height: calc(var(--art-h) + 130px); }   /* the crane jib reaches higher than the other pictures */
 .page-hero--short .page-hero-sub { max-width: 560px; }
-.page-hero .hero-search { display: flex; align-items: center; gap: .4rem; max-width: 560px; background: #fff; border-radius: 999px; padding: 6px; box-shadow: 0 18px 40px rgba(4,20,50,.30), 0 0 0 1px rgba(255,255,255,.45); transition: box-shadow .2s; }
+.page-hero .hero-search { display: flex; align-items: center; gap: .4rem; max-width: 620px; background: #fff; border-radius: 999px; padding: 6px; box-shadow: 0 18px 40px rgba(4,20,50,.30), 0 0 0 1px rgba(255,255,255,.45); transition: box-shadow .2s; }
 .page-hero .hero-search:focus-within { box-shadow: 0 0 0 4px rgba(22,184,106,.42), 0 18px 40px rgba(4,20,50,.30); }
 .page-hero .hero-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2300A862' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 16px center; font: inherit; font-size: 1rem; font-weight: 600; color: var(--blue-dark); padding: .7rem .9rem .7rem 2.8rem; }
+.page-hero .hero-search input { border-radius: 999px; }
+.page-hero .hero-search input:focus, .page-hero .hero-search input:not(:placeholder-shown) { background-color: transparent; box-shadow: none; }
+.page-hero .hero-search input:-webkit-autofill, .page-hero .hero-search input:-webkit-autofill:hover, .page-hero .hero-search input:-webkit-autofill:focus { -webkit-box-shadow: 0 0 0 100px #fff inset; -webkit-text-fill-color: var(--blue-dark); border-radius: 999px; caret-color: var(--blue-dark); }
 .page-hero .hero-search input::placeholder { color: #7d8da3; font-weight: 500; }
 .page-hero .hero-search button { border: 0; border-radius: 999px; background: linear-gradient(135deg, #12A860, #0C8F50); color: #fff; font: inherit; font-weight: 700; padding: .8rem 1.7rem; cursor: pointer; box-shadow: 0 6px 16px rgba(12,143,80,.38); transition: transform .15s, box-shadow .15s, filter .15s; }
 .page-hero .hero-search button:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 10px 22px rgba(12,143,80,.42); }
