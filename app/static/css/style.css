@@ -963,3 +963,23 @@ h1 em { font-style: normal; color: #5FE3A1; background: linear-gradient(90deg, #
   .page-hero { min-height: 440px; padding-top: 2rem; background-position: 62% bottom; }
   .page-hero h1 { font-size: 1.8rem; }
 }
+
+/* ---- 2026-11-13: page-hero image variants (towns, large sites, farm diversification) ----
+   The picture is its own layer (.page-hero-art) fixed to the bottom edge at its natural 3:1 shape, with sky-blue
+   hero background above it, so the title and search sit on open sky and never on top of buildings or cranes. */
+.page-hero--short { --art-h: calc(min(100vw, 1800px) / 3); background: linear-gradient(180deg, #2398f4 0%, #2ca4f5 100%); min-height: calc(var(--art-h) + 95px); padding: 2.6rem 1.5rem 0; }
+.page-hero--short .page-hero-art { position: absolute; left: 0; right: 0; bottom: 0; height: var(--art-h); background-repeat: no-repeat; background-position: center bottom; background-size: cover; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 30%); mask-image: linear-gradient(180deg, transparent 0, #000 30%); pointer-events: none; }
+.page-hero--towns .page-hero-art { background-image: url(/static/img/towns-hero.webp); }
+.page-hero--large_site .page-hero-art { background-image: url(/static/img/largesites-hero.webp); }
+.page-hero--farm_diversification .page-hero-art { background-image: url(/static/img/farm-hero.webp); }
+.page-hero--large_site { min-height: calc(var(--art-h) + 130px); }   /* the crane jib reaches higher than the other pictures */
+.page-hero--short .page-hero-sub { max-width: 560px; }
+.page-hero .hero-search { display: flex; gap: .5rem; max-width: 520px; background: #fff; border-radius: 14px; padding: .45rem; box-shadow: 0 18px 44px rgba(10,40,90,.28); }
+.page-hero .hero-search input { flex: 1; border: 0; outline: 0; background: transparent; font: inherit; font-size: 1rem; padding: .55rem .8rem; color: var(--blue-dark); min-width: 0; }
+.page-hero .hero-search button { border: 0; border-radius: 10px; background: var(--green, #1faa59); color: #fff; font-weight: 700; padding: .55rem 1.2rem; cursor: pointer; }
+.page-hero .hero-note { display: inline-block; background: rgba(255,255,255,.92); color: var(--blue-dark); border-radius: 999px; padding: .3rem .85rem; font-size: .84rem; font-weight: 600; box-shadow: 0 4px 12px rgba(10,40,90,.15); }
+@media (max-width: 700px) {
+  .page-hero--short, .page-hero--large_site { --art-h: 230px; min-height: 440px; padding-top: 1.8rem; }
+  .page-hero--short .page-hero-art { background-position: 55% bottom; }
+  .page-hero--large_site .page-hero-art { background-position: 38% bottom; }
+}
