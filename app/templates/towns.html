@@ -1,27 +1,28 @@
 {% extends "base.html" %}
 {% block title %}Planning Applications by Town — PlanPing{% endblock %}
 {% block content %}
-<main class="main">
-  <div style="margin-bottom:1.75rem">
-    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">
-      {% if county_filter %}Towns in {{ county_filter }}{% else %}Planning Applications by Town{% endif %}
-    </h1>
-    <p style="color:var(--muted)">
+<section class="page-hero page-hero--towns page-hero--short">
+  <div class="page-hero-art" aria-hidden="true"></div>
+  <div class="page-hero-inner">
+    <h1>{% if county_filter %}Towns in {{ county_filter }}{% else %}Planning Applications by Town{% endif %}</h1>
+    <p class="page-hero-sub">
       {% if county_filter %}
-      {{ total_towns }} town{{ 's' if total_towns != 1 }} in {{ county_filter }}. <a href="/towns">Browse all towns →</a>
+      {{ total_towns }} town{{ 's' if total_towns != 1 }} in {{ county_filter }}.
       {% else %}
       Search {{ total_towns }}+ UK towns and villages to see recent planning applications nearby.
       {% endif %}
     </p>
+    {% if not county_filter %}
+    <form class="hero-search" action="/towns" method="get">
+      <input type="text" name="q" placeholder="Search for a town or village…" value="{{ q }}" aria-label="Search for a town or village">
+      <button type="submit">Search</button>
+    </form>
+    {% else %}
+    <a href="/towns" class="hero-note">← Browse all towns</a>
+    {% endif %}
   </div>
-
-  {% if not county_filter %}
-  <form action="/towns" method="get" style="margin-bottom:1.5rem;max-width:420px">
-    <input type="text" name="q" class="form-input" placeholder="Search for a town or village…"
-      value="{{ q }}" style="padding:.7rem .9rem">
-  </form>
-  {% endif %}
-
+</section>
+<main class="main">
   {% if searched and not towns %}
   <p style="font-size:.85rem;color:var(--muted);margin-bottom:1.5rem">
     No towns matching "{{ q }}" — try a different spelling, or
