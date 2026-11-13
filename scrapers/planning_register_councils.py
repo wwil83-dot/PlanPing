@@ -54,9 +54,9 @@ PLANNING_REGISTER_COUNCILS = [
     ("Welwyn Hatfield Borough Council", "https://planning.welhat.gov.uk", False, True, True, True),
     # Added 2026-11-13: Cambridgeshire County Council (minerals & waste / county matters) left Idox for this same platform
     # (planning.cambridgeshire.gov.uk/Search/Advanced + /Search/Results, "Planning (6840)" tab, table results with
-    # Application Number / Location / Proposal / Status columns). Flags are a best guess from the screenshots: date inputs are
+    # Application Number / Location / Proposal / Status columns). Recon (cambs_form_recon, 13 Nov) showed a Copyright & Privacy gate with one button, "Planning Register" (needs_disclaimer=True). The other flags are a best guess from the screenshots: date inputs are
     # type=date like Welwyn Hatfield (iso dates), results are a table not a list. First run's log will confirm.
-    ("Cambridgeshire County Council", "https://planning.cambridgeshire.gov.uk", False, True, True, False),
+    ("Cambridgeshire County Council", "https://planning.cambridgeshire.gov.uk", True, True, True, False),
 ]
 
 # Fill these in with the real Supabase-assigned council ids after

@@ -363,6 +363,7 @@ class PlanningRegisterPortal:
         if "Disclaimer" not in page.url:
             return
         for selector in [
+            "form[action*='Disclaimer/Accept'] input[type='submit']",     # Cambridgeshire County: single button, value "Planning Register"
             "input[value*='Accept' i]", "button:has-text('Accept')",
             "input[value='Agree']", "button:has-text('Agree')",
         ]:
@@ -444,6 +445,13 @@ class PlanningRegisterPortal:
                 if self.search_url not in page.url:
                     await page.goto(self.search_url, wait_until="domcontentloaded", timeout=45_000)
 
+            if await page.locator("#DateReceivedFrom").count() == 0:
+                # unknown form for a new council in this family: list what IS there so the next fix is one step, not a guess
+                try:
+                    fields = await page.evaluate("() => [...document.querySelectorAll('input,select')].map(e => e.type + '#' + e.id + '[' + e.name + ']').join(' | ')")
+                    self._log(f"FORM DIAGNOSTIC (no #DateReceivedFrom) at {page.url}: {fields[:1500]}")
+                except Exception:
+                    pass
             await page.fill("#DateReceivedFrom", start_str, timeout=5_000)
             await page.fill("#DateReceivedTo", end_str, timeout=5_000)
 
