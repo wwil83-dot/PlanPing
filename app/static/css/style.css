@@ -964,6 +964,34 @@ h1 em { font-style: normal; color: #5FE3A1; background: linear-gradient(90deg, #
   .page-hero h1 { font-size: 1.8rem; }
 }
 
+/* ---- 2026-11-13 (b): title + filter card sit ON the picture (large sites, farm diversification) ---- */
+.page-hero--tools { min-height: calc(var(--art-h) + 40px); }
+.page-hero--tools.page-hero--large_site { min-height: calc(var(--art-h) + 70px); }
+.page-hero--tools::before { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, rgba(6,40,95,.50) 0%, rgba(6,40,95,.22) 40%, rgba(6,40,95,0) 68%); pointer-events: none; z-index: 0; }
+.page-hero--tools .page-hero-art { z-index: 0; }
+.page-hero--tools .page-hero-inner { display: flex; flex-direction: column; min-height: calc(var(--art-h) + 40px - 2.6rem); }
+.page-hero--tools.page-hero--large_site .page-hero-inner { min-height: calc(var(--art-h) + 70px - 2.6rem); }
+@media (min-width: 1000px) {
+  .page-hero--tools .filter-bar { flex-wrap: nowrap; align-items: center; }
+  .page-hero--tools .filter-bar > label:first-child { display: none; }
+  .page-hero--tools .filter-bar .form-input { max-width: none !important; min-width: 0; padding: .5rem .8rem; font-size: .88rem; }
+  .page-hero--tools .filter-bar input[name=keyword] { flex: 1.2 1 120px; }
+  .page-hero--tools .filter-bar select[name=status] { flex: 0 0 118px; }
+  .page-hero--tools .filter-bar select[name=council] { flex: 1 1 130px; }
+  .page-hero--tools .filter-bar select[name=sort] { flex: 0 0 142px; }
+  .page-hero--tools .filter-bar input[type=date] { flex: 0 0 142px; padding-left: .6rem; padding-right: .4rem; }
+  .page-hero--tools .filter-bar span { flex: 0 0 auto; }
+  .page-hero--tools .filter-bar .btn { white-space: nowrap; }
+}
+.page-hero--tools .filter-bar { margin: auto 0 52px; background: rgba(255,255,255,.93); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.7); border-radius: 20px; box-shadow: 0 22px 50px rgba(4,20,50,.34); padding: .9rem 1.1rem; gap: .6rem; }
+.page-hero--tools .filter-bar { transition: box-shadow .2s; }
+.page-hero--tools .filter-bar:focus-within { box-shadow: 0 0 0 4px rgba(22,184,106,.42), 0 22px 50px rgba(4,20,50,.34); }
+.page-hero--tools .filter-bar .form-input { border-radius: 999px; background: #fff; border: 1px solid #dbe5f1; transition: box-shadow .2s, border-color .2s; }
+.page-hero--tools .filter-bar .form-input:focus { outline: 0; border-color: #16B86A; box-shadow: 0 0 0 4px rgba(22,184,106,.25); }
+.page-hero--tools .filter-bar .btn { border: 0; border-radius: 999px; background: linear-gradient(135deg, #12A860, #0C8F50); color: #fff; font-weight: 700; padding: .55rem 1.4rem; box-shadow: 0 6px 16px rgba(12,143,80,.34); }
+.page-hero--tools .filter-bar .btn:hover { filter: brightness(1.06); }
+.page-hero--tools .filter-bar .btn-link { color: var(--blue) !important; }
+.page-hero--tools .page-hero-sub { max-width: 600px; }
 /* ---- 2026-11-13: page-hero image variants (towns, large sites, farm diversification) ----
    The picture is its own layer (.page-hero-art) fixed to the bottom edge at its natural 3:1 shape, with sky-blue
    hero background above it, so the title and search sit on open sky and never on top of buildings or cranes. */
@@ -974,12 +1002,22 @@ h1 em { font-style: normal; color: #5FE3A1; background: linear-gradient(90deg, #
 .page-hero--farm_diversification .page-hero-art { background-image: url(/static/img/farm-hero.webp); }
 .page-hero--large_site { min-height: calc(var(--art-h) + 130px); }   /* the crane jib reaches higher than the other pictures */
 .page-hero--short .page-hero-sub { max-width: 560px; }
-.page-hero .hero-search { display: flex; gap: .5rem; max-width: 520px; background: #fff; border-radius: 14px; padding: .45rem; box-shadow: 0 18px 44px rgba(10,40,90,.28); }
-.page-hero .hero-search input { flex: 1; border: 0; outline: 0; background: transparent; font: inherit; font-size: 1rem; padding: .55rem .8rem; color: var(--blue-dark); min-width: 0; }
-.page-hero .hero-search button { border: 0; border-radius: 10px; background: var(--green, #1faa59); color: #fff; font-weight: 700; padding: .55rem 1.2rem; cursor: pointer; }
+.page-hero .hero-search { display: flex; align-items: center; gap: .4rem; max-width: 560px; background: #fff; border-radius: 999px; padding: 6px; box-shadow: 0 18px 40px rgba(4,20,50,.30), 0 0 0 1px rgba(255,255,255,.45); transition: box-shadow .2s; }
+.page-hero .hero-search:focus-within { box-shadow: 0 0 0 4px rgba(22,184,106,.42), 0 18px 40px rgba(4,20,50,.30); }
+.page-hero .hero-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2300A862' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 16px center; font: inherit; font-size: 1rem; font-weight: 600; color: var(--blue-dark); padding: .7rem .9rem .7rem 2.8rem; }
+.page-hero .hero-search input::placeholder { color: #7d8da3; font-weight: 500; }
+.page-hero .hero-search button { border: 0; border-radius: 999px; background: linear-gradient(135deg, #12A860, #0C8F50); color: #fff; font: inherit; font-weight: 700; padding: .8rem 1.7rem; cursor: pointer; box-shadow: 0 6px 16px rgba(12,143,80,.38); transition: transform .15s, box-shadow .15s, filter .15s; }
+.page-hero .hero-search button:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 10px 22px rgba(12,143,80,.42); }
 .page-hero .hero-note { display: inline-block; background: rgba(255,255,255,.92); color: var(--blue-dark); border-radius: 999px; padding: .3rem .85rem; font-size: .84rem; font-weight: 600; box-shadow: 0 4px 12px rgba(10,40,90,.15); }
 @media (max-width: 700px) {
   .page-hero--short, .page-hero--large_site { --art-h: 230px; min-height: 440px; padding-top: 1.8rem; }
   .page-hero--short .page-hero-art { background-position: 55% bottom; }
   .page-hero--large_site .page-hero-art { background-position: 38% bottom; }
+  .page-hero--tools, .page-hero--tools.page-hero--large_site { min-height: 0; padding-bottom: 0; }
+  .page-hero--tools .page-hero-inner, .page-hero--tools.page-hero--large_site .page-hero-inner { min-height: 0; }
+  .page-hero--tools .filter-bar { margin: 1.4rem 0 80px; }
+  .page-hero--tools .filter-bar .form-input { max-width: none !important; flex: 1 1 100%; }
+  .page-hero--tools .filter-bar span { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; width: 100%; }
+  .page-hero--tools .filter-bar span .form-input { flex: 1 1 120px; min-width: 0; }
+  .page-hero .hero-search button { padding: .75rem 1.2rem; }
 }
