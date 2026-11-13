@@ -1,12 +1,22 @@
 {% extends "base.html" %}
 {% block title %}{{ title }} — PlanFind{% endblock %}
 {% block content %}
+{% if tag in ('large_site', 'farm_diversification') %}
+<section class="page-hero page-hero--{{ tag }} page-hero--short">
+  <div class="page-hero-art" aria-hidden="true"></div>
+  <div class="page-hero-inner">
+    <h1>{{ title }}</h1>
+    <p class="page-hero-sub">{{ intro }}</p>
+  </div>
+</section>
+{% else %}
 <header class="hero hero-compact">
   <div class="hero-inner">
     <h1 style="margin:0 0 .4rem">{{ title }}</h1>
     <p class="hero-sub" style="margin:0">{{ intro }}</p>
   </div>
 </header>
+{% endif %}
 <main class="main">
   <p style="font-size:.8rem;color:var(--muted);margin-bottom:1rem">
     Tagged automatically from each application's description using keyword
