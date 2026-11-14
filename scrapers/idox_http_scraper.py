@@ -160,6 +160,9 @@ class Blocked(Exception):
     pass
 
 
+FLAKY_SERVERS = {190}      # councils whose own server is known to be unreliable (Sandwell: HTTP 500s and timeouts); a timeout on every address is reported as info, not as a failure
+
+
 class CouncilDown(Exception):
     """ADDED 2026-11-12 — the council's own server answers the search form with a 5xx error (Sandwell: HTTP 500 on every proxy, every night). That is their outage, not a block and not a scraper bug: retried across proxies, then reported as information, not a red failure."""
     pass
@@ -251,6 +254,8 @@ class Portal:
                 except RuntimeError as e:
                     self.log(f"search form unreachable (proxy {self.pi % max(1, len(PROXIES))}): {str(e)[:90]}")
                     if attempt >= 4 or not use_proxy:
+                        if self.cid in FLAKY_SERVERS and re.search(r"imed? ?out|imeout", str(e)):
+                            raise CouncilDown(f"search form timed out on every address ({str(e)[:60]})")
                         raise
                     self.pi += 1
                     self.session = self.mk_session()
