@@ -2,21 +2,18 @@
 {% block title %}About PlanFind — Planning Application Search Made Easy{% endblock %}
 {% block head_extra %}
 <style>
-  .ab-hero { position: relative; overflow: hidden; color: #fff; padding: 3.4rem 1.5rem 6.2rem;
-    background: radial-gradient(900px 380px at 85% -10%, rgba(66,224,160,.28), transparent 60%),
-                radial-gradient(700px 400px at 0% 110%, rgba(35,152,244,.55), transparent 60%),
-                linear-gradient(135deg, #0a2f6b 0%, #145fc4 55%, #1d86e6 100%); }
-  .ab-hero::after { content:''; position:absolute; inset:0; background-image: radial-gradient(rgba(255,255,255,.10) 1px, transparent 1.5px); background-size: 26px 26px; -webkit-mask-image: linear-gradient(180deg,#000,transparent 85%); mask-image: linear-gradient(180deg,#000,transparent 85%); pointer-events:none; }
+  .ab-hero { position: relative; overflow: hidden; color: #fff; padding: 3.4rem 1.5rem 6.2rem; background: var(--hero-grad); }
+  .ab-hero::after { content: ''; position: absolute; right: -12%; bottom: -55%; width: 75%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, rgba(22,184,106,.40) 0%, rgba(22,184,106,0) 65%); pointer-events: none; }
   .ab-hero-inner { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; }
-  .ab-eyebrow { display:inline-block; font-size:.74rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8ff0c4; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.18); padding:.35rem .8rem; border-radius:999px; margin-bottom:1rem; }
+  .ab-eyebrow { display:inline-block; font-size:.74rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#7CE8B1; background:rgba(22,184,106,.16); border:1px solid rgba(22,184,106,.45); padding:.35rem .8rem; border-radius:999px; margin-bottom:1rem; }
   .ab-hero h1 { font-size: clamp(2rem, 4.2vw, 3.2rem); line-height:1.1; font-weight:800; letter-spacing:-.025em; margin:0 0 .9rem; max-width: 780px; }
-  .ab-hero h1 em { font-style:normal; color:#42e0a0; }
+  .ab-hero h1 em { font-style:normal; color:#5FE3A1; background:linear-gradient(90deg,#7CF0B8,#16B86A); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
   .ab-hero p { font-size:1.12rem; line-height:1.6; max-width:640px; color:rgba(255,255,255,.88); margin:0; }
   .ab-wrap { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem 3rem; }
   .ab-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:0; background:#fff; border:1px solid #e1e8f2; border-radius:22px; box-shadow:0 22px 50px rgba(10,47,107,.16); margin-top:-3.6rem; position:relative; z-index:2; overflow:hidden; }
   .ab-stat { padding:1.5rem 1.4rem; text-align:center; }
   .ab-stat + .ab-stat { border-left:1px solid #e8eef7; }
-  .ab-stat b { display:block; font-size:2.2rem; font-weight:800; letter-spacing:-.02em; color:#0a2f6b; line-height:1.1; }
+  .ab-stat b { display:block; font-size:2.2rem; font-weight:800; letter-spacing:-.02em; color:var(--blue-dark); line-height:1.1; }
   .ab-stat span { display:block; margin-top:.3rem; font-size:.74rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#6b7a90; }
   .ab-section { margin-top: 3rem; }
   .ab-section > h2 { font-size:1.55rem; font-weight:800; letter-spacing:-.02em; color:#0a2f6b; margin:0 0 .35rem; }
@@ -43,7 +40,7 @@
   .ab-data p { color:#4a5a72; line-height:1.7; margin:0 0 .8rem; }
   .ab-faq { display:grid; grid-template-columns:1fr 1fr; gap:1.2rem; }
   .ab-callout { background:#eef7f1; border:1px solid #cfe9d9; border-radius:14px; padding:.9rem 1.1rem; color:#2e5d44; font-size:.92rem; line-height:1.6; margin-top:1rem; }
-  .ab-contact { margin-top:3rem; border-radius:24px; padding:2.2rem 2.2rem; color:#fff; background:radial-gradient(500px 240px at 100% 0%, rgba(66,224,160,.3), transparent 60%), linear-gradient(135deg,#0a2f6b,#145fc4); box-shadow:0 22px 50px rgba(10,47,107,.25); }
+  .ab-contact { margin-top:3rem; border-radius:24px; padding:2.2rem 2.2rem; color:#fff; background:radial-gradient(500px 260px at 100% 0%, rgba(22,184,106,.38), transparent 62%), var(--hero-grad); box-shadow:0 22px 50px rgba(10,47,107,.25); }
   .ab-contact h2 { margin:0 0 .6rem; font-size:1.6rem; font-weight:800; letter-spacing:-.02em; }
   .ab-contact p { margin:0 0 .7rem; color:rgba(255,255,255,.88); line-height:1.65; max-width:760px; }
   .ab-contact a { color:#8ff0c4; font-weight:700; }
