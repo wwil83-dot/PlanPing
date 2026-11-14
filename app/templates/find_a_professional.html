@@ -36,24 +36,46 @@
     padding: 8px 12px;
     font-size: .85rem;
     cursor: pointer;
-    /* CHANGED (2026-10-18): set the text colour explicitly. The filter bar
-       has white text on a dark background, and the suggestions inherited it,
-       so they were white-on-white until hovered. */
-    color: #1e293b;
-    text-align: left;
-    font-weight: 400;
   }
   .town-autocomplete-item:hover,
   .town-autocomplete-item.active { background: var(--page); color: var(--blue); }
 </style>
 {% endblock %}
 {% block content %}
-<header class="hero hero-compact">
-  <div class="hero-inner">
-    <h1 style="font-size:1.9rem">Find a <em>Professional</em></h1>
-    <p class="hero-sub" style="margin-bottom:0">Architects and tradespeople to help with your project.</p>
+<section class="page-hero page-hero--pros page-hero--short page-hero--tools">
+  <div class="page-hero-art" aria-hidden="true"></div>
+  <div class="page-hero-inner">
+    <h1>Find a <em>Professional</em></h1>
+    <p class="page-hero-sub">Architects and tradespeople to help with your project.</p>
+    <form action="/find-a-professional" method="get" class="filter-bar">
+      <label style="font-size:.8rem;color:var(--muted);font-weight:600">Filter:</label>
+
+      <input type="text" name="keyword" class="form-input" style="max-width:200px"
+        placeholder="Search by business name..."
+        value="{{ keyword }}">
+
+      <select name="trade" class="form-input" style="max-width:220px" onchange="this.form.submit()">
+        <option value="">Any trade</option>
+        {% for key, label in trade_options.items() %}
+        <option value="{{ key }}" {{ 'selected' if trade == key }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <div style="position:relative">
+        <input type="text" name="town" id="town-input" class="form-input" style="max-width:200px"
+          placeholder="Type a town..." autocomplete="off"
+          value="{{ town or '' }}">
+        <div id="town-suggestions" class="town-autocomplete"></div>
+      </div>
+
+      <button type="submit" class="btn btn-sm">Apply</button>
+
+      {% if trade or town or keyword %}
+      <a href="/find-a-professional" class="btn-link" style="font-size:.8rem">Clear filters</a>
+      {% endif %}
+    </form>
   </div>
-</header>
+</section>
 
 <main class="main">
   <div class="coverage-note" style="margin-bottom:1.25rem">
@@ -62,33 +84,7 @@
     Always do your own checks (insurance, qualifications, reviews) before hiring anyone.
   </div>
 
-  <form action="/find-a-professional" method="get" class="filter-bar">
-    <label style="font-size:.8rem;color:var(--muted);font-weight:600">Filter:</label>
 
-    <input type="text" name="keyword" class="form-input" style="max-width:200px"
-      placeholder="Search by business name..."
-      value="{{ keyword }}">
-
-    <select name="trade" class="form-input" style="max-width:220px" onchange="this.form.submit()">
-      <option value="">Any trade</option>
-      {% for key, label in trade_options.items() %}
-      <option value="{{ key }}" {{ 'selected' if trade == key }}>{{ label }}</option>
-      {% endfor %}
-    </select>
-
-    <div style="position:relative">
-      <input type="text" name="town" id="town-input" class="form-input" style="max-width:200px"
-        placeholder="Type a town..." autocomplete="off"
-        value="{{ town or '' }}">
-      <div id="town-suggestions" class="town-autocomplete"></div>
-    </div>
-
-    <button type="submit" class="btn btn-sm">Apply</button>
-
-    {% if trade or town or keyword %}
-    <a href="/find-a-professional" class="btn-link" style="font-size:.8rem">Clear filters</a>
-    {% endif %}
-  </form>
 
   {% if not has_filter %}
   <div class="empty-state">
@@ -159,16 +155,12 @@
   // regardless of result count, so this needs to run every time, not
   // just when there happen to be results.
   (function () {
-    // CHANGED (2026-10-18): the full town list is no longer embedded in
-    // the page (it made every page ~45 KB heavier); suggestions are now
-    // fetched from /api/towns as the person types.
+    var allTowns = {{ town_names | tojson }};
     var input = document.getElementById('town-input');
     var box = document.getElementById('town-suggestions');
     if (!input || !box) return;
 
     var activeIndex = -1;
-    var lastQuery = '';
-    var timer = null;
 
     function render(matches) {
       box.innerHTML = '';
@@ -193,22 +185,14 @@
 
     input.addEventListener('input', function () {
       var q = input.value.trim().toLowerCase();
-      clearTimeout(timer);
       if (q.length < 2) {
         box.classList.remove('open');
         return;
       }
-      timer = setTimeout(function () {
-        lastQuery = q;
-        fetch('/api/towns?q=' + encodeURIComponent(q))
-          .then(function (r) { return r.ok ? r.json() : []; })
-          .then(function (matches) {
-            // ignore a slow reply if the person has typed more since
-            if (q !== lastQuery) return;
-            render(matches);
-          })
-          .catch(function () { box.classList.remove('open'); });
-      }, 150);
+      var matches = allTowns.filter(function (name) {
+        return name.toLowerCase().indexOf(q) !== -1;
+      });
+      render(matches);
     });
 
     input.addEventListener('keydown', function (e) {

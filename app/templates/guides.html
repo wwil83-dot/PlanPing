@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Planning Guides — PlanFind{% endblock %}
 {% block content %}
-<header class="hero hero-compact">
-  <div class="hero-inner">
-    <h1 style="font-size:1.9rem">Planning <em>Guides</em></h1>
-    <p class="hero-sub" style="margin-bottom:0">Clear, practical guides to how the UK planning system actually works — from a first-time application to farm diversification and large-site developments.</p>
+<section class="page-hero page-hero--guides page-hero--short">
+  <div class="page-hero-art" aria-hidden="true"></div>
+  <div class="page-hero-inner">
+    <h1>Planning <em>Guides</em></h1>
+    <p class="page-hero-sub">Clear, practical guides to how the UK planning system actually works — from a first-time application to farm diversification and large-site developments.</p>
   </div>
-</header>
+</section>
 
 <main class="main">
   {% for cat_key, meta in category_meta.items() %}
