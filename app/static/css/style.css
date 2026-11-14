@@ -1034,7 +1034,7 @@ h1 em { font-style: normal; color: #5FE3A1; background: linear-gradient(90deg, #
 .page-hero--tools.page-hero--pros .page-hero-inner { min-height: calc(var(--art-h) + 135px - 2.6rem); }
 .page-hero--tools.page-hero--pros .filter-bar { position: relative; z-index: 5; }
 /* guides picture carries its own icon row near the top, so the title sits in a taller sky band above it and the picture is barely faded */
-.page-hero--guides { min-height: calc(var(--art-h) + 175px); background: linear-gradient(180deg, #2398f4 0%, #0a9cfa 100%); }
+.page-hero--guides { min-height: calc(var(--art-h) + 134px); background: linear-gradient(180deg, #2398f4 0%, #0a9cfa 100%); }
 .page-hero--guides .page-hero-art { -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 9%); mask-image: linear-gradient(180deg, transparent 0, #000 9%); }
 @media (min-width: 1000px) {
   .page-hero--tools .filter-bar select[name=trade] { flex: 0 0 200px; }
@@ -1047,3 +1047,7 @@ h1 em { font-style: normal; color: #5FE3A1; background: linear-gradient(90deg, #
   .page-hero--tools.page-hero--pros .page-hero-inner { min-height: 0; }
   .page-hero--guides { padding-bottom: 250px; }
 }
+
+
+.page-hero--guides .page-hero-sub { max-width: 920px; }
+@media (min-width:701px){ .page-hero--guides + .main { margin-top: -2.2rem; position: relative; z-index: 2; } }
