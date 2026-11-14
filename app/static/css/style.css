@@ -1023,3 +1023,27 @@ h1 em { font-style: normal; color: #5FE3A1; background: linear-gradient(90deg, #
   .page-hero--tools .filter-bar span .form-input { flex: 1 1 120px; min-width: 0; }
   .page-hero .hero-search button { padding: .75rem 1.2rem; }
 }
+
+/* ---- 2026-11-14: commercial conversion, find a professional, guides ---- */
+.page-hero--commercial_conversion .page-hero-art { background-image: url(/static/img/commercial-hero.webp); }
+.page-hero--pros .page-hero-art { background-image: url(/static/img/pros-hero.webp); }
+.page-hero--guides .page-hero-art { background-image: url(/static/img/guides-hero.webp); }
+.page-hero h1 em { font-style: normal; color: #42e0a0; }
+/* people picture: heads reach high, so more open sky above them; overflow visible so the town suggestions list is not clipped */
+.page-hero--tools.page-hero--pros { min-height: calc(var(--art-h) + 135px); overflow: visible; }
+.page-hero--tools.page-hero--pros .page-hero-inner { min-height: calc(var(--art-h) + 135px - 2.6rem); }
+.page-hero--tools.page-hero--pros .filter-bar { position: relative; z-index: 5; }
+/* guides picture carries its own icon row near the top, so the title sits in a taller sky band above it and the picture is barely faded */
+.page-hero--guides { min-height: calc(var(--art-h) + 175px); background: linear-gradient(180deg, #2398f4 0%, #0a9cfa 100%); }
+.page-hero--guides .page-hero-art { -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 9%); mask-image: linear-gradient(180deg, transparent 0, #000 9%); }
+@media (min-width: 1000px) {
+  .page-hero--tools .filter-bar select[name=trade] { flex: 0 0 200px; }
+  .page-hero--tools .filter-bar > div { flex: 1 1 150px; min-width: 0; }
+  .page-hero--tools .filter-bar > div .form-input { width: 100%; max-width: none !important; }
+  .page-hero--tools .filter-bar .btn-link { white-space: nowrap; }
+}
+@media (max-width: 700px) {
+  .page-hero--guides, .page-hero--tools.page-hero--pros { min-height: 0; }
+  .page-hero--tools.page-hero--pros .page-hero-inner { min-height: 0; }
+  .page-hero--guides { padding-bottom: 250px; }
+}
