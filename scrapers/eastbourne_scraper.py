@@ -392,7 +392,22 @@ async def main():
     today = date.today()
     d_from = today - timedelta(days=WINDOW_DAYS)
 
-    async with httpx.AsyncClient(timeout=60, verify=ssl.create_default_context(),
+    # 2026-11-14: gtest.lewes-eastbourne.gov.uk stopped sending its intermediate certificate, so a strict client (Python, unlike a
+    # browser) fails with "unable to get local issuer certificate". It is the council's chain that is incomplete, and this scraper only
+    # reads public planning data, so when - and only when - that exact error appears we continue without certificate checking
+    # (same approach as the Idox scraper's INSECURE list). If the council fixes its chain, the strict check passes again automatically.
+    verify = ssl.create_default_context()
+    try:
+        async with httpx.AsyncClient(timeout=20, verify=verify) as probe:
+            await probe.get(H)
+    except Exception as e:
+        if "CERTIFICATE_VERIFY_FAILED" in str(e) or "issuer certificate" in str(e):
+            print("    ℹ council certificate chain is incomplete (CERTIFICATE_VERIFY_FAILED) - continuing without certificate checking for this read-only public API")
+            verify = False
+        else:
+            print(f"    ℹ TLS probe: {type(e).__name__}: {str(e)[:120]} (continuing)")
+
+    async with httpx.AsyncClient(timeout=60, verify=verify,
                                  follow_redirects=True, headers=_hdr()) as client:
         decisions = await _picklist(client, "PlanDecisions")
         types = await _picklist(client, "PlanApplicationTypes")
