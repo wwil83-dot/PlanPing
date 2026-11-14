@@ -1,62 +1,158 @@
 {% extends "base.html" %}
 {% block title %}About PlanFind — Planning Application Search Made Easy{% endblock %}
+{% block head_extra %}
+<style>
+  .ab-hero { position: relative; overflow: hidden; color: #fff; padding: 3.4rem 1.5rem 6.2rem;
+    background: radial-gradient(900px 380px at 85% -10%, rgba(66,224,160,.28), transparent 60%),
+                radial-gradient(700px 400px at 0% 110%, rgba(35,152,244,.55), transparent 60%),
+                linear-gradient(135deg, #0a2f6b 0%, #145fc4 55%, #1d86e6 100%); }
+  .ab-hero::after { content:''; position:absolute; inset:0; background-image: radial-gradient(rgba(255,255,255,.10) 1px, transparent 1.5px); background-size: 26px 26px; -webkit-mask-image: linear-gradient(180deg,#000,transparent 85%); mask-image: linear-gradient(180deg,#000,transparent 85%); pointer-events:none; }
+  .ab-hero-inner { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; }
+  .ab-eyebrow { display:inline-block; font-size:.74rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8ff0c4; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.18); padding:.35rem .8rem; border-radius:999px; margin-bottom:1rem; }
+  .ab-hero h1 { font-size: clamp(2rem, 4.2vw, 3.2rem); line-height:1.1; font-weight:800; letter-spacing:-.025em; margin:0 0 .9rem; max-width: 780px; }
+  .ab-hero h1 em { font-style:normal; color:#42e0a0; }
+  .ab-hero p { font-size:1.12rem; line-height:1.6; max-width:640px; color:rgba(255,255,255,.88); margin:0; }
+  .ab-wrap { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem 3rem; }
+  .ab-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:0; background:#fff; border:1px solid #e1e8f2; border-radius:22px; box-shadow:0 22px 50px rgba(10,47,107,.16); margin-top:-3.6rem; position:relative; z-index:2; overflow:hidden; }
+  .ab-stat { padding:1.5rem 1.4rem; text-align:center; }
+  .ab-stat + .ab-stat { border-left:1px solid #e8eef7; }
+  .ab-stat b { display:block; font-size:2.2rem; font-weight:800; letter-spacing:-.02em; color:#0a2f6b; line-height:1.1; }
+  .ab-stat span { display:block; margin-top:.3rem; font-size:.74rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#6b7a90; }
+  .ab-section { margin-top: 3rem; }
+  .ab-section > h2 { font-size:1.55rem; font-weight:800; letter-spacing:-.02em; color:#0a2f6b; margin:0 0 .35rem; }
+  .ab-section > .ab-lead { color:#5b6b82; margin:0 0 1.4rem; max-width:680px; line-height:1.6; }
+  .ab-two { display:grid; grid-template-columns:1fr 1fr; gap:1.2rem; margin-top:2.6rem; }
+  .ab-card { background:#fff; border:1px solid #e1e8f2; border-radius:20px; padding:1.7rem 1.8rem; box-shadow:0 6px 20px rgba(10,47,107,.06); position:relative; }
+  .ab-card h3 { font-size:1.2rem; font-weight:800; color:#0a2f6b; margin:0 0 .7rem; letter-spacing:-.01em; }
+  .ab-card p { color:#4a5a72; line-height:1.7; margin:0 0 .8rem; font-size:.97rem; }
+  .ab-card p:last-child { margin-bottom:0; }
+  .ab-card a, .ab-faq a { color:#1260c8; font-weight:600; }
+  .ab-card--accent { border-top:4px solid #16b86a; }
+  .ab-card--blue { border-top:4px solid #1d86e6; }
+  .ab-tools { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:1rem; }
+  .ab-tool { display:block; background:#fff; border:1px solid #e1e8f2; border-radius:18px; padding:1.25rem 1.3rem; text-decoration:none; color:inherit; box-shadow:0 4px 14px rgba(10,47,107,.05); transition:transform .18s, box-shadow .18s, border-color .18s; }
+  .ab-tool:hover { transform:translateY(-3px); box-shadow:0 16px 34px rgba(10,47,107,.14); border-color:#b9d4f5; }
+  .ab-ico { width:44px; height:44px; border-radius:13px; display:grid; place-items:center; font-size:1.3rem; margin-bottom:.8rem; background:linear-gradient(135deg,#e3f0ff,#dff7ec); }
+  .ab-tool h4 { margin:0 0 .3rem; font-size:1.02rem; font-weight:800; color:#0a2f6b; }
+  .ab-tool p { margin:0; font-size:.88rem; line-height:1.55; color:#5b6b82; }
+  .ab-steps { display:grid; grid-template-columns:repeat(3,1fr); gap:1.2rem; counter-reset:s; }
+  .ab-step { background:linear-gradient(160deg,#f3f8ff,#fff); border:1px solid #e1e8f2; border-radius:20px; padding:1.5rem 1.6rem; }
+  .ab-step::before { counter-increment:s; content:counter(s); display:grid; place-items:center; width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,#12a860,#0c8f50); color:#fff; font-weight:800; margin-bottom:.8rem; box-shadow:0 6px 14px rgba(12,143,80,.3); }
+  .ab-step h4 { margin:0 0 .4rem; font-size:1.05rem; font-weight:800; color:#0a2f6b; }
+  .ab-step p { margin:0; font-size:.92rem; line-height:1.6; color:#4a5a72; }
+  .ab-data p { color:#4a5a72; line-height:1.7; margin:0 0 .8rem; }
+  .ab-faq { display:grid; grid-template-columns:1fr 1fr; gap:1.2rem; }
+  .ab-callout { background:#eef7f1; border:1px solid #cfe9d9; border-radius:14px; padding:.9rem 1.1rem; color:#2e5d44; font-size:.92rem; line-height:1.6; margin-top:1rem; }
+  .ab-contact { margin-top:3rem; border-radius:24px; padding:2.2rem 2.2rem; color:#fff; background:radial-gradient(500px 240px at 100% 0%, rgba(66,224,160,.3), transparent 60%), linear-gradient(135deg,#0a2f6b,#145fc4); box-shadow:0 22px 50px rgba(10,47,107,.25); }
+  .ab-contact h2 { margin:0 0 .6rem; font-size:1.6rem; font-weight:800; letter-spacing:-.02em; }
+  .ab-contact p { margin:0 0 .7rem; color:rgba(255,255,255,.88); line-height:1.65; max-width:760px; }
+  .ab-contact a { color:#8ff0c4; font-weight:700; }
+  @media (min-width:1000px){ .ab-tools{grid-template-columns:repeat(5,1fr)} .ab-tool{padding:1.1rem 1.1rem} }
+  @media (max-width:820px){ .ab-two,.ab-faq,.ab-steps{grid-template-columns:1fr} .ab-stats{grid-template-columns:1fr} .ab-stat+.ab-stat{border-left:0;border-top:1px solid #e8eef7} .ab-hero{padding:2.4rem 1.25rem 5.5rem} .ab-wrap{padding:0 1.1rem 2.5rem} .ab-contact{padding:1.6rem 1.3rem} }
+</style>
+{% endblock %}
 {% block content %}
-<main class="main" style="max-width:720px">
-  <div style="margin-bottom:2rem">
-    <h1 style="font-size:2rem;font-weight:700;color:var(--blue-dark);margin-bottom:.5rem">About PlanFind</h1>
-    <p style="font-size:1.05rem;color:var(--muted)">Planning Application Search Made Easy</p>
+<section class="ab-hero">
+  <div class="ab-hero-inner">
+    <span class="ab-eyebrow">About PlanFind</span>
+    <h1>Planning applications, <em>made easy</em> to find.</h1>
+    <p>A free service that helps homeowners, landlords and local residents see what's being built near them — before the consultation window closes.</p>
   </div>
-  <div class="about-card">
-    <h2>What is PlanFind?</h2>
-    <p>PlanFind is a free service that helps homeowners, landlords and local residents stay informed about planning applications submitted near their property.</p>
-    <p>We collect planning application data directly from council planning registers across England, Scotland, Wales and Northern Ireland, making it easy to search by postcode and set up email alerts for your local area.</p>
+</section>
+
+<div class="ab-wrap">
+  <div class="ab-stats">
+    <div class="ab-stat"><b>{{ council_count|default(0) }}+</b><span>Councils covered</span></div>
+    <div class="ab-stat"><b>{{ "{:,}".format(app_count|default(0)) }}+</b><span>Applications tracked</span></div>
+    <div class="ab-stat"><b>Nightly</b><span>Register checks</span></div>
   </div>
-  <div class="about-card">
-    <h2>Why did we build it?</h2>
-    <p>Finding out about planning applications near your home is surprisingly difficult. Councils publish the information, but it's buried in hard-to-navigate portals — and by the time you get a neighbour's letter, the consultation window may already be closing.</p>
-    <p>PlanFind fixes that. Search your postcode, see what's been submitted nearby, and get notified the moment something new appears.</p>
+
+  <div class="ab-two">
+    <div class="ab-card ab-card--accent">
+      <h3>What is PlanFind?</h3>
+      <p>PlanFind collects planning application data directly from council planning registers across England, Scotland, Wales and Northern Ireland, so you can search by postcode and set up email alerts for your local area.</p>
+      <p>It's free, independent, and needs no account to search.</p>
+    </div>
+    <div class="ab-card ab-card--blue">
+      <h3>Why we built it</h3>
+      <p>Finding out about planning applications near your home is surprisingly difficult. Councils publish the information, but it's buried in hard-to-navigate portals — and by the time a neighbour's letter arrives, the consultation window may already be closing.</p>
+      <p>PlanFind fixes that: search your postcode, see what's been submitted nearby, and get notified the moment something new appears.</p>
+    </div>
   </div>
-  <div class="about-card">
-    <h2>What else can I do on PlanFind?</h2>
-    <p>Beyond postcode search and alerts, a few other tools worth knowing about:</p>
-    <ul style="margin:.75rem 0 .75rem 1.25rem;color:var(--muted);font-size:.92rem;line-height:1.9">
-      <li><strong><a href="/activity">Today's Activity</a></strong> — a live look at what's happened just today: new applications submitted, decisions made, appeals lodged.</li>
-      <li><strong><a href="/trends">Trends</a></strong> — see which councils approve or refuse planning applications at the highest rates, based on real decided outcomes.</li>
-      <li><strong><a href="/street-history">Street History</a></strong> — search any street or road to see its full planning history: every extension, conversion or new build ever submitted there.</li>
-      <li><strong><a href="/bulk-search">Bulk Search</a></strong> — paste up to 50 postcodes at once and get results for all of them together, useful if you're checking several properties — agents, surveyors and other professionals use this most.</li>
-      <li><strong><a href="/large-sites">Large Sites</a></strong>, <strong><a href="/farm-diversification">Farm Diversification</a></strong> and <strong><a href="/commercial-conversion">Commercial Conversion</a></strong> — filtered views for major developments, agricultural land being converted to other uses, and commercial-to-residential (or similar) conversions specifically.</li>
-      <li><strong><a href="/guides">Guides</a></strong> — practical, plain-English guides covering planning permission basics, farm diversification, commercial conversions and large developments.</li>
-      <li><strong><a href="/find-a-professional">Find a Professional</a></strong> — a directory of planning consultants, architects and agents if you need help preparing or navigating an application yourself.</li>
-      <li><strong><a href="/biodiversity-gain-sites">Biodiversity Gain Sites</a></strong> — registered sites delivering the habitat improvements required under Biodiversity Net Gain rules, sourced directly from the official government register. Shows real, registered activity by council — but not prices, availability, or landowner contact details, so treat it as a starting point for research rather than a complete answer.</li>
-    </ul>
-  </div>
-  <div class="about-card">
-    <h2>Where does the data come from?</h2>
-    <p>We connect directly to each council's own online planning register — the same public system your council already publishes applications through — and check it on a regular schedule so new applications show up here without you needing to visit dozens of different council websites yourself.</p>
-    <p>Most areas are checked nightly. A small number of sources are checked slightly less often, based on how each individual council's system responds to automated requests — we'd rather check a source reliably every few days than risk it becoming unavailable by checking too aggressively.</p>
-    <p>Where a council doesn't yet publish through a format we can connect to directly, we also draw on <a href="https://www.planning.data.gov.uk" target="_blank" rel="noopener">planning.data.gov.uk</a>, the government's national planning data platform, and, for biodiversity gain sites specifically, the Defra / Natural England Biodiversity Gain Sites Register. All data is used under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open Government Licence v3.0</a>.</p>
-  </div>
-  <div class="about-card">
-    <h2>Current coverage</h2>
-    <p>We currently cover {{ council_count|default(0) }}+ councils across England, Scotland, Wales and Northern Ireland — from major cities to coastal towns and rural districts — with new councils added regularly. That's {{ "{:,}".format(app_count|default(0)) }}+ planning applications tracked so far. You can see the full, up-to-date list, including which areas are live right now, on our <a href="/councils">councils page</a>.</p>
-    <p>If your council isn't covered yet, you can join the waitlist on that same page and we'll notify you as soon as it's added.</p>
-    <p>We'd also rather be upfront than quietly let something go stale: if a council that was working stops returning new data, our <a href="/coverage-gaps">Coverage Gaps</a> page names exactly which one, and since when — rather than leaving you to notice the silence yourself.</p>
-  </div>
-  <div class="about-card">
-    <h2>Is it really free?</h2>
-    <p>Yes — searching and basic weekly email alerts are completely free. No account needed to search. Just enter your postcode and go.</p>
-    <p>We plan to introduce optional paid tiers for instant alerts and wider radius searches in the future, but the core service will always be free.</p>
-  </div>
-  <div class="about-card">
-    <h2>How do I object to a planning application?</h2>
-    <p>Every application on PlanFind links directly to the council's planning portal where you can view the full documents and submit a formal comment or objection. Consultation windows typically run around 21 days from validation, though the exact period varies by council, application type, and nation — always check the specific dates shown on the council's own page for that application.</p>
-  </div>
-  <div class="about-card" id="contact">
-    <h2>Contact</h2>
+
+  <section class="ab-section">
+    <h2>What else can you do here?</h2>
+    <p class="ab-lead">Beyond postcode search and alerts, a few tools worth knowing about.</p>
+    <div class="ab-tools">
+      <a class="ab-tool" href="/activity"><div class="ab-ico">⚡</div><h4>Today's Activity</h4><p>A live look at what's happened today: new applications, decisions made, appeals lodged.</p></a>
+      <a class="ab-tool" href="/trends"><div class="ab-ico">📈</div><h4>Trends</h4><p>Which councils approve or refuse at the highest rates, based on real decided outcomes.</p></a>
+      <a class="ab-tool" href="/street-history"><div class="ab-ico">🏘️</div><h4>Street History</h4><p>Any street's full planning history: every extension, conversion or new build ever submitted.</p></a>
+      <a class="ab-tool" href="/bulk-search"><div class="ab-ico">🗂️</div><h4>Bulk Search</h4><p>Paste up to 50 postcodes at once — favoured by agents, surveyors and other professionals.</p></a>
+      <a class="ab-tool" href="/large-sites"><div class="ab-ico">🏗️</div><h4>Large Sites</h4><p>Filtered view of major developments across the country.</p></a>
+      <a class="ab-tool" href="/farm-diversification"><div class="ab-ico">🌾</div><h4>Farm Diversification</h4><p>Agricultural land and buildings being converted to other uses.</p></a>
+      <a class="ab-tool" href="/commercial-conversion"><div class="ab-ico">🏬</div><h4>Commercial Conversion</h4><p>Commercial-to-residential and similar conversions, including prior approvals.</p></a>
+      <a class="ab-tool" href="/guides"><div class="ab-ico">📘</div><h4>Guides</h4><p>Plain-English guides on permission basics, farm diversification, conversions and large developments.</p></a>
+      <a class="ab-tool" href="/find-a-professional"><div class="ab-ico">👷</div><h4>Find a Professional</h4><p>A directory of architects and tradespeople if you need help with an application.</p></a>
+      <a class="ab-tool" href="/biodiversity-gain-sites"><div class="ab-ico">🌿</div><h4>Biodiversity Gain Sites</h4><p>Registered habitat-improvement sites from the official government register. A starting point for research — no prices or landowner contact details.</p></a>
+    </div>
+  </section>
+
+  <section class="ab-section">
+    <h2>How it works</h2>
+    <p class="ab-lead">Three steps from postcode to peace of mind.</p>
+    <div class="ab-steps">
+      <div class="ab-step"><h4>Search your postcode</h4><p>See what's been submitted nearby, with status, description and a link to the council's own page.</p></div>
+      <div class="ab-step"><h4>Set up an alert</h4><p>Get a free weekly email when something new appears near you.</p></div>
+      <div class="ab-step"><h4>Comment or object</h4><p>Every application links straight to the council portal to read the documents and respond.</p></div>
+    </div>
+  </section>
+
+  <section class="ab-section">
+    <div class="ab-card ab-data">
+      <h3>Where does the data come from?</h3>
+      <p>We connect directly to each council's own online planning register — the same public system your council already publishes through — and check it on a regular schedule, so you don't need to visit dozens of council websites yourself.</p>
+      <p>Most areas are checked nightly. A small number of sources are checked slightly less often, based on how each council's system responds to automated requests — we'd rather check reliably every few days than risk a source becoming unavailable by checking too aggressively.</p>
+      <p>Where a council doesn't yet publish in a format we can connect to directly, we also draw on <a href="https://www.planning.data.gov.uk" target="_blank" rel="noopener">planning.data.gov.uk</a>, the government's national planning data platform, and, for biodiversity gain sites, the Defra / Natural England Biodiversity Gain Sites Register. All data is used under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open Government Licence v3.0</a>.</p>
+    </div>
+  </section>
+
+  <section class="ab-section">
+    <h2>Coverage, honestly</h2>
+    <div class="ab-two" style="margin-top:1rem">
+      <div class="ab-card">
+        <h3>Current coverage</h3>
+        <p>We cover {{ council_count|default(0) }}+ councils — from major cities to coastal towns and rural districts — with more added regularly, and {{ "{:,}".format(app_count|default(0)) }}+ applications tracked so far. See the full list, including which areas are live right now, on our <a href="/councils">councils page</a>.</p>
+        <p>If your council isn't covered yet, join the waitlist on that page and we'll tell you when it's added.</p>
+      </div>
+      <div class="ab-card">
+        <h3>No quiet failures</h3>
+        <p>We'd rather be upfront than let something go stale. If a council that was working stops returning new data, our <a href="/coverage-gaps">Coverage Gaps</a> page names exactly which one, and since when — so you never have to notice the silence yourself.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="ab-section">
+    <div class="ab-faq">
+      <div class="ab-card ab-card--accent">
+        <h3>Is it really free?</h3>
+        <p>Yes — searching and basic weekly email alerts are completely free, with no account needed. Just enter your postcode and go.</p>
+        <p>We plan to introduce optional paid tiers for instant alerts and wider-radius searches, but the core service will always be free.</p>
+      </div>
+      <div class="ab-card ab-card--blue">
+        <h3>How do I object to an application?</h3>
+        <p>Every application links directly to the council's planning portal, where you can read the documents and submit a formal comment or objection.</p>
+        <div class="ab-callout">Consultation windows typically run around 21 days from validation, but vary by council, application type and nation — always check the dates on the council's own page.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ab-contact" id="contact">
+    <h2>Get in touch</h2>
     <p>PlanFind is an independent service. We're not affiliated with any council or government body.</p>
-    <p>For data accuracy issues or general enquiries, you can email us at <span id="contact-email"><noscript>planfind [at] gmail [dot] com</noscript></span> or use the feedback link on any search result page.</p>
+    <p>For data accuracy issues or general enquiries, email us at <span id="contact-email"><noscript>planfind [at] gmail [dot] com</noscript></span> or use the feedback link on any search result page.</p>
     <p><strong>Councils and planning teams:</strong> if you'd like to talk about how PlanFind reads your public planning register, including whether you publish a data file or feed we could use instead, please write to the same address.</p>
-  </div>
+  </section>
+</div>
   <script>
     // Builds the mailto link in the browser, so the address isn't sitting in the page
     // source as plain text for scrapers to harvest. Without JavaScript, the <noscript>
@@ -71,5 +167,4 @@
       el.appendChild(a);
     })();
   </script>
-</main>
 {% endblock %}
