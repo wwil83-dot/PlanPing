@@ -155,7 +155,7 @@
   // regardless of result count, so this needs to run every time, not
   // just when there happen to be results.
   (function () {
-    var allTowns = {{ town_names | tojson }};
+    var allTowns = {{ (town_names | default([], true)) | tojson }};
     var input = document.getElementById('town-input');
     var box = document.getElementById('town-suggestions');
     if (!input || !box) return;
