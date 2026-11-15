@@ -1051,3 +1051,17 @@ h1 em { font-style: normal; color: #5FE3A1; background: linear-gradient(90deg, #
 
 .page-hero--guides .page-hero-sub { max-width: 920px; }
 @media (min-width:701px){ .page-hero--guides + .main { margin-top: -2.2rem; position: relative; z-index: 2; } }
+
+/* ---- 2026-11-15: trade-leads call to action (strip under nav, nav pill, hero button) ---- */
+.lead-strip { background: linear-gradient(90deg, #0c8f50 0%, #16b86a 55%, #1fc97a 100%); color: #fff; position: relative; z-index: 3; box-shadow: 0 4px 18px rgba(12,143,80,.28); }
+.lead-strip-in { max-width: 1130px; margin: 0 auto; padding: .7rem 1.5rem; display: flex; align-items: center; justify-content: center; gap: 1rem; flex-wrap: wrap; text-align: center; }
+.lead-strip-badge { background: #fff; color: #0c8f50; font-size: .68rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; padding: .28rem .6rem; border-radius: 999px; }
+.lead-strip-text { font-size: 1.02rem; font-weight: 700; letter-spacing: -.01em; }
+.lead-strip-text span { font-weight: 500; opacity: .95; }
+.lead-strip-btn { background: #fff; color: #0a6e3c; font-weight: 800; font-size: .95rem; text-decoration: none; padding: .5rem 1.15rem; border-radius: 999px; box-shadow: 0 4px 12px rgba(0,0,0,.16); white-space: nowrap; transition: transform .15s, box-shadow .15s; }
+.lead-strip-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(0,0,0,.22); }
+.nav-cta { background: linear-gradient(135deg,#16b86a,#0c8f50); color: #fff !important; padding: .42rem .95rem; border-radius: 999px; font-weight: 700; box-shadow: 0 4px 12px rgba(12,143,80,.28); }
+.nav-cta:hover { filter: brightness(1.06); color: #fff !important; }
+.hero-cta { display: inline-block; margin-top: 1.3rem; background: linear-gradient(135deg,#16b86a,#0c8f50); color: #fff; font-weight: 800; text-decoration: none; padding: .8rem 1.5rem; border-radius: 999px; box-shadow: 0 10px 24px rgba(0,0,0,.25); }
+.hero-cta:hover { filter: brightness(1.07); }
+@media (max-width:700px){ .lead-strip-in { padding: .65rem 1rem; gap: .5rem; } .lead-strip-text { font-size: .95rem; } }
