@@ -44,16 +44,22 @@
   .ab-contact h2 { margin:0 0 .6rem; font-size:1.6rem; font-weight:800; letter-spacing:-.02em; }
   .ab-contact p { margin:0 0 .7rem; color:rgba(255,255,255,.88); line-height:1.65; max-width:760px; }
   .ab-contact a { color:#8ff0c4; font-weight:700; }
-  @media (min-width:1000px){ .ab-tools{grid-template-columns:repeat(5,1fr)} .ab-tool{padding:1.1rem 1.1rem} }
+  @media (min-width:1000px){ .ab-tools{grid-template-columns:repeat(4,1fr)} .ab-tool{padding:1.1rem 1.1rem} }
   @media (max-width:820px){ .ab-two,.ab-faq,.ab-steps{grid-template-columns:1fr} .ab-stats{grid-template-columns:1fr} .ab-stat+.ab-stat{border-left:0;border-top:1px solid #e8eef7} .ab-hero{padding:2.4rem 1.25rem 5.5rem} .ab-wrap{padding:0 1.1rem 2.5rem} .ab-contact{padding:1.6rem 1.3rem} }
 </style>
 {% endblock %}
 {% block content %}
+<div class="lead-strip"><div class="lead-strip-in">
+  <span class="lead-strip-badge">For trades</span>
+  <span class="lead-strip-text">Builder, roofer, architect? <span>See how much work is being planned near you.</span></span>
+  <a class="lead-strip-btn" href="/patch-checker">Check my patch &mdash; free &rarr;</a>
+</div></div>
 <section class="ab-hero">
   <div class="ab-hero-inner">
     <span class="ab-eyebrow">About PlanFind</span>
     <h1>Planning applications, <em>made easy</em> to find.</h1>
     <p>A free service that helps homeowners, landlords and local residents see what's being built near them — before the consultation window closes.</p>
+    <a class="hero-cta" href="/patch-checker">Are you a trade? Check your patch &rarr;</a>
   </div>
 </section>
 
@@ -81,6 +87,7 @@
     <h2>What else can you do here?</h2>
     <p class="ab-lead">Beyond postcode search and alerts, a few tools worth knowing about.</p>
     <div class="ab-tools">
+      <a class="ab-tool" href="/patch-checker" style="border-color:#16b86a;box-shadow:0 8px 24px rgba(22,184,106,.22)"><div class="ab-ico">🔨</div><h4>Leads for Trades <span style="font-size:.62rem;background:#16b86a;color:#fff;padding:.15rem .45rem;border-radius:99px;vertical-align:middle;letter-spacing:.08em">FREE</span></h4><p>See how much work is being planned on your patch, by trade, in the last 30 and 90 days.</p></a>
       <a class="ab-tool" href="/activity"><div class="ab-ico">⚡</div><h4>Today's Activity</h4><p>A live look at what's happened today: new applications, decisions made, appeals lodged.</p></a>
       <a class="ab-tool" href="/trends"><div class="ab-ico">📈</div><h4>Trends</h4><p>Which councils approve or refuse at the highest rates, based on real decided outcomes.</p></a>
       <a class="ab-tool" href="/street-history"><div class="ab-ico">🏘️</div><h4>Street History</h4><p>Any street's full planning history: every extension, conversion or new build ever submitted.</p></a>
