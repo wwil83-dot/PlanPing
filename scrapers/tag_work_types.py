@@ -19,7 +19,16 @@ PAUSE = 0.25
 async def main():
     retag = "--retag" in sys.argv
     limit = next((int(a.split("=")[1]) for a in sys.argv if a.startswith("--limit=")), None)
-    conn = await asyncpg.connect(dsn=os.environ["DATABASE_URL"], ssl="require", statement_cache_size=0)
+    conn = None
+    for attempt in range(1, 16):
+        try:
+            conn = await asyncpg.connect(dsn=os.environ["DATABASE_URL"], ssl="require", statement_cache_size=0)
+            break
+        except Exception as e:
+            print(f"[tag] connect attempt {attempt}/15 failed: {str(e)[:120]} — waiting 60s", flush=True)
+            await asyncio.sleep(60)
+    if conn is None:
+        raise SystemExit("[tag] could not get a database connection after 15 attempts")
     last_id, done, t0 = 0, 0, time.time()
     counts = collections.Counter()
     where = "id > $1" + ("" if retag else " AND work_type IS NULL")
