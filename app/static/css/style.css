@@ -1065,3 +1065,13 @@ h1 em { font-style: normal; color: #5FE3A1; background: linear-gradient(90deg, #
 .hero-cta { display: inline-block; margin-top: 1.3rem; background: linear-gradient(135deg,#16b86a,#0c8f50); color: #fff; font-weight: 800; text-decoration: none; padding: .8rem 1.5rem; border-radius: 999px; box-shadow: 0 10px 24px rgba(0,0,0,.25); }
 .hero-cta:hover { filter: brightness(1.07); }
 @media (max-width:700px){ .lead-strip-in { padding: .65rem 1rem; gap: .5rem; } .lead-strip-text { font-size: .95rem; } }
+
+/* ---- 2026-11-15 (b): hero pictures for coverage, coverage gaps, trends, bulk search ---- */
+.page-hero--coverage .page-hero-art, .page-hero--gaps .page-hero-art { background-image: url(/static/img/coverage-hero.webp); }
+.page-hero--trends .page-hero-art { background-image: url(/static/img/trends-hero.webp); -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14%); mask-image: linear-gradient(180deg, transparent 0, #000 14%); }
+.page-hero--bulk .page-hero-art { background-image: url(/static/img/bulk-hero.webp); }
+.page-hero--trends { min-height: calc(var(--art-h) + 120px); }
+.page-hero--gaps { min-height: calc(var(--art-h) + 185px); }
+.page-hero--gaps .page-hero-sub { max-width: 780px; }
+.page-hero--trends .page-hero-sub { max-width: 640px; }
+@media (max-width:700px){ .page-hero--gaps, .page-hero--trends { min-height: 0; padding-bottom: 240px; } }
