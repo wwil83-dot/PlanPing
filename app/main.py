@@ -829,6 +829,7 @@ _TRENDS_CACHE_TTL = timedelta(hours=1)
 
 # Work types that are real building work (admin, trees, adverts, blank and "other" are left out of the trends).
 _TREND_EXCLUDE = ["admin", "unknown", "other", "trees", "signage"]
+_TREND_NICHE_TAGS = ["large_site", "farm_diversification", "commercial_conversion"]
 _TREND_LEADER_TYPES = ["new_dwelling", "loft_conversion", "rear_extension", "solar"]
 
 
@@ -897,17 +898,17 @@ async def trends(request: Request):
         # 4) Decision speed: median days from submission to decision, last 12 months
         speed_rows = await db.fetch("""
             SELECT c.name, c.slug, COUNT(*) AS n,
-                   percentile_cont(0.5) WITHIN GROUP (ORDER BY (pa.decision_date - pa.submitted_date)) AS median_days
+                   percentile_cont(0.5) WITHIN GROUP (ORDER BY (pa.decision_date::date - pa.submitted_date::date)) AS median_days
             FROM planning_applications pa
             JOIN councils c ON c.id = pa.council_id
             WHERE pa.status IN ('approved', 'refused')
               AND pa.decision_date IS NOT NULL AND pa.submitted_date IS NOT NULL
               AND pa.decision_date >= CURRENT_DATE - INTERVAL '365 days'
               AND pa.decision_date >= pa.submitted_date
-              AND (pa.decision_date - pa.submitted_date) <= 730
+              AND (pa.decision_date::date - pa.submitted_date::date) <= 730
             GROUP BY c.id, c.name, c.slug
             HAVING COUNT(*) >= 30
-               AND percentile_cont(0.5) WITHIN GROUP (ORDER BY (pa.decision_date - pa.submitted_date)) >= 3
+               AND percentile_cont(0.5) WITHIN GROUP (ORDER BY (pa.decision_date::date - pa.submitted_date::date)) >= 3
         """)
         speed_list = [{"name": r["name"], "slug": r["slug"], "n": r["n"], "median": round(float(r["median_days"]))}
                       for r in speed_rows]
@@ -946,8 +947,30 @@ async def trends(request: Request):
               AND COALESCE(pa.decision_date, pa.submitted_date) >= CURRENT_DATE - INTERVAL '365 days'
             GROUP BY c.id, c.name, c.slug
             HAVING COUNT(*) >= 50
+               AND COUNT(*) FILTER (WHERE pa.status = 'refused') * 100.0 / COUNT(*) >= 3
             ORDER BY approval_rate_pct DESC
         """)
+
+        # 7) Specialist niches (tagged applications, last 12 months): councils with the most
+        niche_leaders = {}
+        for tag in _TREND_NICHE_TAGS:
+            rows = await db.fetch("""
+                SELECT c.name, c.slug, COUNT(*) AS n
+                FROM planning_applications pa
+                JOIN councils c ON c.id = pa.council_id
+                WHERE pa.tags @> ARRAY[$1]::text[]
+                  AND pa.submitted_date >= CURRENT_DATE - INTERVAL '365 days'
+                GROUP BY c.id, c.name, c.slug
+                ORDER BY n DESC
+                LIMIT 5
+            """, tag)
+            niche_leaders[tag] = [dict(r) for r in rows]
+
+    approval_all = [dict(r) for r in approval_rows]
+    approval_top = approval_all[:15]
+    approval_bottom = approval_all[-15:] if len(approval_all) > 30 else []
+    if len(approval_all) <= 30:
+        approval_top = approval_all
 
     ctx = {
         "most_active": [dict(r) for r in most_active_rows],
@@ -957,7 +980,13 @@ async def trends(request: Request):
         "speed_fast": speed_fast,
         "speed_slow": speed_slow,
         "approval_by_type": approval_by_type,
-        "councils_ranked": [dict(r) for r in approval_rows],
+        "approval_top": approval_top,
+        "approval_bottom": approval_bottom,
+        "approval_total": len(approval_all),
+        "niche_leaders": niche_leaders,
+        "niche_labels": {t: TAG_META[t]["title"] for t in _TREND_NICHE_TAGS},
+        "niche_links": {"large_site": "/large-sites", "farm_diversification": "/farm-diversification",
+                        "commercial_conversion": "/commercial-conversion"},
     }
     _TRENDS_CACHE["ctx"] = ctx
     _TRENDS_CACHE["at"] = now
