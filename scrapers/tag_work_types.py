@@ -43,7 +43,7 @@ async def main():
             wt = classify(r["description"], r["application_type"])
             ids.append(r["id"]); tags.append(wt); counts[wt] += 1
         await conn.execute(
-            "UPDATE planning_applications p SET work_type = v.wt FROM unnest($1::int[], $2::text[]) AS v(id, wt) WHERE p.id = v.id",
+            "UPDATE planning_applications p SET work_type = v.wt FROM unnest($1::int[], $2::text[]) AS v(id, wt) WHERE p.id = v.id AND p.work_type IS DISTINCT FROM v.wt",
             ids, tags)
         last_id = rows[-1]["id"]
         done += len(rows)
