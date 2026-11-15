@@ -1075,3 +1075,12 @@ h1 em { font-style: normal; color: #5FE3A1; background: linear-gradient(90deg, #
 .page-hero--gaps .page-hero-sub { max-width: 780px; }
 .page-hero--trends .page-hero-sub { max-width: 640px; }
 @media (max-width:700px){ .page-hero--gaps, .page-hero--trends { min-height: 0; padding-bottom: 240px; } }
+
+/* ---- 2026-11-15 (c): pull page content up onto the lower part of the hero picture ---- */
+@media (min-width:701px){
+  .page-hero--short:not(.page-hero--tools):not(.page-hero--guides) + .main { margin-top: -4.8rem; position: relative; z-index: 2; }
+  .page-hero--short:not(.page-hero--tools) + .main > h2:first-child,
+  .page-hero--short:not(.page-hero--tools) + .main > div:first-child > h2:first-child { text-shadow: 0 1px 0 rgba(255,255,255,.9), 0 0 14px rgba(255,255,255,.95); }
+  .page-hero--bulk + .main { margin-top: -10rem; }
+  .page-hero--bulk + .main .bulk-card { margin-top: 0 !important; }
+}
