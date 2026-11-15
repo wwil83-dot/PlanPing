@@ -17,9 +17,11 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.db import get_db, lifespan
 from app.geocode import postcode_lookup
+from app.leads import router as leads_router  # trade-leads: /patch-checker (added 2026-11-15)
 
 app = FastAPI(lifespan=lifespan, title="PlanPing")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.include_router(leads_router)
 
 # ---------------------------------------------------------------------
 # Bandwidth protection — ADDED 2026-10-17. Render's request log showed
