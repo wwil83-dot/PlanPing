@@ -17,6 +17,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.db import get_db, lifespan
 from app.geocode import postcode_lookup
+from app.worktype import WORK_TYPES  # trends: work-type labels
 from app.leads import router as leads_router  # trade-leads: /patch-checker (added 2026-11-15)
 
 app = FastAPI(lifespan=lifespan, title="PlanPing")
@@ -823,28 +824,23 @@ async def bng_sites_index(request: Request):
         "last_scraped": last_scraped,
     })
 
+_TRENDS_CACHE: dict = {"ctx": None, "at": None}
+_TRENDS_CACHE_TTL = timedelta(hours=1)
+
+# Work types that are real building work (admin, trees, adverts, blank and "other" are left out of the trends).
+_TREND_EXCLUDE = ["admin", "unknown", "other", "trees", "signage"]
+_TREND_LEADER_TYPES = ["new_dwelling", "loft_conversion", "rear_extension", "solar"]
+
+
 @app.get("/trends", response_class=HTMLResponse)
 async def trends(request: Request):
-    async with get_db() as db:
-        approval_rows = await db.fetch("""
-            SELECT
-                c.name,
-                c.slug,
-                COUNT(*) FILTER (WHERE pa.status IN ('approved', 'refused')) AS decided_count,
-                COUNT(*) FILTER (WHERE pa.status = 'approved') AS approved_count,
-                COUNT(*) FILTER (WHERE pa.status = 'refused') AS refused_count,
-                ROUND(
-                    100.0 * COUNT(*) FILTER (WHERE pa.status = 'approved')
-                    / NULLIF(COUNT(*) FILTER (WHERE pa.status IN ('approved', 'refused')), 0),
-                    1
-                ) AS approval_rate_pct
-            FROM councils c
-            JOIN planning_applications pa ON pa.council_id = c.id
-            GROUP BY c.id, c.name, c.slug
-            HAVING COUNT(*) FILTER (WHERE pa.status IN ('approved', 'refused')) >= 10
-            ORDER BY approval_rate_pct DESC
-        """)
+    now = datetime.now(timezone.utc)
+    if (_TRENDS_CACHE["ctx"] is not None and _TRENDS_CACHE["at"] is not None
+            and now - _TRENDS_CACHE["at"] < _TRENDS_CACHE_TTL):
+        return render("trends.html", {"request": request, **_TRENDS_CACHE["ctx"]})
 
+    async with get_db() as db:
+        # 1) Most active councils (collected applications, last 30 days)
         most_active_rows = await db.fetch("""
             SELECT c.name, c.slug, COUNT(*) AS recent_count
             FROM planning_applications pa
@@ -855,86 +851,117 @@ async def trends(request: Request):
             LIMIT 10
         """)
 
-        niche_leaders = {}
-        for tag_key in ("farm_diversification", "commercial_conversion", "large_site"):
-            rows = await db.fetch("""
-                SELECT
-                    c.name, c.slug,
-                    COUNT(*) FILTER (WHERE pa.tags @> ARRAY[$1]::text[]) AS tag_count,
-                    COUNT(*) AS total_count,
-                    ROUND(
-                        100.0 * COUNT(*) FILTER (WHERE pa.tags @> ARRAY[$1]::text[])
-                        / NULLIF(COUNT(*), 0),
-                        1
-                    ) AS tag_pct
-                FROM planning_applications pa
-                JOIN councils c ON c.id = pa.council_id
-                WHERE pa.submitted_date >= CURRENT_DATE - INTERVAL '90 days'
-                GROUP BY c.id, c.name, c.slug
-                HAVING COUNT(*) FILTER (WHERE pa.tags @> ARRAY[$1]::text[]) >= 3
-                ORDER BY tag_pct DESC
-                LIMIT 5
-            """, tag_key)
-            niche_leaders[tag_key] = [dict(r) for r in rows]
-
-        type_rows = await db.fetch("""
-            SELECT application_type, reference
+        # 2) National mix of real building work, last 90 days
+        mix_rows = await db.fetch("""
+            SELECT work_type, COUNT(*) AS n
             FROM planning_applications
             WHERE submitted_date >= CURRENT_DATE - INTERVAL '90 days'
-        """)
-        type_counts: dict[str, int] = {}
-        for r in type_rows:
-            badge = _type_badge(r["application_type"] or "", r["reference"] or "")
-            type_counts[badge] = type_counts.get(badge, 0) + 1
-        total_typed = sum(type_counts.values())
-        type_mix = sorted(
-            [
-                {"badge": k, "count": v, "pct": round(100 * v / total_typed, 1) if total_typed else 0}
-                for k, v in type_counts.items()
-            ],
-            key=lambda x: x["count"], reverse=True,
-        )
+              AND work_type IS NOT NULL
+              AND NOT (work_type = ANY($1::text[]))
+            GROUP BY work_type
+            ORDER BY n DESC
+        """, _TREND_EXCLUDE)
+        mix_total = sum(r["n"] for r in mix_rows)
+        work_mix = [
+            {"key": r["work_type"], "label": WORK_TYPES.get(r["work_type"], r["work_type"]),
+             "count": r["n"], "pct": round(100 * r["n"] / mix_total, 1) if mix_total else 0}
+            for r in mix_rows
+        ]
 
-        growth_rows = await db.fetch("""
-            SELECT
-                c.name, c.slug,
-                COUNT(*) FILTER (WHERE pa.submitted_date >= CURRENT_DATE - INTERVAL '30 days') AS recent_count,
-                COUNT(*) FILTER (WHERE pa.submitted_date >= CURRENT_DATE - INTERVAL '60 days'
-                                  AND pa.submitted_date < CURRENT_DATE - INTERVAL '30 days') AS prior_count
+        # 3) Where each type of work is most common (share of a council's own applications)
+        lead_rows = await db.fetch("""
+            SELECT c.name, c.slug,
+                   COUNT(*) AS total_count,
+                   COUNT(*) FILTER (WHERE pa.work_type = 'new_dwelling')   AS new_dwelling,
+                   COUNT(*) FILTER (WHERE pa.work_type = 'loft_conversion') AS loft_conversion,
+                   COUNT(*) FILTER (WHERE pa.work_type = 'rear_extension') AS rear_extension,
+                   COUNT(*) FILTER (WHERE pa.work_type = 'solar')          AS solar
             FROM planning_applications pa
             JOIN councils c ON c.id = pa.council_id
-            WHERE pa.submitted_date >= CURRENT_DATE - INTERVAL '60 days'
+            WHERE pa.submitted_date >= CURRENT_DATE - INTERVAL '90 days'
+              AND pa.work_type IS NOT NULL
+              AND pa.work_type <> 'unknown'
             GROUP BY c.id, c.name, c.slug
-            HAVING COUNT(*) FILTER (WHERE pa.submitted_date >= CURRENT_DATE - INTERVAL '60 days'
-                                      AND pa.submitted_date < CURRENT_DATE - INTERVAL '30 days') >= 5
+            HAVING COUNT(*) >= 50
         """)
-        growth_list = []
-        for r in growth_rows:
-            pct_change = round(100 * (r["recent_count"] - r["prior_count"]) / r["prior_count"], 1)
-            growth_list.append({
-                "name": r["name"], "slug": r["slug"],
-                "recent_count": r["recent_count"], "prior_count": r["prior_count"],
-                "pct_change": pct_change,
-            })
-        growth_list.sort(key=lambda x: x["pct_change"], reverse=True)
-        growth_top = growth_list[:10]
+        type_leaders = {}
+        for key in _TREND_LEADER_TYPES:
+            ranked = [
+                {"name": r["name"], "slug": r["slug"], "count": r[key], "total": r["total_count"],
+                 "pct": round(100.0 * r[key] / r["total_count"], 1)}
+                for r in lead_rows if r[key] >= 5
+            ]
+            ranked.sort(key=lambda x: x["pct"], reverse=True)
+            type_leaders[key] = ranked[:5]
 
-    councils_ranked = [dict(r) for r in approval_rows]
+        # 4) Decision speed: median days from submission to decision, last 12 months
+        speed_rows = await db.fetch("""
+            SELECT c.name, c.slug, COUNT(*) AS n,
+                   percentile_cont(0.5) WITHIN GROUP (ORDER BY (pa.decision_date - pa.submitted_date)) AS median_days
+            FROM planning_applications pa
+            JOIN councils c ON c.id = pa.council_id
+            WHERE pa.status IN ('approved', 'refused')
+              AND pa.decision_date IS NOT NULL AND pa.submitted_date IS NOT NULL
+              AND pa.decision_date >= CURRENT_DATE - INTERVAL '365 days'
+              AND pa.decision_date >= pa.submitted_date
+              AND (pa.decision_date - pa.submitted_date) <= 730
+            GROUP BY c.id, c.name, c.slug
+            HAVING COUNT(*) >= 30
+               AND percentile_cont(0.5) WITHIN GROUP (ORDER BY (pa.decision_date - pa.submitted_date)) >= 3
+        """)
+        speed_list = [{"name": r["name"], "slug": r["slug"], "n": r["n"], "median": round(float(r["median_days"]))}
+                      for r in speed_rows]
+        speed_list.sort(key=lambda x: x["median"])
+        speed_fast = speed_list[:8]
+        speed_slow = list(reversed(speed_list[-8:])) if len(speed_list) > 8 else []
 
-    return render("trends.html", {
-        "request": request,
-        "councils_ranked": councils_ranked,
-        "total_councils": len(councils_ranked),
+        # 5) Approval rate by type of work, decisions in the last 12 months
+        appr_type_rows = await db.fetch("""
+            SELECT work_type,
+                   COUNT(*) AS decided,
+                   COUNT(*) FILTER (WHERE status = 'approved') AS approved
+            FROM planning_applications
+            WHERE status IN ('approved', 'refused')
+              AND COALESCE(decision_date, submitted_date) >= CURRENT_DATE - INTERVAL '365 days'
+              AND work_type IS NOT NULL
+              AND NOT (work_type = ANY($1::text[]))
+            GROUP BY work_type
+            HAVING COUNT(*) >= 200
+            ORDER BY 100.0 * COUNT(*) FILTER (WHERE status = 'approved') / COUNT(*) DESC
+        """, _TREND_EXCLUDE)
+        approval_by_type = [
+            {"label": WORK_TYPES.get(r["work_type"], r["work_type"]), "decided": r["decided"],
+             "pct": round(100.0 * r["approved"] / r["decided"], 1)}
+            for r in appr_type_rows
+        ]
+
+        # 6) Approval rate by council (kept, now last 12 months and a higher minimum)
+        approval_rows = await db.fetch("""
+            SELECT c.name, c.slug,
+                   COUNT(*) AS decided_count,
+                   ROUND(100.0 * COUNT(*) FILTER (WHERE pa.status = 'approved') / COUNT(*), 1) AS approval_rate_pct
+            FROM councils c
+            JOIN planning_applications pa ON pa.council_id = c.id
+            WHERE pa.status IN ('approved', 'refused')
+              AND COALESCE(pa.decision_date, pa.submitted_date) >= CURRENT_DATE - INTERVAL '365 days'
+            GROUP BY c.id, c.name, c.slug
+            HAVING COUNT(*) >= 50
+            ORDER BY approval_rate_pct DESC
+        """)
+
+    ctx = {
         "most_active": [dict(r) for r in most_active_rows],
-        "niche_leaders": niche_leaders,
-        "niche_labels": {
-            "farm_diversification": "Farm Diversification",
-            "commercial_conversion": "Commercial Conversion",
-            "large_site": "Large Sites",
-        },
-        "type_mix": type_mix,
-        "growth_top": growth_top,
-    })
+        "work_mix": work_mix,
+        "type_leaders": type_leaders,
+        "leader_labels": {k: WORK_TYPES[k] for k in _TREND_LEADER_TYPES},
+        "speed_fast": speed_fast,
+        "speed_slow": speed_slow,
+        "approval_by_type": approval_by_type,
+        "councils_ranked": [dict(r) for r in approval_rows],
+    }
+    _TRENDS_CACHE["ctx"] = ctx
+    _TRENDS_CACHE["at"] = now
+    return render("trends.html", {"request": request, **ctx})
 
 
 async def _render_tag_page(request: Request, tag: str, status: Optional[str],
