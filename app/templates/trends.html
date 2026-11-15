@@ -71,6 +71,27 @@
     <p style="margin-top:1rem;font-size:.88rem"><a href="/patch-checker" style="font-weight:700">Work in the trade? Check how much of this is on your patch &rarr;</a></p>
   </div>
 
+  <!-- Specialist niches -->
+  <div style="margin-bottom:2.5rem">
+    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Large Sites, Farm &amp; Commercial Conversions</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Councils with the most applications in each specialist category over the last 12 months.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem">
+      {% for key, label in niche_labels.items() %}
+      <div class="guide-stat-panel cat-getting_started" style="display:block">
+        <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.6rem">{{ label }}</h3>
+        {% for c in niche_leaders[key] %}
+        <a href="/council/{{ c.slug }}" style="display:flex;justify-content:space-between;padding:.35rem 0;text-decoration:none;color:inherit;font-size:.85rem;border-bottom:1px solid rgba(0,0,0,.06)">
+          <span>{{ loop.index }}. {{ c.name }}</span><strong>{{ c.n }}</strong>
+        </a>
+        {% else %}
+        <p style="font-size:.8rem;color:var(--muted)">Not enough data yet.</p>
+        {% endfor %}
+        <a href="{{ niche_links[key] }}" style="display:inline-block;margin-top:.6rem;font-size:.8rem;font-weight:600">Browse all &rarr;</a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
   <!-- Decision speed -->
   {% if speed_fast %}
   <div style="margin-bottom:2.5rem">
@@ -81,7 +102,7 @@
         <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.6rem">Fastest</h3>
         {% for c in speed_fast %}
         <a href="/council/{{ c.slug }}" style="display:flex;justify-content:space-between;padding:.35rem 0;text-decoration:none;color:inherit;font-size:.85rem;border-bottom:1px solid rgba(0,0,0,.06)">
-          <span>{{ loop.index }}. {{ c.name }}</span><strong>{{ c.median }} days</strong>
+          <span>{{ loop.index }}. {{ c.name }}</span><span><strong>{{ c.median }} days</strong> <span style="color:var(--muted);font-size:.75rem">({{ c.n }} decisions)</span></span>
         </a>
         {% endfor %}
       </div>
@@ -90,7 +111,7 @@
         <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.6rem">Slowest</h3>
         {% for c in speed_slow %}
         <a href="/council/{{ c.slug }}" style="display:flex;justify-content:space-between;padding:.35rem 0;text-decoration:none;color:inherit;font-size:.85rem;border-bottom:1px solid rgba(0,0,0,.06)">
-          <span>{{ loop.index }}. {{ c.name }}</span><strong>{{ c.median }} days</strong>
+          <span>{{ loop.index }}. {{ c.name }}</span><span><strong>{{ c.median }} days</strong> <span style="color:var(--muted);font-size:.75rem">({{ c.n }} decisions)</span></span>
         </a>
         {% endfor %}
       </div>
@@ -124,20 +145,17 @@
   <div>
     <h2 style="font-size:1.05rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Approval Rates by Council</h2>
     <p style="font-size:.8rem;color:var(--muted);margin-bottom:1rem">
-      Decisions made in the last 12 months. Only councils where PlanFind has recorded at least 50 approved or refused
-      outcomes are shown, so some councils are missing while we build up their decision history.
+      Decisions made in the last 12 months. Only councils with at least 50 approved or refused outcomes and a plausible
+      refusal record are shown ({{ approval_total }} councils qualify), so some councils are missing while we build up their decision history.
     </p>
+    <h3 style="font-size:.9rem;margin:.5rem 0">Highest approval rates</h3>
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:8px;font-size:.85rem">
-        <thead>
-          <tr style="border-bottom:1px solid var(--border);text-align:left">
-            <th style="padding:.6rem .8rem">Council</th>
-            <th style="padding:.6rem .8rem">Approval Rate</th>
-            <th style="padding:.6rem .8rem">Decided</th>
-          </tr>
-        </thead>
+        <thead><tr style="border-bottom:1px solid var(--border);text-align:left">
+          <th style="padding:.6rem .8rem">Council</th><th style="padding:.6rem .8rem">Approval Rate</th><th style="padding:.6rem .8rem">Decided</th>
+        </tr></thead>
         <tbody>
-          {% for c in councils_ranked %}
+          {% for c in approval_top %}
           <tr style="border-bottom:1px solid var(--border)">
             <td style="padding:.6rem .8rem"><a href="/council/{{ c.slug }}">{{ c.name }}</a></td>
             <td style="padding:.6rem .8rem;font-weight:600">{{ c.approval_rate_pct }}%</td>
@@ -147,6 +165,25 @@
         </tbody>
       </table>
     </div>
+    {% if approval_bottom %}
+    <h3 style="font-size:.9rem;margin:1.5rem 0 .5rem">Lowest approval rates</h3>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:8px;font-size:.85rem">
+        <thead><tr style="border-bottom:1px solid var(--border);text-align:left">
+          <th style="padding:.6rem .8rem">Council</th><th style="padding:.6rem .8rem">Approval Rate</th><th style="padding:.6rem .8rem">Decided</th>
+        </tr></thead>
+        <tbody>
+          {% for c in approval_bottom %}
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:.6rem .8rem"><a href="/council/{{ c.slug }}">{{ c.name }}</a></td>
+            <td style="padding:.6rem .8rem;font-weight:600">{{ c.approval_rate_pct }}%</td>
+            <td style="padding:.6rem .8rem;color:var(--muted)">{{ c.decided_count }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
   </div>
 
 </main>
