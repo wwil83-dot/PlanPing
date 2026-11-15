@@ -1,18 +1,21 @@
 {% extends "base.html" %}
 {% block title %}Coverage — PlanFind{% endblock %}
 {% block content %}
-<main class="main">
-  <div style="margin-bottom:1.75rem">
-    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Coverage</h1>
-    <p style="color:var(--muted)">We currently have live data for {{ covered_count }} council{{ 's' if covered_count != 1 }}. More being added regularly.</p>
+<section class="page-hero page-hero--coverage page-hero--short">
+  <div class="page-hero-art" aria-hidden="true"></div>
+  <div class="page-hero-inner">
+    <h1>Council <em>Coverage</em></h1>
+    <p class="page-hero-sub">We currently have live data for {{ covered_count }} council{{ 's' if covered_count != 1 }}. More being added regularly.</p>
+    <div class="hero-search">
+      <input type="text" id="coverage-search" placeholder="Search by council or area — e.g. Harrogate, Craven..." oninput="filterCoverage(this.value)" autocomplete="off">
+    </div>
   </div>
+</section>
+<main class="main">
   {% if covered %}
   <div style="margin-bottom:2rem">
     <h2 style="font-size:1rem;font-weight:600;color:var(--green);margin-bottom:.75rem">✓ Live data ({{ covered_count }})</h2>
 
-    <input type="text" id="coverage-search" placeholder="Search by council or area — e.g. Harrogate, Craven..."
-      style="width:100%;max-width:420px;padding:.6rem .9rem;border:1px solid var(--border);border-radius:8px;font-size:.85rem;margin-bottom:1rem"
-      oninput="filterCoverage(this.value)">
     <p id="coverage-no-results" style="display:none;font-size:.85rem;color:var(--muted);margin-bottom:1rem">
       No council matches that search.
     </p>

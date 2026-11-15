@@ -1,19 +1,24 @@
 {% extends "base.html" %}
 {% block title %}Known Coverage Gaps — PlanFind{% endblock %}
+{% block head_extra %}
+<style>
+  .gap-card { background:#fff; border:1px solid #e1e8f2; border-left:4px solid #e0a030; border-radius:16px; padding:1.2rem 1.4rem; box-shadow:0 6px 20px rgba(10,47,107,.06); }
+  .gap-card strong { color:var(--blue-dark); }
+  .gap-ok { background:linear-gradient(135deg,#EAF3FF,#E6F7EE); border:1px solid #D3E4F7; border-radius:20px; padding:1.6rem 1.8rem; box-shadow:0 6px 20px rgba(10,47,107,.06); }
+</style>
+{% endblock %}
 {% block content %}
-<main class="main">
-  <div style="margin-bottom:1.75rem">
-    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Known Coverage Gaps</h1>
-    <p style="color:var(--muted);max-width:640px">
-      Councils listed below were previously being updated automatically and have since gone quiet —
-      we'd rather tell you directly than let you find a stale result on your own. This list doesn't
-      include councils we've never covered at all; see the <a href="/councils">full coverage page</a> for that.
-    </p>
+<section class="page-hero page-hero--gaps page-hero--short">
+  <div class="page-hero-art" aria-hidden="true"></div>
+  <div class="page-hero-inner">
+    <h1>Known Coverage <em>Gaps</em></h1>
+    <p class="page-hero-sub">Councils listed below were previously being updated automatically and have since gone quiet — we'd rather tell you directly than let you find a stale result on your own. This list doesn't include councils we've never covered at all; see the <a href="/councils" style="color:#fff;text-decoration:underline">full coverage page</a> for that.</p>
   </div>
-
+</section>
+<main class="main">
   {% if total == 0 %}
-  <div style="background:var(--blue-light);border:1px solid #c3d9f0;border-radius:12px;padding:1.5rem">
-    <p style="font-size:.9rem;color:var(--muted)">
+  <div class="gap-ok">
+    <p style="font-size:.95rem;color:var(--muted)">
       No known gaps right now — every previously-covered council has updated within the last
       {{ threshold_days }} days.
     </p>
@@ -25,7 +30,7 @@
 
   <div style="display:flex;flex-direction:column;gap:.75rem">
     {% for g in gaps %}
-    <div style="background:#fff;border:1px solid var(--border);border-left:4px solid #e0a030;border-radius:8px;padding:1.1rem 1.25rem">
+    <div class="gap-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap">
         <div>
           <strong style="font-size:1rem">{{ g.name }}</strong>

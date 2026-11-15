@@ -1,16 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Bulk Search — PlanFind{% endblock %}
+{% block head_extra %}
+<style>
+  .bulk-card { background:#fff; border:1px solid #e1e8f2; border-radius:20px; padding:1.5rem 1.6rem; margin:0 0 1.5rem; box-shadow:0 14px 36px rgba(10,47,107,.10); }
+  .bulk-card label { letter-spacing:.02em; }
+  .bulk-card textarea { width:100%; padding:.9rem 1rem; border:1px solid #d6e0ee; border-radius:14px; font-family:inherit; font-size:.95rem; margin-bottom:1rem; background:#fff; }
+  .bulk-card textarea:focus, .bulk-card select:focus { outline:none; border-color:#16b86a; box-shadow:0 0 0 4px rgba(22,184,106,.18); }
+  .bulk-card select { border-radius:12px; }
+  .bulk-card .btn-primary { background:linear-gradient(135deg,#16b86a,#0c8f50); border:0; border-radius:999px; padding:.7rem 1.6rem; font-weight:800; box-shadow:0 8px 18px rgba(12,143,80,.28); }
+  .bulk-card .btn-primary:hover { filter:brightness(1.06); }
+</style>
+{% endblock %}
 {% block content %}
-<main class="main">
-  <div style="margin-bottom:1.75rem">
-    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Bulk Search</h1>
-    <p style="color:var(--muted)">Search multiple postcodes or sites at once — one combined result set, deduplicated, with CSV export.</p>
+<section class="page-hero page-hero--bulk page-hero--short">
+  <div class="page-hero-art" aria-hidden="true"></div>
+  <div class="page-hero-inner">
+    <h1>Bulk <em>Search</em></h1>
+    <p class="page-hero-sub">Search multiple postcodes or sites at once — one combined result set, deduplicated, with CSV export.</p>
   </div>
-
-  <form action="/bulk-search" method="post" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:1.25rem;margin-bottom:1.5rem">
+</section>
+<main class="main">
+  <form action="/bulk-search" method="post" class="bulk-card" style="margin-top:-1.5rem;position:relative;z-index:2">
     <label style="display:block;font-size:.85rem;font-weight:600;margin-bottom:.4rem">Postcodes (one per line, up to 50)</label>
     <textarea name="postcodes" rows="6" placeholder="SE10 8XJ&#10;M1 1AE&#10;LS1 4DY"
-      style="width:100%;padding:.7rem;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:.9rem;margin-bottom:.9rem"
+      
       required>{{ postcodes_input }}</textarea>
 
     <div style="display:flex;gap:.9rem;flex-wrap:wrap;align-items:flex-end">
