@@ -25,6 +25,7 @@ WORK_TYPES = {
     "driveway":          "Driveway / hardstanding / fencing",
     "demolition":        "Demolition",
     "commercial":        "Commercial / industrial building",
+    "agricultural":      "Agricultural building",
     "signage":           "Advertisements / signage",
     "trees":             "Tree works",
     "admin":             "Conditions / certificates / admin",
@@ -40,28 +41,29 @@ _NOT_ADD = r"(?:(?!extension|garage|porch|shed|fence|wall\b|store\b|outbuilding|
 _DW = r"(?:dwellings?|dwellinghouses?|houses?|bungalows?|homes?|townhouses?|apartments?|flats?|cottages?)"
 RULES = [
     # --- things that are not building work for a trade ---
-    ("trees",    _R(r"^(?!.*\b(erection|construction|extension|dwellings?|conversion|demolition|storey)\b).*\b(\bt\d+\b[^.]{0,50}\b(remove|fell|prune|reduce|pollard)|tree preservation|tpo\b|works? to trees?|trees?\b|hedges?\b|high hedge|stump|pollard|coppic|crown (reduction|lift|thin)|\bfell(ing)?\b)")),
+    ("trees",    _R(r"^(?!.*\b(erection|construction|extension|dwellings?|conversion|demolition|storey)\b).*(\(t\d+\)|\bt\d{1,4}\b|[-–] ?(remove|fell|reduce|prune)\b|\b(pruning|canopy|dismantle|arboricultur\w*)\b|\b(\bt\d+\b[^.]{0,50}\b(remove|fell|prune|reduce|pollard)|tree preservation|tpo\b|works? to trees?|trees?\b|hedges?\b|high hedge|stump|pollard|coppic|crown (reduction|lift|thin)|\bfell(ing)?\b))")),
     ("signage",  _R(r"\b(advertisement|advertising|illuminated|signage|\bsigns?\b|fascia|totem|hoarding|48[- ]sheet|6[- ]sheet|digital (display|screen)|display (panel|unit))")),
     ("admin",    _R(r"\b(discharge of condition|approval of details?|non[- ]?material amendment|material amendment|variation of condition|removal of condition|(required|pursuant to|in relation to|compliance with|details of[\w\s]{0,40}) conditions?\b|condition \d+|certificate of lawfulness|lawful development|prior notification|screening opinion|scoping opinion|pre-?application|section 73|\bs\.?73|submission of details|(amendment|modification|variation) (to|of)\b|previous(ly)? (approved|approval|consent|permission)|opening hours|hours of (use|opening|operation)|extension of time|renewal of (planning )?permission)")),
     ("demolition", _R(r"^(?!.*\b(erection|construction|replacement|redevelopment|new)\b).*\b(demolition of|demolish|prior approval.{0,20}demolition)")),
     # --- building work ---
     ("loft_conversion", _R(r"\b(loft conversion|roof conversion|dormers?|roof ?lights?|hip[- ]to[- ]gable|convert(ing)? (the )?(loft|roof ?space)|habitable roof|loft extension|loft)")),
     ("solar",    _R(r"\b(solar|photovoltaic|\bpv\b|heat pump|air source|ground source|battery storage|ev charg|wind turbine|biomass)")),
-    ("basement", _R(r"\b(basement (extension|conversion|excavation|storey|level|development|flat|room|garage|area)|excavat\w+[^.]{0,60}basement|(new|additional|extend\w*|enlarg\w*|form\w*|construct\w*|creat\w*|convert\w*|dig\w*)[^.]{0,25}\b(basement|cellar)\b|subterranean)")),
     ("conservatory", _R(r"\b(conservator|orangery|sun ?room|garden room|glazed (extension|roof))")),
     ("two_storey", _R(r"\b((two|2|double)[- ]storey[^.]{0,40}(extension|addition|rear|side|extend)|(extension|addition)[^.]{0,30}(two|2)[- ]storey|first floor (rear |side )?extension)")),
     ("rear_extension", _R(r"\b(single[- ]storey rear|rear extension|rear single|extension to (the )?rear|to rear\b|larger home extension|rear (ground floor )?extension|kitchen ext(ension)?\b)")),
     ("side_extension", _R(r"\b(side extension|extension to (the )?side|side and rear|wrap[- ]around extension)")),
     ("change_of_use", _R(r"\b(change of use|conversion (of|to|from|and)|convert(ing)? [^.]{0,60} (to|into) [^.]{0,30}" + _DW + r"|class (ma|q|r|s|o|c3|e|b8)\b|prior approval.{0,40}(change|class)|hmo|house in multiple|subdivision|sub-?divid|amalgamation|flats? above|office to residential|agricultural (building|barn) to|conversion[^.]{0,80}(into|to)[^.]{0,30}" + _DW + r")")),
-    ("new_dwelling", _R(r"\b((erection|construction|build|development) of" + _NOT_ADD + r"\b" + _DW + r"|new[- ]build|new " + _DW + r"|(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[\s\-]?(no\.?\s*)?(\w+[- ]){0,4}(dwellings?|houses|homes|flats|apartments|bungalows|cottages|units)\b|(pair|row|terrace|block) of[\w\s\-]{0,20}" + _DW + r"s?|detached (houses|dwellings|homes|bungalows)|(houses|dwellings|bungalows) (and|with) |residential development|housing (development|scheme)|self[- ]?build|replacement dwelling|outline[^.]{0,40}(residential|dwelling|housing)|permission in principle|up to \d+ (dwellings|homes))")),
+    ("new_dwelling", _R(r"\b(\bhse\b|(erection|construction|build|development) of" + _NOT_ADD + r"\b" + _DW + r"|new[- ]build|new " + _DW + r"|(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[\s\-]?(no\.?\s*)?(\w+[- ]){0,4}(dwellings?|houses|homes|flats|apartments|bungalows|cottages|units)\b|(pair|row|terrace|block) of[\w\s\-]{0,20}" + _DW + r"s?|detached (houses|dwellings|homes|bungalows)|(houses|dwellings|bungalows) (and|with) |residential development|housing (development|scheme)|self[- ]?build|replacement dwelling|outline[^.]{0,40}(residential|dwelling|housing)|permission in principle|up to \d+ (dwellings|homes))")),
+    ("basement", _R(r"\b(basement (extension|conversion|excavation|storey|development)|excavat\w+[^.]{0,60}basement|(new|additional|extend\w*|enlarg\w*|form\w*|construct\w*|creat\w*|convert\w*|dig\w*)[^.]{0,25}\b(basement|cellar)\b|subterranean)")),
     ("extension", _R(r"\b(extension|extend|\bext\b)")),
     ("outbuilding", _R(r"\b(garages?|car ?ports?|annexe|annex\b|outbuildings?|summer ?houses?|sheds?\b|studio(?! ?flats?)|home office|stables?|barns?\b|log cabins?|granny flat|ancillary (accommodation|building)|swimming pool|gym\b|pool house|greenhouse|gazebo|store\b)")),
     ("windows_doors", _R(r"\b(replacement (of )?(upvc )?(windows?|doors?)|(new|replacement|install\w*)\b[^.]{0,30}\b(windows?|doors?|glazing)\b|window replacement|bi[- ]fold|french doors|shop ?front|fenestration|double[- ]glaz|secondary glazing)")),
     ("roof",     _R(r"\b(re-?roof|roof (replacement|repair|covering|alteration|extension|works?)|replacement roof|chimney|slate|new roof|raising (of )?(the )?roof|roof height|(replace|replacement|new|pitched|flat|alter\w*)[^.]{0,30}\broof\b|\broof\b[^.]{0,20}(replac|alter|repair))")),
     ("driveway", _R(r"\b(driveway|drive way|dropped kerb|vehicle crossover|hardstanding|hard standing|parking (space|area)|fence\b|fencing|boundary (wall|treatment)|gates?\b|retaining wall|front garden|patio|decking|raised terrace|terraces|landscaping|ramp\b|steps\b|wall\b)")),
-    ("commercial", _R(r"\b(warehouse|industrial|office|retail|shop|restaurant|cafe|café|pub\b|hotel|class (e|b2|b8)|commercial|unit \d+|storage and distribution|data centre|school|hospital|care home|nursery|petrol|car (wash|showroom)|takeaway|drive[- ]?thr|club|premises|mast\b|antennae?|telecom|church|community (hall|centre))")),
+    ("agricultural", _R(r"\b(agricultur\w*|livestock|animal (shelter|housing)|manege|equestrian|slurry|silage|polytunnel|farm (building|shop|track)|dairy|poultry|grain store|hay ?barn)")),
+    ("commercial", _R(r"\b(poles?\b|aerials?|cabin|electronic communication|overhead line|cash machine|atm\b|telecom\w*|extraction|quarry|sports facility|car (park|sales)|police|temporary (use|sales)|use (as|for) |mixed use|loading bay|canopy|boiler house|warehouse|industrial|office|retail|shop|restaurant|cafe|café|pub\b|hotel|class (e|b2|b8)|commercial|unit \d+|storage and distribution|data centre|school|hospital|care home|nursery|petrol|car (wash|showroom)|takeaway|drive[- ]?thr|club|premises|mast\b|antennae?|telecom|church|community (hall|centre))")),
     ("listed_building", _R(r"\b(listed building|conservation area consent)")),
-    ("internal", _R(r"\b(internal|interior|refurbish\w*|renovat\w*|renewal|kitchens?|bathrooms?|staircase|porch|alterations?|stud (wall|partition)|remodel)")),
+    ("internal", _R(r"\b(cladding|render(ing)?|re-?pointing|flue|structural|remedial|beam|repairs?|internal|interior|refurbish\w*|renovat\w*|renewal|kitchens?|bathrooms?|staircase|porch|alterations?|stud (wall|partition)|remodel)")),
 ]
 
 def classify(description, application_type=""):
@@ -77,7 +79,7 @@ def classify(description, application_type=""):
 # can serve several trades — a loft conversion is of interest to a builder,
 # roofer, electrician, plasterer and so on.
 TRADES = {
-    "general_builder": ("Builders",              ["internal","listed_building","loft_conversion","rear_extension","side_extension","two_storey","extension","new_dwelling","change_of_use","outbuilding","conservatory","basement"]),
+    "general_builder": ("Builders",              ["agricultural","internal","listed_building","loft_conversion","rear_extension","side_extension","two_storey","extension","new_dwelling","change_of_use","outbuilding","conservatory","basement"]),
     "architect":       ("Architects & designers", ["loft_conversion","rear_extension","side_extension","two_storey","extension","new_dwelling","change_of_use","basement","conservatory"]),
     "roofer":          ("Roofers",               ["roof","loft_conversion","two_storey","rear_extension","side_extension","new_dwelling","outbuilding"]),
     "electrician":     ("Electricians",          ["internal","solar","loft_conversion","rear_extension","side_extension","two_storey","new_dwelling","change_of_use","basement"]),
@@ -134,6 +136,17 @@ if __name__ == "__main__":
         "Construction of club premises and steward accommodation": "commercial",
         "Porch": "internal",
         "Erection of a garage to serve the dwelling": "outbuilding",
+        "T2213 White Poplar - Canopy reduction by 3-4m.": "trees",
+        "PRUNING OF 1 NO. ASH, OAK AND SYCAMORE": "trees",
+        "Elder - Remove": "trees",
+        "Detached Hse": "new_dwelling",
+        "Erect agricultural storage building.": "agricultural",
+        "Construction of animal shelter": "agricultural",
+        "Install One New 8M Light Pole": "commercial",
+        "Change of use of existing ground floor and basement levels from restaurant to office": "change_of_use",
+        "Replacement of rear and front doors at lower ground level in connection with basement flat": "windows_doors",
+        "Creation of basement level, with lightwell and skylight.": "basement",
+        "Replacement cladding to south-west elevation": "internal",
     }
     bad = [(d, classify(d), w) for d, w in tests.items() if classify(d) != w]
     for b in bad: print("MISMATCH", b)
