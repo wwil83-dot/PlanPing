@@ -14,7 +14,7 @@
   <!-- Most Active Councils -->
   <div style="margin-bottom:2.5rem">
     <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Most Active Councils</h2>
-    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Councils with the most new applications submitted in the last 30 days.</p>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Councils with the most new applications submitted in the last 30 days, based on the applications PlanFind has collected.</p>
     <div class="app-list">
       {% for c in most_active %}
       <a href="/council/{{ c.slug }}" class="guide-card cat-getting_started" style="flex-direction:row;align-items:center;justify-content:space-between">
@@ -25,74 +25,107 @@
     </div>
   </div>
 
-  <!-- Niche Category Leaders -->
+  <!-- What people are building -->
   <div style="margin-bottom:2.5rem">
-    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Niche Category Leaders</h2>
-    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Top 5 councils by rate — the % of their own applications matching each category, last 90 days. Ranked by rate, not raw volume, so this isn't just whichever council has the biggest database.</p>
+    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">What People Are Building</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Building work submitted nationally in the last 90 days, by type. Tree works, adverts and paperwork-only applications are left out. Types are tagged automatically from each application's description, so a few may be mis-labelled.</p>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:16px;padding:1.4rem 1.5rem;box-shadow:0 6px 20px rgba(10,47,107,.06)">
+      {% for t in work_mix %}
+      <div style="margin-bottom:.8rem">
+        <div style="display:flex;justify-content:space-between;font-size:.88rem;margin-bottom:.28rem">
+          <span style="font-weight:600;color:var(--blue-dark)">{{ t.label }}</span>
+          <span style="color:var(--muted)">{{ "{:,}".format(t.count) }} ({{ t.pct }}%)</span>
+        </div>
+        <div style="background:var(--page);border-radius:99px;height:9px;overflow:hidden">
+          <div style="background:linear-gradient(90deg,#1d86e6,#16b86a);height:100%;width:{{ t.pct * 100 / (work_mix[0].pct if work_mix else 1) }}%;border-radius:99px"></div>
+        </div>
+      </div>
+      {% else %}
+      <p style="font-size:.85rem;color:var(--muted)">No data yet.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Where each type is most common -->
+  <div style="margin-bottom:2.5rem">
+    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Where Each Type of Work Is Most Common</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Top 5 councils by share of their own applications over the last 90 days (councils with at least 50 applications and 5 of the type). Ranked by rate, not raw volume.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem">
-      {% for tag_key, label in niche_labels.items() %}
-      <div class="guide-stat-panel cat-{{ 'large_sites' if tag_key == 'large_site' else tag_key }}" style="display:block">
+      {% for key, label in leader_labels.items() %}
+      <div class="guide-stat-panel cat-getting_started" style="display:block">
         <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.6rem">{{ label }}</h3>
-        {% for c in niche_leaders[tag_key] %}
+        {% for c in type_leaders[key] %}
         <a href="/council/{{ c.slug }}" style="display:flex;justify-content:space-between;padding:.35rem 0;text-decoration:none;color:inherit;font-size:.85rem;border-bottom:1px solid rgba(0,0,0,.06)">
           <span>{{ loop.index }}. {{ c.name }}</span>
           <span style="text-align:right">
-            <strong>{{ c.tag_pct }}%</strong>
-            <span style="color:var(--muted);font-size:.75rem"> ({{ c.tag_count }}/{{ c.total_count }})</span>
+            <strong>{{ c.pct }}%</strong>
+            <span style="color:var(--muted);font-size:.75rem"> ({{ c.count }}/{{ c.total }})</span>
           </span>
         </a>
         {% else %}
-        <p style="font-size:.8rem;color:var(--muted)">No data yet for this category.</p>
+        <p style="font-size:.8rem;color:var(--muted)">Not enough data yet.</p>
         {% endfor %}
       </div>
       {% endfor %}
     </div>
+    <p style="margin-top:1rem;font-size:.88rem"><a href="/patch-checker" style="font-weight:700">Work in the trade? Check how much of this is on your patch &rarr;</a></p>
   </div>
 
-  <!-- Application Type Mix -->
+  <!-- Decision speed -->
+  {% if speed_fast %}
   <div style="margin-bottom:2.5rem">
-    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">What's Being Submitted</h2>
-    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Application type breakdown nationally, last 90 days.</p>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:1.25rem">
-      {% for t in type_mix %}
-      <div style="margin-bottom:.75rem">
-        <div style="display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:.25rem">
-          <span class="badge badge-{{ t.badge }}">{{ t.badge | title }}</span>
-          <span style="color:var(--muted)">{{ t.count }} ({{ t.pct }}%)</span>
+    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">How Fast Do Councils Decide?</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Median days from submission to decision for applications decided in the last 12 months (councils with at least 30 decisions on record). Most householder applications have an 8-week (56-day) target; major ones 13 weeks.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem">
+      <div class="guide-stat-panel cat-getting_started" style="display:block">
+        <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.6rem">Fastest</h3>
+        {% for c in speed_fast %}
+        <a href="/council/{{ c.slug }}" style="display:flex;justify-content:space-between;padding:.35rem 0;text-decoration:none;color:inherit;font-size:.85rem;border-bottom:1px solid rgba(0,0,0,.06)">
+          <span>{{ loop.index }}. {{ c.name }}</span><strong>{{ c.median }} days</strong>
+        </a>
+        {% endfor %}
+      </div>
+      {% if speed_slow %}
+      <div class="guide-stat-panel cat-farm_diversification" style="display:block">
+        <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.6rem">Slowest</h3>
+        {% for c in speed_slow %}
+        <a href="/council/{{ c.slug }}" style="display:flex;justify-content:space-between;padding:.35rem 0;text-decoration:none;color:inherit;font-size:.85rem;border-bottom:1px solid rgba(0,0,0,.06)">
+          <span>{{ loop.index }}. {{ c.name }}</span><strong>{{ c.median }} days</strong>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Approval by type of work -->
+  {% if approval_by_type %}
+  <div style="margin-bottom:2.5rem">
+    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">How Likely Is Approval, by Type of Work?</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Share of approved applications among those approved or refused in the last 12 months (types with at least 200 decisions). Withdrawn and undecided applications are not counted, and decisions are only included for councils where PlanFind records outcomes.</p>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:16px;padding:1.4rem 1.5rem;box-shadow:0 6px 20px rgba(10,47,107,.06)">
+      {% for t in approval_by_type %}
+      <div style="margin-bottom:.8rem">
+        <div style="display:flex;justify-content:space-between;font-size:.88rem;margin-bottom:.28rem">
+          <span style="font-weight:600;color:var(--blue-dark)">{{ t.label }}</span>
+          <span style="color:var(--muted)"><strong style="color:var(--blue-dark)">{{ t.pct }}%</strong> approved · {{ "{:,}".format(t.decided) }} decisions</span>
         </div>
-        <div style="background:var(--page);border-radius:6px;height:8px;overflow:hidden">
-          <div style="background:var(--blue);height:100%;width:{{ t.pct }}%"></div>
+        <div style="background:var(--page);border-radius:99px;height:9px;overflow:hidden">
+          <div style="background:linear-gradient(90deg,#16b86a,#0c8f50);height:100%;width:{{ t.pct }}%;border-radius:99px"></div>
         </div>
       </div>
       {% endfor %}
     </div>
   </div>
+  {% endif %}
 
-  <!-- Growth / Momentum -->
-  <div style="margin-bottom:2.5rem">
-    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Growth &amp; Momentum</h2>
-    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Councils with the biggest change in application volume — last 30 days vs the 30 days before that.</p>
-    <div class="app-list">
-      {% for c in growth_top %}
-      <a href="/council/{{ c.slug }}" class="guide-card cat-farm_diversification" style="flex-direction:row;align-items:center;justify-content:space-between">
-        <span class="guide-card-title" style="margin-bottom:0">{{ c.name }}</span>
-        <span style="text-align:right">
-          <span style="font-family:'Fraunces',serif;font-weight:700;font-size:1.3rem;color:{{ 'var(--green)' if c.pct_change >= 0 else 'var(--red)' }}">
-            {{ '+' if c.pct_change >= 0 }}{{ c.pct_change }}%
-          </span><br>
-          <span style="font-size:.72rem;color:var(--muted)">{{ c.prior_count }} → {{ c.recent_count }}</span>
-        </span>
-      </a>
-      {% endfor %}
-    </div>
-  </div>
-
-  <!-- Approval Rate — kept, repositioned smaller -->
+  <!-- Approval rate by council -->
   <div>
-    <h2 style="font-size:1.05rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Approval Rates</h2>
+    <h2 style="font-size:1.05rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">Approval Rates by Council</h2>
     <p style="font-size:.8rem;color:var(--muted);margin-bottom:1rem">
-      Only reliably populated for a handful of councils right now — most scrapers don't yet re-check applications
-      for a decision after first finding them. Showing councils with at least 10 decided applications on record.
+      Decisions made in the last 12 months. Only councils where PlanFind has recorded at least 50 approved or refused
+      outcomes are shown, so some councils are missing while we build up their decision history.
     </p>
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:8px;font-size:.85rem">
