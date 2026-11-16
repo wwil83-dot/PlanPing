@@ -1090,3 +1090,10 @@ h1 em { font-style: normal; color: #5FE3A1; background: linear-gradient(90deg, #
   .page-hero--bulk + .main { margin-top: -7.8rem !important; }
   .page-hero--guides + .main { margin-top: -9.5rem; position: relative; z-index: 2; }
 }
+
+/* ---- 2026-11-16: Biodiversity Gain Sites, Street History and Today's Activity heroes ---- */
+.page-hero--bng .page-hero-art { background-image: url(/static/img/bng-hero.webp); }
+.page-hero--street .page-hero-art { background-image: url(/static/img/street-hero.webp); }
+.page-hero--activity .page-hero-art { background-image: url(/static/img/activity-hero.webp); }
+.page-hero--bng .page-hero-art, .page-hero--street .page-hero-art, .page-hero--activity .page-hero-art { -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14%); mask-image: linear-gradient(180deg, transparent 0, #000 14%); }
+.page-hero--bng .page-hero-sub, .page-hero--street .page-hero-sub, .page-hero--activity .page-hero-sub { max-width: 760px; }
