@@ -1084,3 +1084,7 @@ h1 em { font-style: normal; color: #5FE3A1; background: linear-gradient(90deg, #
   .page-hero--bulk + .main { margin-top: -10rem; }
   .page-hero--bulk + .main .bulk-card { margin-top: 0 !important; }
 }
+
+/* 2026-11-16: bring the heading text higher up the Bulk Search and Guides heroes */
+.page-hero--bulk, .page-hero--guides { padding-top: 1.5rem; }
+@media (max-width:700px){ .page-hero--bulk, .page-hero--guides { padding-top: .9rem; } }
