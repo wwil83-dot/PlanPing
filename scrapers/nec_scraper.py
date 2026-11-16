@@ -366,6 +366,8 @@ def _birmingham_status(status: str, decision_type: str) -> str:
     st, dt = (status or "").strip().lower(), (decision_type or "").strip().lower()
     if "withdraw" in st:
         return "withdrawn"
+    if dt.startswith("pending"):
+        return "pending"                    # e.g. H&F 'Pending Recommendation': not decided yet
     if dt:
         if "refus" in dt:
             return "refused"
