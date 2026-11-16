@@ -1,28 +1,41 @@
 {% extends "base.html" %}
 {% block title %}Today's Planning Activity — PlanFind{% endblock %}
+{% block head_extra %}
+<style>
+  .act-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1rem; margin-bottom:1.6rem; }
+  .act-stat { background:#fff; border:1px solid #e1e8f2; border-radius:18px; padding:1.3rem 1.4rem; box-shadow:0 14px 34px rgba(10,47,107,.11); position:relative; overflow:hidden; }
+  .act-stat::before { content:''; position:absolute; left:0; top:0; bottom:0; width:5px; background:var(--accent, var(--blue-dark)); }
+  .act-stat .n { font-size:2.2rem; font-weight:800; letter-spacing:-.02em; color:var(--accent, var(--blue-dark)); line-height:1.1; }
+  .act-stat .l { font-size:.86rem; color:var(--muted); margin-top:.3rem; font-weight:600; }
+  .act-card { background:#fff; border:1px solid #e1e8f2; border-radius:16px; padding:1rem 1.2rem; text-decoration:none; color:var(--text); display:block; box-shadow:0 8px 22px rgba(10,47,107,.07); transition:transform .15s, box-shadow .15s; }
+  .act-card:hover { transform:translateY(-2px); box-shadow:0 14px 30px rgba(10,47,107,.13); }
+</style>
+{% endblock %}
 {% block content %}
-<main class="main">
-  <div style="margin-bottom:1.75rem">
-    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Today's Planning Activity</h1>
-    <p style="color:var(--muted)">{{ today }} — across every council we cover</p>
+<section class="page-hero page-hero--activity page-hero--short">
+  <div class="page-hero-art" aria-hidden="true"></div>
+  <div class="page-hero-inner">
+    <h1>Today's Planning <em>Activity</em></h1>
+    <p class="page-hero-sub">{{ today }} &mdash; across every council we cover</p>
   </div>
-
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.9rem;margin-bottom:2rem">
-    <div style="background:#fff;border:1px solid var(--border);border-left:3px solid var(--blue-dark);border-radius:8px;padding:1.2rem">
-      <div style="font-size:2rem;font-weight:700;color:var(--blue-dark)">{{ new_applications }}</div>
-      <div style="font-size:.85rem;color:var(--muted);margin-top:.2rem">New applications</div>
+</section>
+<main class="main">
+  <div class="act-grid">
+    <div class="act-stat" style="--accent:var(--blue-dark)">
+      <div class="n">{{ new_applications }}</div>
+      <div class="l">New applications</div>
     </div>
-    <div style="background:#fff;border:1px solid var(--border);border-left:3px solid var(--green);border-radius:8px;padding:1.2rem">
-      <div style="font-size:2rem;font-weight:700;color:var(--green)">{{ approved_today }}</div>
-      <div style="font-size:.85rem;color:var(--muted);margin-top:.2rem">Approved†</div>
+    <div class="act-stat" style="--accent:var(--green)">
+      <div class="n">{{ approved_today }}</div>
+      <div class="l">Approved†</div>
     </div>
-    <div style="background:#fff;border:1px solid var(--border);border-left:3px solid #c0392b;border-radius:8px;padding:1.2rem">
-      <div style="font-size:2rem;font-weight:700;color:#c0392b">{{ refused_today }}</div>
-      <div style="font-size:.85rem;color:var(--muted);margin-top:.2rem">Refused†</div>
+    <div class="act-stat" style="--accent:#c0392b">
+      <div class="n">{{ refused_today }}</div>
+      <div class="l">Refused†</div>
     </div>
-    <div style="background:#fff;border:1px solid var(--border);border-left:3px solid #8a6416;border-radius:8px;padding:1.2rem">
-      <div style="font-size:2rem;font-weight:700;color:#8a6416">{{ appeals_today }}</div>
-      <div style="font-size:.85rem;color:var(--muted);margin-top:.2rem">Appeals lodged*</div>
+    <div class="act-stat" style="--accent:#8a6416">
+      <div class="n">{{ appeals_today }}</div>
+      <div class="l">Appeals lodged*</div>
     </div>
   </div>
 
@@ -38,22 +51,22 @@
 
   {% if highlights %}
   <div style="margin-bottom:1rem">
-    <h2 style="font-size:1rem;font-weight:600;color:var(--blue-dark);margin-bottom:.75rem">Today's new applications</h2>
-    <div style="display:grid;gap:.6rem">
+    <h2 style="font-size:1.05rem;font-weight:700;color:var(--blue-dark);margin-bottom:.75rem">Today's new applications</h2>
+    <div style="display:grid;gap:.7rem">
       {% for h in highlights %}
-      <a href="/application/{{ h.id }}" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:.9rem 1.1rem;text-decoration:none;color:var(--text);display:block;box-shadow:0 1px 4px rgba(0,0,0,.04)">
+      <a href="/application/{{ h.id }}" class="act-card">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
           <span style="font-size:.78rem;color:var(--muted);font-weight:600">{{ h.reference }} · {{ h.council_name }}</span>
           <span class="badge badge-{{ h.status_class }}" style="font-size:.7rem">{{ h.status }}</span>
         </div>
-        <div style="font-size:.9rem;margin-top:.3rem">{{ h.description or h.address }}</div>
+        <div style="font-size:.92rem;margin-top:.3rem">{{ h.description or h.address }}</div>
       </a>
       {% endfor %}
     </div>
   </div>
   {% else %}
-  <div style="background:var(--blue-light);border:1px solid #c3d9f0;border-radius:12px;padding:1.5rem">
-    <p style="font-size:.9rem;color:var(--muted)">No new applications recorded yet today — check back after tonight's update, or
+  <div style="background:#fff;border:1px solid #e1e8f2;border-radius:18px;padding:1.5rem;box-shadow:0 8px 22px rgba(10,47,107,.07)">
+    <p style="font-size:.92rem;color:var(--muted);margin:0">No new applications recorded yet today — check back after tonight's update, or
     <a href="/councils">see full coverage</a> in the meantime.</p>
   </div>
   {% endif %}

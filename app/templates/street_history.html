@@ -1,44 +1,64 @@
 {% extends "base.html" %}
 {% block title %}Street History — PlanFind{% endblock %}
+{% block head_extra %}
+<style>
+  .sh-card { display:block; background:#fff; border:1px solid #e1e8f2; border-radius:16px; padding:1rem 1.2rem; margin-bottom:.7rem; text-decoration:none; color:var(--text); box-shadow:0 8px 22px rgba(10,47,107,.07); transition:transform .15s, box-shadow .15s; }
+  .sh-card:hover { transform:translateY(-2px); box-shadow:0 14px 30px rgba(10,47,107,.13); }
+  .sh-tip { background:#fff; border:1px solid #e1e8f2; border-radius:18px; padding:1.3rem 1.5rem; box-shadow:0 14px 36px rgba(10,47,107,.10); max-width:760px; }
+  .sh-tip h2 { font-size:1rem; font-weight:700; color:var(--blue-dark); margin:0 0 .5rem; }
+  .sh-tip ul { margin:0; padding-left:1.1rem; color:var(--muted); font-size:.92rem; line-height:1.7; }
+</style>
+{% endblock %}
 {% block content %}
-<main class="main">
-  <div style="margin-bottom:1.75rem">
-    <h1 style="font-size:1.8rem;font-weight:700;color:var(--blue-dark);margin-bottom:.4rem">Street History</h1>
-    <p style="color:var(--muted)">Search by street or address to see everything we've recorded there — not a postcode radius, just that specific place.</p>
+<section class="page-hero page-hero--street page-hero--short">
+  <div class="page-hero-art" aria-hidden="true"></div>
+  <div class="page-hero-inner">
+    <h1>Street <em>History</em></h1>
+    <p class="page-hero-sub">Search a street or address to see everything we've recorded at that exact place.</p>
+    <form class="hero-search" action="/street-history" method="get">
+      <input type="text" name="q" value="{{ q }}" placeholder="e.g. High Street, Leigh-on-Sea" aria-label="Search by street or address" autocomplete="off">
+      <button type="submit">Search</button>
+    </form>
   </div>
-  <form action="/street-history" method="get" style="display:flex;gap:.6rem;margin-bottom:1.5rem;flex-wrap:wrap">
-    <input type="text" name="q" value="{{ q }}" placeholder="e.g. High Street, Leigh-on-Sea"
-      class="search-input" style="flex:1;min-width:220px" autocomplete="off">
-    <button type="submit" class="btn btn-primary">Search</button>
-  </form>
+</section>
+<main class="main">
   {% if searched %}
     {% if applications %}
-    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">
+    <p style="font-size:.88rem;color:var(--muted);margin:0 0 1rem;font-weight:600">
       {{ total }} application{{ 's' if total != 1 }} matching "{{ q }}"
     </p>
     {% for a in applications %}
-    <a href="/application/{{ a.id }}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;margin-bottom:.6rem;text-decoration:none;color:var(--text)">
+    <a href="/application/{{ a.id }}" class="sh-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;flex-wrap:wrap">
         <div style="flex:1;min-width:200px">
-          <div style="font-size:.85rem;font-weight:500">{{ a.address }}</div>
-          <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem">{{ a.description | truncate(100) }}</div>
+          <div style="font-size:.9rem;font-weight:600;color:var(--blue-dark)">{{ a.address }}</div>
+          <div style="font-size:.8rem;color:var(--muted);margin-top:.2rem">{{ a.description | truncate(100) }}</div>
         </div>
         <span class="badge badge-status badge-{{ a.status_class }}" style="flex-shrink:0">{{ a.status | title }}</span>
       </div>
-      <div style="font-size:.72rem;color:var(--muted);margin-top:.4rem">
+      <div style="font-size:.74rem;color:var(--muted);margin-top:.45rem">
         {{ a.reference }} · {{ a.council_name }} ·
         {% if a.date_unavailable_note %}date not shown by council{% else %}{{ a.days_ago }}{% endif %}
       </div>
     </a>
     {% endfor %}
     {% else %}
-    <div style="background:var(--blue-light);border:1px solid #c3d9f0;border-radius:12px;padding:1.5rem">
-      <p style="font-size:.9rem;color:var(--muted)">No applications found matching "{{ q }}" in our records.</p>
+    <div class="sh-tip">
+      <p style="font-size:.92rem;color:var(--muted);margin:0">No applications found matching "{{ q }}" in our records. Try a shorter version of the street name, or just the street and town.</p>
     </div>
     {% endif %}
-    <p style="font-size:.75rem;color:var(--muted);margin-top:1.25rem">
+    <p style="font-size:.76rem;color:var(--muted);margin-top:1.25rem">
       Showing everything we've scraped for this search — for most councils that's roughly the last 6 months, not a complete multi-year history.
     </p>
+  {% else %}
+    <div class="sh-tip">
+      <h2>Tips for a good search</h2>
+      <ul>
+        <li>Type a street name and a town, for example <em>Church Lane, Weybridge</em>.</li>
+        <li>You can search part of an address, such as a house name or building.</li>
+        <li>Results cover everything PlanFind has recorded at that address, newest first.</li>
+      </ul>
+    </div>
   {% endif %}
 </main>
 {% endblock %}
