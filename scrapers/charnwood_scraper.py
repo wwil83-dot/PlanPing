@@ -437,7 +437,8 @@ async def recheck_pending(browser: Browser, pending: list[dict]) -> list[dict]:
             continue
 
         m = re.search(r"Decided:\s*([A-Za-z ,.'()-]+)", text)
-        if not m and re.search(r"Planning application\s*:\s*\S+\s+Withdrawn\s+Print", text, re.I):
+        _hdr = re.search(r"Planning application\s*:\s*\S+\s*(.{0,60}?)\s*Print\b", text, re.S | re.I)
+        if not m and _hdr and "withdrawn" in _hdr.group(1).lower():     # header reads 'P/26/1173/2 Withdrawn Print' or 'P/26/1366/2 Withdrawn: WITHDRAWN Print' 
             updates.append({"reference": p["reference"], "status": "withdrawn"})       # confirmed header format 2026-11-17: 'Planning application : P/26/1173/2 Withdrawn Print'
             continue
         if not m and re.search(r"withdrawn", text, re.I) and _WD_SHOWN[0] < 3:
