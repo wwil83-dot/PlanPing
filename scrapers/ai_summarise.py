@@ -26,8 +26,15 @@ TAGS = [t.strip() for t in os.environ.get(
     "SUMMARY_TAGS", "new_dwelling,change_of_use,commercial,agricultural,demolition"
 ).split(",") if t.strip()]
 ALL_TYPES = os.environ.get("SUMMARY_ALL_TYPES") == "1"
+# Only spend tokens on descriptions that contain something worth explaining.
+EXPLAIN_RE = os.environ.get("SUMMARY_REGEX",
+    r"(class [a-z]|\mE\(|\mB[0-9]|\mC[0-9]|prior approval|outline|certificate|lawful|\mhmo\M|sui generis|"
+    r"retrospective|crossover|change of use|permitted development|listed building|reserved matters|"
+    r"\m(1[0-9]|[2-9][0-9]|[0-9]{3,})\s*(no\.?\s*)?(dwelling|flat|unit|home|house|apartment)|"
+    r"solar|battery|data cent|telecom|mast|anaerobic|biodiversity|section 73|variation of condition)")
 DRY = os.environ.get("DRY_RUN") == "1"
-CONCURRENCY = 5
+CONCURRENCY = 2
+STOP = asyncio.Event()
 
 SYSTEM = """You write short plain-English notes for a UK planning-applications website.
 Explain what a planning application proposes, in everyday words, so a neighbour or local business can understand it.
@@ -49,6 +56,11 @@ Hard rules:
   * Certificate of lawful development = confirms a use or work is lawful; it is not planning permission
   * Crossover = a dropped kerb giving vehicle access
   * Retrospective = work or use that has already happened
+- If a glossary term appears in the description, add ONE short sentence giving its plain meaning from the glossary.
+  That explanation is the main value of the note.
+- If the description is already plain and complete, with no glossary term and nothing worth explaining (for example a
+  simple extension, conservatory or outbuilding), reply with exactly: SKIP
+- For a certificate of lawful development, write "asks the council to confirm that ..." and do not say the use already exists.
 - Only describe the type or stage of an application (outline, prior approval, retrospective, certificate) if those
   words appear in the description or the application type given. Otherwise do not mention it.
 - Say "proposes" or "is proposed", never "will be built". Do not state anything as already existing unless the text says so.
@@ -70,19 +82,35 @@ async def summarise(client, row, sem):
         f"Description: {row['description']}"
     )
     async with sem:
-        for attempt in range(3):
+        if STOP.is_set():
+            return row["id"], None
+        for attempt in range(8):
             try:
                 text = clean(await client.complete(MODEL, SYSTEM, prompt, max_tokens=200))
                 if not text:
                     raise RuntimeError("empty reply from model")
                 return row["id"], text
             except Exception as e:
-                if "404" in str(e) or "model_not_found" in str(e) or "does not exist" in str(e):
+                msg = str(e)
+                if "404" in msg or "model_not_found" in msg or "does not exist" in msg:
                     sys.exit(f"Model '{MODEL}' not available to this key. Run the groq_models job and pick a name from its list. ({e})")
-                if attempt == 2:
+                if "429" in msg or "rate limit" in msg.lower():
+                    if "per day" in msg or "(TPD)" in msg or "(RPD)" in msg:
+                        print("Daily limit reached - stopping early; the rest will be done on the next run.", flush=True)
+                        STOP.set()
+                        return row["id"], None
+                    m = re.search(r"try again in ([0-9.]+)\s*(ms|s|m)", msg)
+                    wait = 5.0
+                    if m:
+                        wait = float(m.group(1)) / (1000 if m.group(2) == "ms" else 1) * (60 if m.group(2) == "m" else 1)
+                    await asyncio.sleep(wait + 1.5)
+                    continue
+                if attempt >= 2:
                     print(f"  ! id {row['id']}: {e}", flush=True)
                     return row["id"], None
                 await asyncio.sleep(2 * (attempt + 1))
+        print(f"  ! id {row['id']}: gave up after repeated rate limits", flush=True)
+        return row["id"], None
 
 
 async def main():
@@ -96,13 +124,14 @@ async def main():
         WHERE a.ai_summary IS NULL
           AND a.status = 'pending'
           AND a.description IS NOT NULL AND length(a.description) >= 25
+          AND a.description ~* $5
           AND a.description !~* '(test case|test application|example [a-z]:)'
           AND a.submitted_date >= current_date - $1::int
           AND ($2::boolean OR a.work_type = ANY($3::text[]))
         ORDER BY a.submitted_date DESC
         LIMIT $4
         """,
-        DAYS, ALL_TYPES, TAGS, LIMIT,
+        DAYS, ALL_TYPES, TAGS, LIMIT, EXPLAIN_RE,
     )
     print(f"{len(rows)} applications to summarise (model {MODEL}, dry={DRY})", flush=True)
     sem = asyncio.Semaphore(CONCURRENCY)
