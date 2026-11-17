@@ -37,8 +37,11 @@ class Client:
 
     async def complete(self, model: str, system: str, user: str, max_tokens: int = 300) -> str:
         if PROVIDER == "groq":
+            # gpt-oss models "think" first and those tokens count towards the limit,
+            # so keep reasoning low and leave headroom.
             r = await self._c.chat.completions.create(
-                model=model, max_tokens=max_tokens, temperature=0.2,
+                model=model, max_tokens=max_tokens + 1000, temperature=0.2,
+                extra_body={"reasoning_effort": "low"},
                 messages=[{"role": "system", "content": system}, {"role": "user", "content": user}])
             return r.choices[0].message.content or ""
         m = await self._c.messages.create(
