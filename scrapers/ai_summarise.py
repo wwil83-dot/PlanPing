@@ -9,8 +9,8 @@ Env:
   DATABASE_URL        (required)
   ANTHROPIC_API_KEY or GROQ_API_KEY (with AI_PROVIDER=groq and AI_MODEL=<groq model>)
   SUMMARY_LIMIT       max rows per run                (default 300)
-  SUMMARY_DAYS        only apps submitted this recently (default 60)
-  SUMMARY_TAGS        comma list of work_type keys     (default large_site,farm_diversification,commercial_conversion)
+  SUMMARY_DAYS        only apps submitted this recently (default 30)
+  SUMMARY_TAGS        comma list of work_type keys     (default new_dwelling,change_of_use,commercial,agricultural,demolition)
   SUMMARY_ALL_TYPES   "1" = ignore SUMMARY_TAGS, do any pending app
   AI_MODEL            (default claude-haiku-5-5)
   DRY_RUN             "1" = print summaries, do not save
@@ -21,9 +21,9 @@ from ai_client import Client, model_name
 
 MODEL = model_name("claude-haiku-5-5")
 LIMIT = int(os.environ.get("SUMMARY_LIMIT", "300"))
-DAYS = int(os.environ.get("SUMMARY_DAYS", "60"))
+DAYS = int(os.environ.get("SUMMARY_DAYS", "30"))
 TAGS = [t.strip() for t in os.environ.get(
-    "SUMMARY_TAGS", "large_site,farm_diversification,commercial_conversion"
+    "SUMMARY_TAGS", "new_dwelling,change_of_use,commercial,agricultural,demolition"
 ).split(",") if t.strip()]
 ALL_TYPES = os.environ.get("SUMMARY_ALL_TYPES") == "1"
 DRY = os.environ.get("DRY_RUN") == "1"
