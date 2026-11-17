@@ -3554,7 +3554,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           AI_PROVIDER: groq
-          AI_MODEL: llama-3.3-70b-versatile
+          AI_MODEL: openai/gpt-oss-120b
           SUMMARY_LIMIT: "20"
           DRY_RUN: "1"
         run: cd scrapers && python ai_summarise.py
@@ -3576,7 +3576,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           AI_PROVIDER: groq
-          AI_MODEL: llama-3.3-70b-versatile
+          AI_MODEL: openai/gpt-oss-120b
           SUMMARY_LIMIT: "300"
         run: cd scrapers && python ai_summarise.py
 
@@ -3597,7 +3597,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           AI_PROVIDER: groq
-          AI_MODEL: llama-3.3-70b-versatile
+          AI_MODEL: openai/gpt-oss-120b
           OUT_FILE: ${{ github.workspace }}/social_pack.md
         run: cd scrapers && python social_posts.py
       - uses: actions/upload-artifact@v4
