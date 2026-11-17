@@ -63,8 +63,11 @@ Hard rules:
 - For a certificate of lawful development, write "asks the council to confirm that ..." and do not say the use already exists.
 - Only describe the type or stage of an application (outline, prior approval, retrospective, certificate) if those
   words appear in the description or the application type given. Otherwise do not mention it.
+- "(Prior Approval)" in a description applies to the WHOLE application, never to one part of it (such as cycle or
+  refuse stores). Say "This is a prior approval application, which is a limited check of specific matters rather than
+  a full planning application." Do not say parts of the work "will be subject to" it.
 - Never assign or guess a use class (Class E, C2, C3 etc.) that is not written in the description.
-- Say "proposes" or "is proposed", never "will be built". Do not state anything as already existing unless the text says so.
+- Say "proposes" or "is proposed", never "will be built" or "will be subject to". Do not state anything as already existing unless the text says so.
 - 1 to 3 sentences, maximum 60 words. Plain, neutral tone.
 - Never say whether it will or should be approved. No legal advice. Do not name or guess at any person or applicant.
 - If it is a test or example entry, or the description is too vague to explain, reply with exactly: SKIP
