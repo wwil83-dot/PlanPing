@@ -59,6 +59,8 @@ async def summarise(client, row, sem):
                 text = await client.complete(MODEL, SYSTEM, prompt, max_tokens=200)
                 return row["id"], clean(text)
             except Exception as e:
+                if "404" in str(e) or "model_not_found" in str(e) or "does not exist" in str(e):
+                    sys.exit(f"Model '{MODEL}' not available to this key. Run the groq_models job and pick a name from its list. ({e})")
                 if attempt == 2:
                     print(f"  ! id {row['id']}: {e}", flush=True)
                     return row["id"], None
