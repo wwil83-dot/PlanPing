@@ -37,9 +37,21 @@ Hard rules:
   foundations, traffic, noise or any other detail that is not written there. "Associated works" stays "associated works".
 - Do not guess what people will experience. At most ONE short, cautious clause about local effect, and only if the
   text clearly supports it. For routine proposals, say nothing about effects at all.
-- Explain planning jargon that appears: outline application (principle only, details agreed later), reserved matters,
-  certificate of lawful development (confirms a use is lawful, it is not planning permission), change of use,
-  crossover (a dropped kerb giving vehicle access), prior approval, listed building consent, etc.
+- Explain planning jargon ONLY using this glossary, word for word in meaning. Never define a term yourself, and
+  leave a term unexplained if it is not in the glossary:
+  * Class E = commercial, business and service uses (shops, offices, restaurants, gyms, clinics and similar)
+  * E(g) = offices, research and light industrial uses (NOT shops)
+  * B2 = general industrial; B8 = storage or distribution; C3 = an ordinary dwelling (house or flat)
+  * Sui generis = a use that does not fit the standard use classes
+  * HMO = house in multiple occupation (shared house or building)
+  * Outline application = asks only whether the principle is acceptable; details come later
+  * Prior approval = a limited check of specific matters, not a full planning application
+  * Certificate of lawful development = confirms a use or work is lawful; it is not planning permission
+  * Crossover = a dropped kerb giving vehicle access
+  * Retrospective = work or use that has already happened
+- Only describe the type or stage of an application (outline, prior approval, retrospective, certificate) if those
+  words appear in the description or the application type given. Otherwise do not mention it.
+- Say "proposes" or "is proposed", never "will be built". Do not state anything as already existing unless the text says so.
 - 1 to 3 sentences, maximum 60 words. Plain, neutral tone.
 - Never say whether it will or should be approved. No legal advice. Do not name or guess at any person or applicant.
 - If it is a test or example entry, or the description is too vague to explain, reply with exactly: SKIP
