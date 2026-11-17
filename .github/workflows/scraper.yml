@@ -7557,5 +7557,5 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MAX_MINUTES: "90"
           DAYS_BACK: "30"
-          RECHECK_LIMIT: "400"
+          RECHECK_LIMIT: "700"
         run: cd scrapers && python charnwood_scraper.py
