@@ -18,6 +18,14 @@ function (a real UI click on the pagination link was confirmed to
 mechanically succeed with no error while never actually triggering
 the AJAX content swap, across several separate attempts).
 
+FIX 2026-11-17 (a withdrawn application still showed "Pending" on the site; 386 pending vs 29 approved in the database):
+  1. THE BUG: every nightly run re-saved all applications of the last 30 days with status 'pending', which overwrote any decision a
+     previous run had found. Only up to 50 were then re-checked, so decided applications were constantly flipped back to pending.
+     Now: a stored approved/refused/withdrawn/closed status is never replaced by 'pending'.
+  2. The list's own Status column is read: 'Withdrawn' is stored as withdrawn straight from the list.
+  3. The recheck now handles the applications the list says are decided first, then the oldest pending ones, and RECHECK_LIMIT is
+     configurable (charnwood_backlog job clears the backlog).
+
 HONEST LIMITATIONS:
   - Real "Status" column values are workflow stages only (REGISTERED,
     FINAL DECISION, etc.) — even "FINAL DECISION" doesn't reveal which
@@ -61,7 +69,7 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "15"))
 DAYS_BACK    = int(os.environ.get("DAYS_BACK", "30"))
 MAX_PAGES_PER_MONTH = int(os.environ.get("MAX_PAGES_PER_MONTH", "15"))
-RECHECK_LIMIT = int(os.environ.get("RECHECK_LIMIT", "50"))
+RECHECK_LIMIT = int(os.environ.get("RECHECK_LIMIT", "80"))
 
 COUNCIL_NAME = "Charnwood Borough Council"
 
@@ -74,6 +82,13 @@ def elapsed_minutes() -> float:
 
 def should_stop() -> bool:
     return elapsed_minutes() >= MAX_MINUTES - 2
+
+
+def _count_by(values) -> dict:
+    out: dict = {}
+    for v in values:
+        out[v] = out.get(v, 0) + 1
+    return out
 
 
 def _log(msg: str) -> None:
@@ -156,6 +171,7 @@ def _parse_results_table(html: str) -> list[dict]:
         description = cells[3].get_text(" ", strip=True)
         date_registered = cells[5].get_text(strip=True)
         postcode = _extract_postcode(address)
+        list_status = cells[1].get_text(" ", strip=True)
 
         apps.append({
             "reference": reference,
@@ -163,7 +179,8 @@ def _parse_results_table(html: str) -> list[dict]:
             "postcode": postcode,
             "description": description,
             "submitted_date": _parse_uk_date(date_registered),
-            "status": "pending",  # real, confirmed: list-view status
+            "list_status": list_status,
+            "status": "withdrawn" if "withdraw" in list_status.lower() else "pending",  # list-view status
                                     # values are workflow stages only,
                                     # never the real decision outcome
             "council_url": detail_url,
@@ -385,6 +402,9 @@ async def scrape_month(browser: Browser, month_label: str) -> list[dict]:
     return apps
 
 
+_WD_SHOWN = [0]
+
+
 async def recheck_pending(browser: Browser, pending: list[dict]) -> list[dict]:
     """Real, confirmed STABLE detail URL — genuinely reusable in a
     completely fresh browser session with no shared cookies/state.
@@ -417,6 +437,10 @@ async def recheck_pending(browser: Browser, pending: list[dict]) -> list[dict]:
             continue
 
         m = re.search(r"Decided:\s*([A-Za-z ,.'()-]+)", text)
+        if not m and re.search(r"withdrawn", text, re.I) and _WD_SHOWN[0] < 3:
+            _WD_SHOWN[0] += 1
+            i = re.search(r"withdrawn", text, re.I).start()
+            _log(f"no 'Decided:' but 'withdrawn' on page for {p['reference']}: ...{' '.join(text[max(0, i - 80):i + 80].split())}...")
         if m:
             outcome = m.group(1).strip().lower()
             if any(x in outcome for x in ("grant", "approv", "permit", "allow", "condition")):
@@ -464,16 +488,32 @@ async def main():
             "planning_applications",
             council_id=f"eq.{cid}",
             status="eq.pending",
-            select="reference,council_url",
-            limit=str(RECHECK_LIMIT),
+            select="reference,council_url,submitted_date",
+            order="submitted_date.asc.nullsfirst",
+            limit="1000",
         )
         if pending:
-            _log(f"Pending recheck: {len(pending)} applications (bounded to {RECHECK_LIMIT})")
+            _log(f"Pending in database: {len(pending)} (rechecking up to {RECHECK_LIMIT}: list-says-decided first, then oldest)")
     except Exception as e:
         _log(f"⚠ Failed to fetch pending recheck list (continuing without it): {e}")
 
     all_apps: list[dict] = []
     seen_refs: set[str] = set()
+
+    existing: dict = {}
+    try:
+        off = 0
+        while off < 20000:
+            rows = await _supa_get("planning_applications", council_id=f"eq.{cid}", select="reference,status",
+                                   limit="1000", offset=str(off))
+            for r in rows:
+                existing[r["reference"]] = r["status"]
+            if len(rows) < 1000:
+                break
+            off += 1000
+        _log(f"Existing statuses loaded: {len(existing)} ({_count_by(existing.values())})")
+    except Exception as e:
+        _log(f"⚠ Could not load existing statuses (continuing; decided statuses may be overwritten this run): {e}")
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True, args=BROWSER_ARGS)
@@ -489,7 +529,13 @@ async def main():
                     seen_refs.add(a["reference"])
                     all_apps.append(a)
 
-        recheck_updates = await recheck_pending(browser, pending)
+        _seen_status = {}
+        for a in all_apps:
+            _seen_status[a.get("list_status", "")] = _seen_status.get(a.get("list_status", ""), 0) + 1
+        _log(f"List 'Status' values seen: {_seen_status}")
+        decided_in_list = {a["reference"] for a in all_apps if "decision" in a.get("list_status", "").lower()}
+        pending.sort(key=lambda p: (0 if p["reference"] in decided_in_list else 1))     # stable: oldest-first order kept inside each group
+        recheck_updates = await recheck_pending(browser, pending[:RECHECK_LIMIT])
 
         await browser.close()
 
@@ -513,13 +559,16 @@ async def main():
         if lat is None:
             fallback_count += 1
 
+        status = a["status"]
+        if status == "pending" and existing.get(a["reference"]) in ("approved", "refused", "withdrawn", "closed"):
+            status = existing[a["reference"]]                 # never put a decided application back to pending
         records.append({
             "council_id": cid,
             "reference": a["reference"],
             "address": a["address"] or None,
             "postcode": a.get("postcode"),
             "description": a.get("description") or None,
-            "status": a["status"],
+            "status": status,
             "submitted_date": a.get("submitted_date"),
             "council_url": a.get("council_url"),
             "lat": lat,
