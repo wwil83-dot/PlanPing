@@ -437,6 +437,9 @@ async def recheck_pending(browser: Browser, pending: list[dict]) -> list[dict]:
             continue
 
         m = re.search(r"Decided:\s*([A-Za-z ,.'()-]+)", text)
+        if not m and re.search(r"Planning application\s*:\s*\S+\s+Withdrawn\s+Print", text, re.I):
+            updates.append({"reference": p["reference"], "status": "withdrawn"})       # confirmed header format 2026-11-17: 'Planning application : P/26/1173/2 Withdrawn Print'
+            continue
         if not m and re.search(r"withdrawn", text, re.I) and _WD_SHOWN[0] < 3:
             _WD_SHOWN[0] += 1
             i = re.search(r"withdrawn", text, re.I).start()
@@ -534,8 +537,13 @@ async def main():
             _seen_status[a.get("list_status", "")] = _seen_status.get(a.get("list_status", ""), 0) + 1
         _log(f"List 'Status' values seen: {_seen_status}")
         decided_in_list = {a["reference"] for a in all_apps if "decision" in a.get("list_status", "").lower()}
-        pending.sort(key=lambda p: (0 if p["reference"] in decided_in_list else 1))     # stable: oldest-first order kept inside each group
-        recheck_updates = await recheck_pending(browser, pending[:RECHECK_LIMIT])
+        first = [p for p in pending if p["reference"] in decided_in_list]
+        rest = [p for p in pending if p["reference"] not in decided_in_list]
+        if rest and len(first) + len(rest) > RECHECK_LIMIT:
+            # rotate through the long tail so every night looks at a different slice (otherwise the same oldest ones are re-read forever)
+            k = (date.today().toordinal() * max(1, RECHECK_LIMIT - len(first))) % len(rest)
+            rest = rest[k:] + rest[:k]
+        recheck_updates = await recheck_pending(browser, (first + rest)[:RECHECK_LIMIT])
 
         await browser.close()
 
