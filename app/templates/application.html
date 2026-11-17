@@ -20,6 +20,13 @@
       </span>
     </div>
     <p style="font-size:.9rem;color:var(--muted);margin-bottom:1rem">{{ app.description }}</p>
+    {% if app.ai_summary %}
+    <div style="background:#f3f8f5;border:1px solid #cfe3d8;border-left:4px solid #1f7a4d;border-radius:8px;padding:.85rem 1rem;margin-bottom:1.1rem">
+      <div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1f7a4d;margin-bottom:.3rem">In plain English</div>
+      <p style="font-size:.92rem;line-height:1.5;margin:0">{{ app.ai_summary }}</p>
+      <p style="font-size:.72rem;color:var(--muted);margin:.5rem 0 0">AI-generated summary of the council's description. It may be incomplete: always check the full application on the council portal.</p>
+    </div>
+    {% endif %}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;font-size:.85rem">
       <div><span style="color:var(--muted)">Type</span><br><strong>{{ app.application_type or '—' }}</strong></div>
       <div>
