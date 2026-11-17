@@ -10,7 +10,7 @@ Env:
   ANTHROPIC_API_KEY or GROQ_API_KEY (with AI_PROVIDER=groq and AI_MODEL=<groq model>)
   SUMMARY_LIMIT       max rows per run                (default 300)
   SUMMARY_DAYS        only apps submitted this recently (default 60)
-  SUMMARY_TAGS        comma list of work_type keys     (default large_site,farm_diversification,commercial_conversion,new_dwelling)
+  SUMMARY_TAGS        comma list of work_type keys     (default large_site,farm_diversification,commercial_conversion)
   SUMMARY_ALL_TYPES   "1" = ignore SUMMARY_TAGS, do any pending app
   AI_MODEL            (default claude-haiku-5-5)
   DRY_RUN             "1" = print summaries, do not save
@@ -23,22 +23,26 @@ MODEL = model_name("claude-haiku-5-5")
 LIMIT = int(os.environ.get("SUMMARY_LIMIT", "300"))
 DAYS = int(os.environ.get("SUMMARY_DAYS", "60"))
 TAGS = [t.strip() for t in os.environ.get(
-    "SUMMARY_TAGS", "large_site,farm_diversification,commercial_conversion,new_dwelling"
+    "SUMMARY_TAGS", "large_site,farm_diversification,commercial_conversion"
 ).split(",") if t.strip()]
 ALL_TYPES = os.environ.get("SUMMARY_ALL_TYPES") == "1"
 DRY = os.environ.get("DRY_RUN") == "1"
 CONCURRENCY = 5
 
 SYSTEM = """You write short plain-English notes for a UK planning-applications website.
-Explain what a planning application proposes and what it could mean for people who live nearby or work locally.
+Explain what a planning application proposes, in everyday words, so a neighbour or local business can understand it.
 
-Rules:
-- Use ONLY the facts given. Never invent sizes, numbers, dates, names, objections or outcomes.
-- 2 to 3 sentences, maximum 70 words, in everyday language. Explain jargon (e.g. "change of use", "outbuilding", "lawful development certificate").
-- Say what is proposed first. Then, only if it follows from the text, what it might mean day to day (e.g. building work, more homes, new business use). Use cautious wording: "could", "may".
-- Do not say whether it will or should be approved. Do not give legal advice. Do not mention the council's decision unless it is stated.
-- Do not name or guess at the applicant or any person.
-- If the description is too vague to explain, reply with exactly: SKIP
+Hard rules:
+- Use ONLY facts stated in the details given. Never add sizes, numbers, durations, materials, parking, landscaping,
+  foundations, traffic, noise or any other detail that is not written there. "Associated works" stays "associated works".
+- Do not guess what people will experience. At most ONE short, cautious clause about local effect, and only if the
+  text clearly supports it. For routine proposals, say nothing about effects at all.
+- Explain planning jargon that appears: outline application (principle only, details agreed later), reserved matters,
+  certificate of lawful development (confirms a use is lawful, it is not planning permission), change of use,
+  crossover (a dropped kerb giving vehicle access), prior approval, listed building consent, etc.
+- 1 to 3 sentences, maximum 60 words. Plain, neutral tone.
+- Never say whether it will or should be approved. No legal advice. Do not name or guess at any person or applicant.
+- If it is a test or example entry, or the description is too vague to explain, reply with exactly: SKIP
 - Output the note only: no heading, no quotes, no preamble."""
 
 
@@ -80,6 +84,7 @@ async def main():
         WHERE a.ai_summary IS NULL
           AND a.status = 'pending'
           AND a.description IS NOT NULL AND length(a.description) >= 25
+          AND a.description !~* '(test case|test application|example [a-z]:)'
           AND a.submitted_date >= current_date - $1::int
           AND ($2::boolean OR a.work_type = ANY($3::text[]))
         ORDER BY a.submitted_date DESC
