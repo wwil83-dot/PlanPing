@@ -63,6 +63,7 @@ Hard rules:
 - For a certificate of lawful development, write "asks the council to confirm that ..." and do not say the use already exists.
 - Only describe the type or stage of an application (outline, prior approval, retrospective, certificate) if those
   words appear in the description or the application type given. Otherwise do not mention it.
+- Never assign or guess a use class (Class E, C2, C3 etc.) that is not written in the description.
 - Say "proposes" or "is proposed", never "will be built". Do not state anything as already existing unless the text says so.
 - 1 to 3 sentences, maximum 60 words. Plain, neutral tone.
 - Never say whether it will or should be approved. No legal advice. Do not name or guess at any person or applicant.
@@ -71,8 +72,11 @@ Hard rules:
 
 
 def clean(text: str) -> str:
-    text = re.sub(r"\s+", " ", text or "").strip()
-    return text.strip('"').strip()
+    text = re.sub(r"\s+", " ", text or "").strip().strip('"').strip()
+    # Some replies start mid-sentence ("asks the council...", "proposes..."): give them a subject.
+    if text and text[0].islower() and not text.upper().startswith("SKIP"):
+        text = "This application " + text
+    return text
 
 
 async def summarise(client, row, sem):
