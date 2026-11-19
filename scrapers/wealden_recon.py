@@ -36,9 +36,25 @@ def show_page(label, r):
     return soup
 
 
+def accept_disclaimer(c, r):
+    """The site redirects everything to a Copyright & Disclaimer page; POSTing its form sets a cookie and returns to the page."""
+    for _ in range(3):
+        if "/Disclaimer" not in str(r.url) and "disclaimer.aspx" not in str(r.url).lower():
+            return r
+        soup = BeautifulSoup(r.text, "html.parser")
+        form = next((f for f in soup.find_all("form") if "Disclaimer/Accept" in (f.get("action") or "")), None)
+        if not form:
+            print("   (disclaimer page but no Accept form found)"); return r
+        data = {i.get("name"): i.get("value", "") for i in form.find_all("input") if i.get("name")}
+        print(f"   accepting disclaimer: POST {form.get('action')} fields={list(data)} buttons={[b.get_text(strip=True) for b in form.find_all(['button','input'])][:4]}")
+        r = c.post(BASE + form.get("action"), data=data)
+        print(f"   -> {r.status_code} {r.url}")
+    return r
+
+
 def main():
     with httpx.Client(headers=H, follow_redirects=True, timeout=45, verify=False) as c:
-        r = c.get(BASE + "/Planning/WeeklyList/")
+        r = accept_disclaimer(c, c.get(BASE + "/Planning/WeeklyList/"))
         soup = show_page("weekly list index", r)
         if not soup:
             return
@@ -63,13 +79,13 @@ def main():
             for idx in (1, 0):
                 if idx < len(matches):
                     url = matches[idx] if matches[idx].startswith("http") else BASE + (matches[idx] if matches[idx].startswith("/") else "/Planning/" + matches[idx])
-                    rr = c.get(url)
+                    rr = accept_disclaimer(c, c.get(url))
                     show_page(f"{label} link #{idx+1}", rr)
                     break
 
         for path in ("/Search", "/Search/Results", "/Search/Planning"):
             try:
-                rr = c.get(BASE + path)
+                rr = accept_disclaimer(c, c.get(BASE + path))
                 s2 = show_page(f"direct {path}", rr)
                 if s2:
                     for f in s2.find_all("form"):
