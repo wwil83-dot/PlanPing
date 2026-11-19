@@ -7,7 +7,8 @@ Add to app/main.py (two lines):
 
 Counts only — no addresses, no names. Addresses are the paid product later.
 """
-import re, time
+import asyncio, json, os, re, time
+import urllib.request, urllib.error
 from collections import defaultdict, deque
 from typing import Optional
 
@@ -84,6 +85,48 @@ async def patch_checker(request: Request, postcode: Optional[str] = None,
     return _page(request, postcode=postcode, trade=trade, radius=radius, result=result)
 
 
+def _send_lead_email(email: str, trade: str, postcode: str, radius, test: bool = False) -> dict:
+    """Instant 'new sign-up' email to the site owner via Resend. Needs RESEND_API_KEY and FROM_EMAIL set on Render
+    (same values as the GitHub secrets). LEADS_NOTIFY_TO overrides the recipient. Never raises: a failed email must not break the sign-up.
+    Returns a dict describing what happened (also printed to the log)."""
+    key, sender = os.environ.get("RESEND_API_KEY"), os.environ.get("FROM_EMAIL")
+    info = {"has_key": bool(key), "has_from": bool(sender), "from": sender}
+    if not key or not sender:
+        print("lead notify: RESEND_API_KEY / FROM_EMAIL not set on this server, no email sent", flush=True)
+        return {**info, "sent": False, "error": "missing RESEND_API_KEY or FROM_EMAIL"}
+    to = os.environ.get("LEADS_NOTIFY_TO", "planfind@gmail.com")
+    label = TRADES[trade][0] if trade in TRADES else trade   # TRADES maps key -> (label, [work types])
+    body = (f"{'TEST EMAIL - ' if test else ''}New PlanFind trade-leads sign-up\n\nTrade: {label}\nPostcode: {postcode}\nRadius: {radius} miles\nEmail: {email}\n\n"
+            f"See all: SELECT created_at, email, trade, postcode, radius_miles FROM lead_waitlist ORDER BY created_at DESC;")
+    payload = json.dumps({"from": sender, "to": [to], "subject": f"{'TEST: ' if test else ''}New lead sign-up: {label} near {postcode}", "text": body}).encode()
+    req = urllib.request.Request("https://api.resend.com/emails", data=payload, method="POST",
+                                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "planfind"})
+    try:
+        resp = urllib.request.urlopen(req, timeout=10)
+        text = resp.read().decode()[:300]
+        print(f"lead notify: email sent to {to}: {text}", flush=True)
+        return {**info, "sent": True, "to": to, "resend": text}
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode()[:400]
+        print(f"lead notify failed: HTTP {e.code}: {detail}", flush=True)
+        return {**info, "sent": False, "to": to, "error": f"HTTP {e.code}: {detail}"}
+    except Exception as e:
+        print(f"lead notify failed: {type(e).__name__}: {str(e)[:200]}", flush=True)
+        return {**info, "sent": False, "to": to, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+
+
+# TEMPORARY diagnostic: open /api/lead-email-test?token=pf-leadtest-7f3a in a browser. It sends ONE test email to the owner and shows
+# exactly what Resend answered. Delete this block once lead emails are confirmed working.
+@router.get("/api/lead-email-test")
+async def lead_email_test(request: Request, token: str = ""):
+    if token != "pf-leadtest-7f3a":
+        return JSONResponse({"ok": False}, status_code=404)
+    if _limited(request, per_minute=3):
+        return JSONResponse({"ok": False, "message": "slow down"}, status_code=429)
+    result = await asyncio.to_thread(_send_lead_email, "test@example.com", "roofer", "TE5 7ST", 3, True)
+    return result
+
+
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -97,8 +140,13 @@ async def lead_waitlist(request: Request, email: str = Form(...), trade: str = F
     if _limited(request, per_minute=6):
         return JSONResponse({"ok": False, "message": "Too many requests — try again shortly."}, status_code=429)
     async with get_db() as db:
-        await db.execute("""
+        inserted = await db.fetchval("""
             INSERT INTO lead_waitlist (email, trade, postcode, radius_miles)
-            VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING
+            VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id
         """, email, trade, postcode, radius)
+    if inserted:   # only a genuinely new sign-up (not a duplicate) sends an email
+        print(f"lead notify: new sign-up saved ({trade}, {postcode}), sending email", flush=True)
+        asyncio.create_task(asyncio.to_thread(_send_lead_email, email, trade, postcode, radius))
+    else:
+        print(f"lead notify: no email, {trade} {postcode} was already on the list (duplicate)", flush=True)
     return {"ok": True, "message": "You're on the list — we'll email you when addresses for your patch are available."}
