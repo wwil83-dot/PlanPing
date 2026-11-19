@@ -160,7 +160,7 @@ class Blocked(Exception):
     pass
 
 
-FLAKY_SERVERS = {190, 170}      # councils whose own server is known to be unreliable (Sandwell: HTTP 500s and timeouts; Bury: Fortinet 504 Gateway Timeout 2026-11-16); a timeout on every address is reported as info, not as a failure
+FLAKY_SERVERS = {190, 170, 65}      # councils whose own server is known to be unreliable (Sandwell: HTTP 500s and timeouts; Bury: Fortinet 504 Gateway Timeout 2026-11-16; Southampton: search form timeouts on all proxies 2026-11-18); a timeout on every address is reported as info, not as a failure
 
 
 class CouncilDown(Exception):
