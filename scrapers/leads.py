@@ -101,6 +101,7 @@ def _send_lead_email(email: str, trade: str, postcode: str, radius) -> None:
                                  headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "planfind"})
     try:
         urllib.request.urlopen(req, timeout=10).read()
+        print(f"lead notify: email sent to {to}")
     except Exception as e:
         print(f"lead notify failed: {type(e).__name__}: {str(e)[:200]}")
 
@@ -123,5 +124,8 @@ async def lead_waitlist(request: Request, email: str = Form(...), trade: str = F
             VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id
         """, email, trade, postcode, radius)
     if inserted:   # only a genuinely new sign-up (not a duplicate) sends an email
+        print(f"lead notify: new sign-up saved ({trade}, {postcode}), sending email")
         asyncio.create_task(asyncio.to_thread(_send_lead_email, email, trade, postcode, radius))
+    else:
+        print(f"lead notify: no email, {trade} {postcode} was already on the list (duplicate)")
     return {"ok": True, "message": "You're on the list — we'll email you when addresses for your patch are available."}
