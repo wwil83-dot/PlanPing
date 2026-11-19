@@ -115,18 +115,6 @@ def _send_lead_email(email: str, trade: str, postcode: str, radius, test: bool =
         return {**info, "sent": False, "to": to, "error": f"{type(e).__name__}: {str(e)[:200]}"}
 
 
-# TEMPORARY diagnostic: open /api/lead-email-test?token=pf-leadtest-7f3a in a browser. It sends ONE test email to the owner and shows
-# exactly what Resend answered. Delete this block once lead emails are confirmed working.
-@router.get("/api/lead-email-test")
-async def lead_email_test(request: Request, token: str = ""):
-    if token != "pf-leadtest-7f3a":
-        return JSONResponse({"ok": False}, status_code=404)
-    if _limited(request, per_minute=3):
-        return JSONResponse({"ok": False, "message": "slow down"}, status_code=429)
-    result = await asyncio.to_thread(_send_lead_email, "test@example.com", "roofer", "TE5 7ST", 3, True)
-    return result
-
-
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
