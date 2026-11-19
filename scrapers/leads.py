@@ -90,10 +90,10 @@ def _send_lead_email(email: str, trade: str, postcode: str, radius) -> None:
     (same values as the GitHub secrets). LEADS_NOTIFY_TO overrides the recipient. Never raises: a failed email must not break the sign-up."""
     key, sender = os.environ.get("RESEND_API_KEY"), os.environ.get("FROM_EMAIL")
     if not key or not sender:
-        print("lead notify: RESEND_API_KEY / FROM_EMAIL not set on this server, no email sent")
+        print("lead notify: RESEND_API_KEY / FROM_EMAIL not set on this server, no email sent", flush=True)
         return
     to = os.environ.get("LEADS_NOTIFY_TO", "planfind@gmail.com")
-    label = TRADES.get(trade, trade) if isinstance(TRADES, dict) else trade
+    label = TRADES[trade][0] if trade in TRADES else trade   # TRADES maps key -> (label, [work types])
     body = (f"New PlanFind trade-leads sign-up\n\nTrade: {label}\nPostcode: {postcode}\nRadius: {radius} miles\nEmail: {email}\n\n"
             f"See all: SELECT created_at, email, trade, postcode, radius_miles FROM lead_waitlist ORDER BY created_at DESC;")
     payload = json.dumps({"from": sender, "to": [to], "subject": f"New lead sign-up: {label} near {postcode}", "text": body}).encode()
@@ -101,9 +101,9 @@ def _send_lead_email(email: str, trade: str, postcode: str, radius) -> None:
                                  headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "planfind"})
     try:
         urllib.request.urlopen(req, timeout=10).read()
-        print(f"lead notify: email sent to {to}")
+        print(f"lead notify: email sent to {to}", flush=True)
     except Exception as e:
-        print(f"lead notify failed: {type(e).__name__}: {str(e)[:200]}")
+        print(f"lead notify failed: {type(e).__name__}: {str(e)[:200]}", flush=True)
 
 
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -124,8 +124,8 @@ async def lead_waitlist(request: Request, email: str = Form(...), trade: str = F
             VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id
         """, email, trade, postcode, radius)
     if inserted:   # only a genuinely new sign-up (not a duplicate) sends an email
-        print(f"lead notify: new sign-up saved ({trade}, {postcode}), sending email")
+        print(f"lead notify: new sign-up saved ({trade}, {postcode}), sending email", flush=True)
         asyncio.create_task(asyncio.to_thread(_send_lead_email, email, trade, postcode, radius))
     else:
-        print(f"lead notify: no email, {trade} {postcode} was already on the list (duplicate)")
+        print(f"lead notify: no email, {trade} {postcode} was already on the list (duplicate)", flush=True)
     return {"ok": True, "message": "You're on the list — we'll email you when addresses for your patch are available."}
