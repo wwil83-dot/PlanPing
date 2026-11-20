@@ -260,7 +260,7 @@ jobs:
           DAYS_BACK: "14"
           CONCURRENCY: "2"
           REQUEST_DELAY_SECONDS: "0"
-        run: cd scrapers && python idox_scraper.py "--only=Rushmoor Borough Council,New Forest District Council,West Oxfordshire District Council,Broadland District Council,South Norfolk Council,Kings Lynn and West Norfolk Borough Council,North Norfolk District Council,Chesterfield Borough Council,East Cambridgeshire District Council,South Cambridgeshire District Council,South Ribble Borough Council,Pendle Borough Council,Chorley Borough Council"
+        run: cd scrapers && python idox_scraper.py "--only=Rushmoor Borough Council,New Forest District Council,West Oxfordshire District Council,Broadland District Council,South Norfolk Council,Kings Lynn and West Norfolk Borough Council,North Norfolk District Council,Chesterfield Borough Council,East Cambridgeshire District Council,South Cambridgeshire District Council,Pendle Borough Council,Chorley Borough Council"
 
   scrape_idox_f:
     if: >
@@ -7298,7 +7298,7 @@ jobs:
           DETAIL_MAX: "300"
           MAX_MINUTES: "60"
           DRY_RUN: "0"
-          HTTP_COUNCILS: "272,275,43"
+          HTTP_COUNCILS: "311"
         run: cd scrapers && python idox_http_scraper.py
 
   idox_http_dry_southeast:
@@ -7322,7 +7322,7 @@ jobs:
           DETAIL_MAX: "30"
           MAX_MINUTES: "20"
           DRY_RUN: "1"
-          HTTP_COUNCILS: "272,275,43"
+          HTTP_COUNCILS: "311"
         run: cd scrapers && python idox_http_scraper.py
 
   idox_http_dry_winchester:
@@ -7492,7 +7492,7 @@ jobs:
           DETAIL_MAX: "60"
           MAX_MINUTES: "60"
           DRY_RUN: "0"
-          HTTP_COUNCILS: "440,530,412,272,275,43"
+          HTTP_COUNCILS: "440,530,412,272,275,43,311"
         run: cd scrapers && python idox_http_scraper.py
 
   idox_blocked_probe:
