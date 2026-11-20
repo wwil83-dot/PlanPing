@@ -7276,8 +7276,8 @@ jobs:
         run: cd scrapers && python wealden_scraper.py
 
   wealden_nightly:
-    # Wealden (id 277): nightly, last 14 days. Add to the 08:07 group once the dry run and backfill are clean.
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'wealden_nightly' || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'group_0807_morning1')
+    # RETIRED 2026-11-20: Wealden is already covered nightly by register_scraper (group_0821_morning2). Do not run or schedule this.
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'wealden_nightly'
     runs-on: [self-hosted, uk-runner]
     timeout-minutes: 45
     steps:
