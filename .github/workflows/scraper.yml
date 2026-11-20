@@ -3633,6 +3633,7 @@ jobs:
           AI_PROVIDER: groq
           AI_MODEL: openai/gpt-oss-120b
           OUT_FILE: ${{ github.workspace }}/social_pack.md
+          FOCUS_COUNCIL: ""   # put a council name here (e.g. Wealden) for a Facebook post about that area only; leave empty for the general pack
         run: cd scrapers && python social_posts.py
       - uses: actions/upload-artifact@v4
         with:
