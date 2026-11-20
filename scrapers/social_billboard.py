@@ -1,6 +1,6 @@
 """PlanFind 'billboard' poster: screenshot of the home page + a short caption + the link.
 Posts to every platform whose secrets are set; skips the rest. DRY_RUN=1 only takes the screenshot and prints the caption.
-Captions rotate by ISO week so the same words are not repeated back to back."""
+Captions rotate by day so the same words are not repeated back to back."""
 import io, os, re, sys, json, datetime, urllib.request, urllib.parse, uuid
 
 SITE = os.environ.get("SITE_URL", "https://planfind.co.uk")
@@ -32,7 +32,7 @@ TIPS = [
 
 
 def caption() -> str:
-    wk = datetime.date.today().isocalendar()[1] + datetime.date.today().year * 53
+    wk = datetime.date.today().toordinal()   # changes every day, so posts 2-3 days apart never share a caption
     # different strides so the opener and the tip pair up differently each week
     return f"{OPENERS[wk % len(OPENERS)]} {TIPS[(wk * 3 + wk // len(TIPS)) % len(TIPS)]}\n{SITE}"
 
