@@ -7527,7 +7527,7 @@ jobs:
           DETAIL_MAX: "60"
           MAX_MINUTES: "60"
           DRY_RUN: "0"
-          HTTP_COUNCILS: "440,530,412,272,275,43,311"
+          HTTP_COUNCILS: "440,530,412,272,275,43"
         run: cd scrapers && python idox_http_scraper.py
 
   idox_blocked_probe:
