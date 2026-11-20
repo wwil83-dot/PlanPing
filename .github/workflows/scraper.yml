@@ -6118,11 +6118,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install httpx
+      - run: pip install httpx curl_cffi
       - name: Run register scraper (${{ matrix.council }})
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
           COUNCIL: ${{ matrix.council }}
           WINDOW_DAYS: "14"
           DRY_RUN: "0"
