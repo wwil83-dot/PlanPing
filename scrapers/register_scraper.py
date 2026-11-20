@@ -200,18 +200,38 @@ async def accept_disclaimer(client: httpx.AsyncClient):
                  headers={"Referer": f"{base}/Disclaimer?returnUrl=%2FSearch%2FAdvanced"})
 
 
+DETECTED: dict = {}     # date field names actually found on the live form (they can differ from CFG if the council changes its form)
+
+
+def _detect_fields(html: str) -> dict:
+    names = re.findall(r'<(?:input|select)[^>]*\bname=["\']([^"\']+)["\']', html, re.I)
+    out = {}
+    for key, pat in (("recv_from", r"received.*from"), ("recv_to", r"received.*to"),
+                     ("dec_from", r"(issued|determined).*from"), ("dec_to", r"(issued|determined).*to")):
+        out[key] = next((n for n in names if re.search(pat, n, re.I)), None)
+    out["_all"] = names
+    return out
+
+
 async def advanced_token(client: httpx.AsyncClient) -> str:
     base = CFG["base"]
     seen = ""
     for attempt in (1, 2, 3, 4):
         try:
             r = await N._req(client, "GET", f"{base}/Search/Advanced")
-            if "DateReceivedFrom" in r.text:
+            det = _detect_fields(r.text)
+            if det["recv_from"] and det["recv_to"]:
                 tok = N._token(r.text)
                 if tok:
+                    if not DETECTED:
+                        DETECTED.update(det)
+                        if det["recv_from"] != CFG["recv"][0] or det["dec_from"] != CFG["dec"][0]:
+                            print(f"    ℹ form field names differ from the config: using {det['recv_from']}/{det['recv_to']} and {det['dec_from']}/{det['dec_to']}")
+                        print(f"    ℹ form fields: {det['_all'][:40]}")
                     return tok
             title = re.search(r"<title>(.*?)</title>", r.text, re.S | re.I)
-            seen = f"HTTP {r.status_code}, url {str(r.url)[:120]}, title {re.sub(chr(32)+'+', ' ', (title.group(1) if title else '?')).strip()[:80]!r}, starts: {re.sub(r'<[^>]+>', ' ', r.text)[:160].split()!r}"
+            seen = (f"HTTP {r.status_code}, url {str(r.url)[:120]}, title {re.sub(chr(32)+'+', ' ', (title.group(1) if title else '?')).strip()[:80]!r}, "
+                    f"fields {det['_all'][:25]}, starts: {re.sub(r'<[^>]+>', ' ', r.text)[:160].split()!r}")
         except Exception as e:
             seen = f"{type(e).__name__}: {str(e)[:150]}"
         print(f"    ℹ search form not available (attempt {attempt} of 4): {seen}")
@@ -219,7 +239,7 @@ async def advanced_token(client: httpx.AsyncClient) -> str:
             await accept_disclaimer(client)
         except Exception as e:
             print(f"    ℹ disclaimer step failed: {type(e).__name__}: {str(e)[:120]}")
-        await asyncio.sleep(4 * attempt)      # a slow or briefly overloaded council site often recovers within a minute
+        await asyncio.sleep(4 * attempt)
     raise RuntimeError(f"Could not reach the advanced search form after accepting the disclaimer ({seen})")
 
 
@@ -229,8 +249,10 @@ CAP = 50  # rows per results page; a window that returns this many may be trunca
 
 async def run_window(client: httpx.AsyncClient, kind: str, a: date, b: date) -> list:
     base = CFG["base"]
-    f_from, f_to = CFG["recv"] if kind == "received" else CFG["dec"]
     tok = await advanced_token(client)
+    f_from, f_to = CFG["recv"] if kind == "received" else CFG["dec"]
+    if DETECTED:
+        f_from, f_to = ((DETECTED["recv_from"], DETECTED["recv_to"]) if kind == "received" else (DETECTED["dec_from"] or f_from, DETECTED["dec_to"] or f_to))
     form = {"__RequestVerificationToken": tok, "AdvancedSearch": "True", **CFG["flags"],
             f_from: a.strftime("%d/%m/%Y"), f_to: b.strftime("%d/%m/%Y")}
     await N._req(client, "POST", base + CFG["action"], data=form, headers={"Referer": f"{base}/Search/Advanced"})
