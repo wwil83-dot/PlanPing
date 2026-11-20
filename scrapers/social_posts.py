@@ -15,7 +15,12 @@ SYSTEM = """You write social media posts for PlanFind (planfind.co.uk), a free U
 You are given REAL data. Use only the numbers and names supplied; never invent or round up figures.
 Tone: friendly, plain English, useful, not hype. No emojis spam (max 2 per post). No politics, no opinions on whether
 developments are good or bad. Never mention applicants or private individuals; addresses are fine only at street/area level.
-Every post ends with the relevant link on planfind.co.uk if one is supplied."""
+Every post ends with the relevant link on planfind.co.uk if one is supplied.
+Strict rules: state only what the data says. Do NOT add commentary, predictions or claims such as "will reshape the area",
+"high-profile", "strong demand" or "highlights the importance of ...". Say "proposed" or "applied for", never that something is happening or approved
+unless the data says so. Write numbers without spaces or thousands separators problems (3,497 or 3497, never 3 497). If a description is ambiguous
+(e.g. a condition discharge or prior approval rather than the main scheme), describe it neutrally or leave it out. Do not use work-type counts for
+'admin', 'trees', 'other' or 'unknown' as headline stats."""
 
 BRIEF = """Using the data below, write a weekly pack:
 
@@ -24,6 +29,8 @@ BRIEF = """Using the data below, write a weekly pack:
 3. X/BLUESKY: three separate posts, each under 270 characters including the link.
 4. IMAGE IDEAS: two simple graphic ideas (e.g. a league table card) with the exact text to put on each.
 
+If the data has "focus_council", the FACEBOOK post must be written for residents of that council area and use ONLY items from "focus_notable_14d"
+(street/area level, with that item's link); if that list is empty say so instead of inventing anything.
 Label each section clearly. DATA:
 """
 
@@ -34,7 +41,7 @@ async def gather(conn):
         "SELECT COUNT(*) FROM planning_applications WHERE submitted_date >= current_date - 7")
     d["top_work_types_7d"] = [dict(r) for r in await conn.fetch("""
         SELECT work_type, COUNT(*) n FROM planning_applications
-        WHERE submitted_date >= current_date - 7 AND work_type IS NOT NULL AND work_type <> 'unknown'
+        WHERE submitted_date >= current_date - 7 AND work_type IS NOT NULL AND work_type NOT IN ('unknown', 'other', 'admin', 'trees')
         GROUP BY 1 ORDER BY 2 DESC LIMIT 6""")]
     d["busiest_councils_7d"] = [dict(r) for r in await conn.fetch("""
         SELECT c.name, c.slug, COUNT(*) n FROM planning_applications a JOIN councils c ON c.id=a.council_id
@@ -48,6 +55,17 @@ async def gather(conn):
         ORDER BY (a.work_type='large_site') DESC, length(a.description) DESC LIMIT 8""")]
     for r in d["notable_new_7d"]:
         r["link"] = f"https://planfind.co.uk/application/{r.pop('id')}"
+    focus = os.environ.get("FOCUS_COUNCIL", "").strip()
+    if focus:
+        d["focus_council"] = focus
+        d["focus_notable_14d"] = [dict(r) for r in await conn.fetch("""
+            SELECT c.name council, a.work_type, left(a.description, 250) description, a.address, a.status, a.id
+            FROM planning_applications a JOIN councils c ON c.id=a.council_id
+            WHERE c.name ILIKE $1 AND a.submitted_date >= current_date - 14 AND a.description IS NOT NULL
+              AND a.work_type IN ('large_site','new_dwelling','change_of_use','commercial','agricultural','demolition')
+            ORDER BY length(a.description) DESC LIMIT 8""", f"%{focus}%")]
+        for r in d["focus_notable_14d"]:
+            r["link"] = f"https://planfind.co.uk/application/{r.pop('id')}"
     d["links"] = {"home": "https://planfind.co.uk", "trends": "https://planfind.co.uk/trends"}
     return d
 
