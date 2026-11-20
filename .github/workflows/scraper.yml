@@ -260,7 +260,7 @@ jobs:
           DAYS_BACK: "14"
           CONCURRENCY: "2"
           REQUEST_DELAY_SECONDS: "0"
-        run: cd scrapers && python idox_scraper.py "--only=Rushmoor Borough Council,New Forest District Council,West Oxfordshire District Council,Broadland District Council,South Norfolk Council,Kings Lynn and West Norfolk Borough Council,North Norfolk District Council,Chesterfield Borough Council,East Cambridgeshire District Council,South Cambridgeshire District Council,Pendle Borough Council,Chorley Borough Council"
+        run: cd scrapers && python idox_scraper.py "--only=Rushmoor Borough Council,New Forest District Council,West Oxfordshire District Council,Broadland District Council,South Norfolk Council,Kings Lynn and West Norfolk Borough Council,North Norfolk District Council,Chesterfield Borough Council,East Cambridgeshire District Council,South Cambridgeshire District Council,South Ribble Borough Council,Pendle Borough Council,Chorley Borough Council"
 
   scrape_idox_f:
     if: >
