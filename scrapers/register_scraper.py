@@ -44,11 +44,11 @@ import httpx
 import northdevon_scraper as N  # tested helpers: _strip, _dmy, _extract_postcode, _word_status, normalise_status, ...
 
 CONFIGS = {
-    "southhams": dict(base="https://southhams.planning-register.co.uk", like="*South Hams*", env="SOUTHHAMS",
+    "southhams": dict(cf=True, base="https://southhams.planning-register.co.uk", like="*South Hams*", env="SOUTHHAMS",
                       action="/Search/SiteResults", source="register_scraper_southhams",
                       flags={"SearchPlanning": ["true", "false"], "SearchTreePreservationOrders": ["true", "false"]},
                       recv=("DateReceivedFrom", "DateReceivedTo"), dec=("DateIssuedFrom", "DateIssuedTo")),
-    "westdevon": dict(base="https://westdevon.planning-register.co.uk", like="*West Devon*", env="WESTDEVON",
+    "westdevon": dict(cf=True, base="https://westdevon.planning-register.co.uk", like="*West Devon*", env="WESTDEVON",
                       action="/Search/SiteResults", source="register_scraper_westdevon",
                       flags={"SearchPlanning": ["true", "false"], "SearchTreePreservationOrders": ["true", "false"]},
                       recv=("DateReceivedFrom", "DateReceivedTo"), dec=("DateIssuedFrom", "DateIssuedTo")),
@@ -191,6 +191,48 @@ def parse_detail(text: str) -> dict:
 # ---------------------------------------------------------------------------
 # HTTP sweeps
 # ---------------------------------------------------------------------------
+class CFClient:
+    """Chrome-fingerprint HTTP client (curl_cffi) with the same .request() the shared helpers expect. South Hams and West Devon
+    put Cloudflare in front of their register (2026-11-20: plain httpx gets 'Attention Required' / HTTP 403). If a direct request
+    is still challenged and HTTP_PROXY_URLS holds addresses, the next address is tried."""
+    def __init__(self):
+        from curl_cffi.requests import AsyncSession
+        self._mk = lambda px: AsyncSession(impersonate="chrome", **({"proxies": {"http": px, "https": px}} if px else {}))
+        self.proxies = [x.strip() for x in os.environ.get("HTTP_PROXY_URLS", "").split(",") if x.strip()]
+        self.pi = -1                      # -1 = direct
+        print(f"    ℹ Chrome-fingerprint client in use; {len(self.proxies)} proxy address(es) available as fallback")
+        self.s = self._mk(None)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        await self.s.close()
+
+    async def request(self, method, url, data=None, headers=None, **kw):
+        from urllib.parse import urlencode
+        headers = dict(headers or {})
+        if isinstance(data, dict):
+            data = urlencode(data, doseq=True)
+            headers.setdefault("Content-Type", "application/x-www-form-urlencoded")
+        for _ in range(len(self.proxies) + 1):
+            r = await self.s.request(method, url, data=data, headers=headers, timeout=60, allow_redirects=True)
+            if r.status_code == 403 and "cloudflare" in (r.text or "")[:3000].lower() and self.pi + 1 < len(self.proxies):
+                self.pi += 1
+                print(f"    ℹ Cloudflare challenge; switching to proxy {self.pi + 1} of {len(self.proxies)}")
+                await self.s.close()
+                self.s = self._mk(self.proxies[self.pi])
+                continue
+            return r
+        return r
+
+
+def make_client():
+    if CFG.get("cf"):
+        return CFClient()
+    return httpx.AsyncClient(timeout=60, follow_redirects=True, headers={"User-Agent": UA, "Accept": "text/html,*/*;q=0.8"})
+
+
 async def accept_disclaimer(client: httpx.AsyncClient):
     base = CFG["base"]
     r = await N._req(client, "GET", f"{base}/Disclaimer?returnUrl=%2FSearch%2FAdvanced")
@@ -341,8 +383,7 @@ async def main():
     today = date.today()
     d_from = today - timedelta(days=WINDOW_DAYS)
 
-    async with httpx.AsyncClient(timeout=60, follow_redirects=True,
-                                 headers={"User-Agent": UA, "Accept": "text/html,*/*;q=0.8"}) as client:
+    async with make_client() as client:
         await accept_disclaimer(client)
         received = await sweep(client, "received", d_from - timedelta(days=LAG_DAYS), today)
         determined = await sweep(client, "determined", d_from, today)
