@@ -521,11 +521,11 @@ IDOX_COUNCILS = [
     # (southhams.planning-register.co.uk) — skip both permanently.
     # North Devon CONFIRMED not Idox (bespoke "Council Services" product,
     # planning.northdevon.gov.uk/Search/Advanced) — skip.
-    # Torridge CONFIRMED Idox Jul 2026 (https since Oct 2026: the old http:// address now answers 404). Plymouth already flagged broken
+    # Torridge CONFIRMED Idox Jul 2026. Plymouth already flagged broken
     # (redirects to Gloucester's server, see SOUTH WEST section below).
     # -------------------------------------------------------------------------
     ("Torridge District Council",
-     "https://publicaccess.torridge.gov.uk/online-applications"),
+     "http://publicaccess.torridge.gov.uk/online-applications"),
 
     ("Teignbridge District Council",
      "https://publicaccess.teignbridge.gov.uk/online-applications"),
@@ -958,22 +958,11 @@ IDOX_COUNCILS = [
     ("Lewes District Council",
      "https://planningpa.lewes-eastbourne.gov.uk/online-applications"),
 
-    # MOVED 2026-10-16: Rother is on the getApplications platform
-    # (online.rother.gov.uk/planning) — see getapplications_councils.py.
-    # The planweb01 Idox URL never saved anything (coverage_source stayed 'pending').
-    # ("Rother District Council",
-    #  "https://planweb01.rother.gov.uk/online-applications"),
+    ("Rother District Council",
+     "https://planweb01.rother.gov.uk/online-applications"),
 
     ("Wealden District Council",
      "https://planning.wealden.gov.uk/online-applications"),
-
-    # ADDED 2026-10-18: Hastings confirmed Idox Public Access (council site
-    # links to publicaccess.hastings.gov.uk/online-applications; it also has a
-    # Weekly / Monthly Lists tab). No COUNCIL_DB_IDS entry: idox_scraper.py
-    # looks the id up by name until one is added. Run INSERT_SQL first so the
-    # row exists.
-    ("Hastings Borough Council",
-     "https://publicaccess.hastings.gov.uk/online-applications"),
 
     # --- WEST SUSSEX districts ---
     ("Chichester District Council",
@@ -1331,13 +1320,13 @@ IDOX_COUNCILS = [
     #  "https://publicaccess.burnley.gov.uk/online-applications"),
 
     ("South Ribble Borough Council",
-     "https://publicaccess.southribble.gov.uk/online-applications"),
+     "https://planning.chorleysouthribble.gov.uk/online-applications"),
 
     ("Pendle Borough Council",
      "https://publicaccess.pendle.gov.uk/online-applications"),
 
     ("Chorley Borough Council",
-     "https://planning.chorley.gov.uk/online-applications"),
+     "https://planning.chorleysouthribble.gov.uk/online-applications"),
 
     ("Wyre Borough Council",
      "https://publicaccess.wyre.gov.uk/online-applications"),
@@ -2012,14 +2001,12 @@ IDOX_COUNCILS = [
     # Glasgow/Aberdeen (just in the opposite direction — they needed
     # monthly because their weekly search broke; East Riding needs
     # weekly because its monthly search is too broad).
-    # MOVED: East Riding (475): detail pages 403 and timeouts from the runner; now run by idox_http_scraper.py through the UK proxies (2026-10-30).
-    # ("East Riding of Yorkshire Council",
-    # "https://newplanningaccess.eastriding.gov.uk/newplanningaccess",
-    # "weekly"),
+    ("East Riding of Yorkshire Council",
+     "https://newplanningaccess.eastriding.gov.uk/newplanningaccess",
+     "weekly"),
 
-    # MOVED: Stafford (476): now run by idox_http_scraper.py through the UK proxies (2026-10-29).
-    # ("Stafford Borough Council",
-    # "https://www12.staffordbc.gov.uk/online-applications"),
+    ("Stafford Borough Council",
+     "https://www12.staffordbc.gov.uk/online-applications"),
 
     ("Lichfield District Council",
      "https://planning.lichfielddc.gov.uk/online-applications"),
@@ -2037,9 +2024,8 @@ IDOX_COUNCILS = [
     # ("North Kesteven District Council",
     #  "https://planningonline.n-kesteven.gov.uk/online-applications"),
 
-    # MOVED: South Kesteven (479): Cloudflare 'Just a moment' challenge in this scraper since 2026-10-20; now run by idox_http_scraper.py through the UK proxies (2026-10-30).
-    # ("South Kesteven District Council",
-    # "https://prod.publicaccess.southkesteven.gov.uk/online-applications"),
+    ("South Kesteven District Council",
+     "https://prod.publicaccess.southkesteven.gov.uk/online-applications"),
 
     # -------------------------------------------------------------------------
     # ADDED 2026-08-22 — 3 more councils, real URLs supplied directly
@@ -2109,15 +2095,6 @@ IDOX_COUNCILS = [
      "https://planonline.rctcbc.gov.uk/online-applications"),
 
 ]
-
-# Scraped by idox_http_scraper.py instead (curl_cffi advanced search): the Playwright scraper can no longer drive these -
-# North East Derbyshire, Bolsover and Derbyshire Dales sit behind a Cloudflare challenge, and Blaby and Hinckley & Bosworth
-# put a reCAPTCHA on the monthly list. Kept in COUNCIL_DB_IDS above; only the nightly batch list skips them.
-_HTTP_SCRAPED = {
-    "North East Derbyshire District Council", "Bolsover District Council", "Derbyshire Dales District Council",
-    "Blaby District Council", "Hinckley and Bosworth Borough Council",
-}
-IDOX_COUNCILS = [c for c in IDOX_COUNCILS if c[0] not in _HTTP_SCRAPED]
 
 # ---------------------------------------------------------------------------
 # SQL to insert all Idox councils into Supabase
@@ -2205,8 +2182,7 @@ VALUES
   ('London Borough of Barnet','london-borough-of-barnet','idox','england','https://publicaccess.barnet.gov.uk/online-applications','pending',true),
   ('London Borough of Enfield','london-borough-of-enfield','idox','england','https://planningandbuildingcontrol.enfield.gov.uk/online-applications','pending',true),
   ('London Borough of Haringey','london-borough-of-haringey','idox','england','https://www.haringey.gov.uk/online-applications','pending',true),
-  ('London Borough of Islington','london-borough-of-islington','idox','england','https://www.islington.gov.uk/online-applications','pending',true),
-  ('Hastings Borough Council','hastings-borough-council','idox','england','https://publicaccess.hastings.gov.uk/online-applications','pending',true)
+  ('London Borough of Islington','london-borough-of-islington','idox','england','https://www.islington.gov.uk/online-applications','pending',true)
 ON CONFLICT (name) DO UPDATE SET
   system = 'idox',
   active = true,
@@ -2214,4 +2190,4 @@ ON CONFLICT (name) DO UPDATE SET
 """
 
 if __name__ == "__main__":
-    print(INSERT_SQL)
+    print(INSERT_SQL)

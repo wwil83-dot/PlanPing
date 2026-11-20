@@ -52,6 +52,10 @@ SHARED_PORTALS = {
         "Cambridge": "Cambridge City Council",
         "South Cambridgeshire": "South Cambridgeshire District Council",
     },
+    "https://planning.chorleysouthribble.gov.uk/online-applications": {
+        "Chorley": "Chorley Borough Council",
+        "South Ribble": "South Ribble Borough Council",
+    },
     "https://planning.baberghmidsuffolk.gov.uk/online-applications": {
         "Babergh": "Babergh District Council",
         "Mid Suffolk": "Mid Suffolk District Council",
