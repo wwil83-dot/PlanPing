@@ -202,16 +202,25 @@ async def accept_disclaimer(client: httpx.AsyncClient):
 
 async def advanced_token(client: httpx.AsyncClient) -> str:
     base = CFG["base"]
-    for attempt in (1, 2):
-        r = await N._req(client, "GET", f"{base}/Search/Advanced")
-        if "DateReceivedFrom" in r.text:
-            tok = N._token(r.text)
-            if tok:
-                return tok
-        print(f"    ℹ disclaimer not accepted yet (attempt {attempt}); accepting")
-        await accept_disclaimer(client)
-        await asyncio.sleep(1)
-    raise RuntimeError("Could not reach the advanced search form after accepting the disclaimer")
+    seen = ""
+    for attempt in (1, 2, 3, 4):
+        try:
+            r = await N._req(client, "GET", f"{base}/Search/Advanced")
+            if "DateReceivedFrom" in r.text:
+                tok = N._token(r.text)
+                if tok:
+                    return tok
+            title = re.search(r"<title>(.*?)</title>", r.text, re.S | re.I)
+            seen = f"HTTP {r.status_code}, url {str(r.url)[:120]}, title {re.sub(chr(32)+'+', ' ', (title.group(1) if title else '?')).strip()[:80]!r}, starts: {re.sub(r'<[^>]+>', ' ', r.text)[:160].split()!r}"
+        except Exception as e:
+            seen = f"{type(e).__name__}: {str(e)[:150]}"
+        print(f"    ℹ search form not available (attempt {attempt} of 4): {seen}")
+        try:
+            await accept_disclaimer(client)
+        except Exception as e:
+            print(f"    ℹ disclaimer step failed: {type(e).__name__}: {str(e)[:120]}")
+        await asyncio.sleep(4 * attempt)      # a slow or briefly overloaded council site often recovers within a minute
+    raise RuntimeError(f"Could not reach the advanced search form after accepting the disclaimer ({seen})")
 
 
 SLICE_DAYS = int(os.environ.get("SLICE_DAYS", "7"))
