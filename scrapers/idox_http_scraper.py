@@ -164,7 +164,7 @@ class Blocked(Exception):
     pass
 
 
-FLAKY_SERVERS = {190, 170, 65}      # councils whose own server is known to be unreliable (Sandwell: HTTP 500s and timeouts; Bury: Fortinet 504 Gateway Timeout 2026-11-16; Southampton: search form timeouts on all proxies 2026-11-18); a timeout on every address is reported as info, not as a failure
+FLAKY_SERVERS = {190, 170, 65, 355}      # councils whose own server is known to be unreliable (Sandwell: HTTP 500s and timeouts; Bury: Fortinet 504 Gateway Timeout 2026-11-16; Southampton: search form timeouts on all proxies 2026-11-18); a timeout on every address is reported as info, not as a failure
 
 
 class CouncilDown(Exception):
@@ -436,7 +436,7 @@ def outcome(raw: str) -> str:
         return "withdrawn"
     if re.search(r"required and (approved|granted|permitted)|^accept", t):
         return "approved"                          # 'Prior Approval Required and Approved'; 'ACCEPT Non-material Minor Amendment'
-    if re.search(r"finally dispose|no decision made", t):
+    if re.search(r"finally dispose|no decision made|opinion issued", t):
         return "closed"                            # Dover: file closed without a decision
     if re.search(r"refus", t) and not re.search(r"not discharged|further discharge|not refus", t):
         return "refused"                           # e.g. 'Prior Approval Required and Refused' (must be checked before 'approval required')
