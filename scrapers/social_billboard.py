@@ -7,19 +7,34 @@ SITE = os.environ.get("SITE_URL", "https://planfind.co.uk")
 DRY = os.environ.get("DRY_RUN", "0").strip() in ("1", "true", "yes")
 OUT = os.environ.get("SHOT_FILE", "billboard.png")
 
-CAPTIONS = [
-    "Planning applications near you, in plain English. Type your postcode and see what's being built on your street.",
-    "Who's applying to build next door? Check every planning application near your home, free.",
-    "Extension, new house, change of use? See what's been applied for near you and what it means.",
-    "Know what's happening on your street before the neighbours do. Free planning alerts by postcode.",
-    "Planning applications without the jargon. Search by postcode, see the decision, get alerts.",
+OPENERS = [
+    "Planning applications near you, in plain English.",
+    "Who's applying to build next door?",
+    "Extension, new house or change of use on your street?",
+    "Know what's happening nearby before the neighbours do.",
     "Thinking of an extension? See what's been approved near you first.",
+    "Planning applications without the jargon.",
+    "Curious what that scaffolding is for?",
+    "Got a planning notice through the door and no idea what it means?",
+]
+TIPS = [
+    "Type your postcode and see what's been applied for.",
+    "Free email alerts when a new application goes in near your home.",
+    "No account needed. Just search.",
+    "Covers England, Scotland, Wales and Northern Ireland.",
+    "Bigger applications get a short plain-English summary of what they mean for people nearby.",
+    "See whether nearby applications were approved or refused.",
+    "Builders, architects and roofers can see how much work is being planned in their patch.",
+    "Handy guides explain planning terms like permitted development and prior approval.",
+    "Looking for a local professional? You can find one on the site.",
+    "Free to use.",
 ]
 
 
 def caption() -> str:
-    wk = datetime.date.today().isocalendar()[1]
-    return f"{CAPTIONS[wk % len(CAPTIONS)]}\n{SITE}"
+    wk = datetime.date.today().isocalendar()[1] + datetime.date.today().year * 53
+    # different strides so the opener and the tip pair up differently each week
+    return f"{OPENERS[wk % len(OPENERS)]} {TIPS[(wk * 3 + wk // len(TIPS)) % len(TIPS)]}\n{SITE}"
 
 
 def screenshot() -> bytes:
@@ -61,7 +76,7 @@ def post_bluesky(img: bytes, text: str):
                        "features": [{"$type": "app.bsky.richtext.facet#link", "uri": m.group().decode()}]})
     rec = {"$type": "app.bsky.feed.post", "text": text, "facets": facets,
            "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
-           "embed": {"$type": "app.bsky.embed.images", "images": [{"alt": "The PlanFind home page: search planning applications by postcode", "image": blob}]}}
+           "embed": {"$type": "app.bsky.embed.images", "images": [{"alt": "The PlanFind home page: search planning applications by postcode", "image": blob, "aspectRatio": {"width": 1200, "height": 630}}]}}
     out = _req(base + "com.atproto.repo.createRecord", json.dumps({"repo": sess["did"], "collection": "app.bsky.feed.post", "record": rec}).encode(), {**auth, "Content-Type": "application/json"})
     return "posted " + out.get("uri", "")
 
