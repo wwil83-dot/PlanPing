@@ -123,7 +123,7 @@ def _w(s: str) -> Optional[str]:
         return "withdrawn"
     if "not issue" in s:
         return "refused"
-    if s in ("issue certificate", "be discharged") or "details approved" in s:
+    if s.startswith("issue certificate") or s in ("be discharged",) or "details approved" in s:
         return "approved"
     if "modification to planning obligation" in s or "appeal lodged" in s:
         return "closed" if "modification" in s else None
