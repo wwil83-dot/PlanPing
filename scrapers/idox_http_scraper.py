@@ -436,6 +436,8 @@ def outcome(raw: str) -> str:
         return "withdrawn"
     if re.search(r"required and (approved|granted|permitted)|^accept", t):
         return "approved"                          # 'Prior Approval Required and Approved'; 'ACCEPT Non-material Minor Amendment'
+    if re.search(r"finally dispose|no decision made", t):
+        return "closed"                            # Dover: file closed without a decision
     if re.search(r"refus", t) and not re.search(r"not discharged|further discharge|not refus", t):
         return "refused"                           # e.g. 'Prior Approval Required and Refused' (must be checked before 'approval required')
     if re.search(r"not discharged|further discharge|details required|approval required|permission required|determine not|"

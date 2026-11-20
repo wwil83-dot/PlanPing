@@ -74,19 +74,31 @@ def _title_address(text: str) -> str:
 
 def _sentence_case(text: str) -> str:
     t = re.sub(r"\s+", " ", text or "").strip()
-    if not t or not t.isupper():
+    if not t:
         return t
+    if not t.isupper():
+        return re.sub(r"\b(wd|tm)/\d{4}/\d+/[a-z]+\b", lambda m: m.group(0).upper(), t, flags=re.I)
     t = t.lower()
     t = re.sub(r"(^|[.!?]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper(), t)
-    for ac in ("TPO", "WD", "UPRN", "BNG", "HMO", "EV", "TV"):
+    for ac in ("TPO", "UPRN", "BNG", "HMO", "EV", "TV"):
         t = re.sub(rf"\b{ac.lower()}\b", ac, t)
+    t = re.sub(r"\b(wd|tm)/\d{4}/\d+/[a-z]+\b", lambda m: m.group(0).upper(), t)
     return t
 
 
-def _app_type(ref: str) -> str:
+_TYPE_SUFFIX = {"F": "Full Planning Permission", "FR": "Full Planning Permission", "O": "Outline Planning Permission",
+                "MAO": "Outline Planning Permission", "MAR": "Reserved Matters", "RM": "Reserved Matters",
+                "CD": "Discharge of Conditions", "TPO": "Tree Preservation Order Works", "TCA": "Tree Works in Conservation Area",
+                "LB": "Listed Building Consent", "LBR": "Listed Building Consent", "PD": "Prior Approval",
+                "POR": "Planning Obligation Modification", "NMA": "Non-Material Amendment", "CLP": "Lawful Development Certificate",
+                "CLE": "Lawful Development Certificate", "AD": "Advertisement Consent", "AA": "Adjoining Authority Consultation"}
+
+
+def _app_type(ref: str, detail_type: str = "") -> str:
+    if detail_type and detail_type.strip() not in ("-", ""):
+        return detail_type.strip()
     suf = ref.rsplit("/", 1)[-1].upper()
-    return {"F": "Full Planning Permission", "O": "Outline Planning Permission", "CD": "Discharge of Conditions",
-            "TPO": "Tree Preservation Order Works", "LB": "Listed Building Consent"}.get(suf, suf)
+    return _TYPE_SUFFIX.get(suf, suf)
 
 
 _UNMAPPED: set = set()
@@ -179,21 +191,28 @@ async def sweep(c, kind: str, d_from: date, d_to: date) -> dict:
               f"{pre}To": (d_to + timedelta(days=1)).strftime("%m/%d/%Y") + " 00:00:00"}
     out, tabs_seen, total = {}, [], None
     r = await get(c, BASE + "/Search/Standard", params=params)
-    for page in range(MAX_PAGES):
+    page = 1
+    while page <= MAX_PAGES:
         rows, tabs, nxt = parse_results(r.text)
-        if page == 0:
-            tabs_seen = tabs
+        if page == 1:
+            tabs_seen = tabs[:1]
             m = next((re.search(r"\((\d+)\)", t) for t in tabs if t.lower().startswith("planning")), None)
             total = int(m.group(1)) if m else None
+        before = len(out)
         for row in rows:
             out[row["reference"]] = row
-        if not nxt or not rows:
+        if not rows or len(out) == before:      # empty or repeated page: stop
             break
+        if total is not None and len(out) >= total:
+            break
+        page += 1
         await asyncio.sleep(DELAY)
-        r = await get(c, BASE + nxt)
+        r = await get(c, f"{BASE}/Search/ResultsPage/{page}?module=PLA&tabOrder=0")
+    if total is not None and page > 1:
+        pass
     note = f" (tab says {total})" if total is not None else ""
     flag = "" if total is None or total == len(out) else "   ⚠ COUNT MISMATCH"
-    print(f"    ℹ {kind} {d_from}..{d_to}: {len(out)} rows{note}; tabs {tabs_seen}{flag}")
+    print(f"    ℹ {kind} {d_from}..{d_to}: {len(out)} rows over {page} page(s){note}{flag}")
     return out
 
 
@@ -221,10 +240,10 @@ def parse_detail_fields(html: str) -> dict:
 
 
 def outcome_from_fields(f: dict) -> Optional[str]:
-    for k, v in f.items():
-        if re.search(r"decision|outcome|determination", k) and not re.search(r"date|notice|level|type|by|expiry|due|target", k) and v:
-            return v
-    return None
+    v = (f.get("decision") or "").strip()
+    if v.lower() in ("", "n/a", "na", "-", "not available", "none"):
+        return None
+    return v
 
 
 # ---------------------------------------------------------------- supabase
@@ -377,6 +396,7 @@ async def main():
                 print(f"    ℹ detail fields for {ref}: {dict(list(fields.items())[:25])}")
                 if first_printed == 1:
                     print("    ℹ detail page text (first 1200 chars): " + re.sub(r'\s+', ' ', BeautifulSoup(r.text, 'html.parser').get_text(' ', strip=True))[:1200])
+            row["_dtype"] = fields.get("application type", "")
             raw = outcome_from_fields(fields)
             outcome_labels[raw or "(none found)"] += 1
             row["_outcome"] = _normalise_outcome(raw) if raw else None
@@ -399,7 +419,7 @@ async def main():
             "address": _title_address(row["location"]),
             "postcode": _postcode(row["location"]),
             "description": _sentence_case(row["description"]),
-            "application_type": _app_type(ref),
+            "application_type": _app_type(ref, row.get("_dtype", "")),
             "status": status,
             "submitted_date": _dmy(row["valid"]),
             "decision_date": _dmy(row["decided"]),
