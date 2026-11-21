@@ -441,7 +441,7 @@ def outcome(raw: str) -> str:
         return "approved"                          # 'Prior Approval Required and Approved'; 'ACCEPT Non-material Minor Amendment'
     if re.search(r"tree preservation order made", t):
         return "closed"                            # council answered a tree notice by making a TPO: not a consent, not a plain refusal
-    if re.search(r"finally dispose|no decision made|opinion issued", t):
+    if re.search(r"finally dispose|no decision made|opinion issued|not development|decline to determine|lapsed|^others$", t):
         return "closed"                            # Dover: file closed without a decision
     if re.search(r"refus", t) and not re.search(r"not discharged|further discharge|not refus", t):
         return "refused"                           # e.g. 'Prior Approval Required and Refused' (must be checked before 'approval required')
