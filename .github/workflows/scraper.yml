@@ -3730,7 +3730,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'planning_register_scraper') ||
       (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *') || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'group_0903_morning4')
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 15
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -3743,12 +3743,13 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-v1
       - run: pip install playwright beautifulsoup4 httpx
       - run: playwright install --with-deps chromium
-      - name: Run planning-register platform scraper (Worcester, Vale of Glamorgan)
+      - name: Run planning-register platform scraper (Welwyn Hatfield, Worcester, Vale of Glamorgan, Cambridgeshire County)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          MAX_MINUTES: "15"
+          MAX_MINUTES: "40"
           DAYS_BACK: "30"
+          DAILY_DAYS: "14"
         run: cd scrapers && python planning_register_scraper.py
 
   bridgend_results_diagnostic:
