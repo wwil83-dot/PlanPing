@@ -59,6 +59,7 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 MAX_MINUTES  = int(os.environ.get("MAX_MINUTES", "15"))
 DAYS_BACK    = int(os.environ.get("DAYS_BACK", "30"))
+DAILY_DAYS   = int(os.environ.get("DAILY_DAYS", "14"))   # days searched one day at a time (exact submitted_date)
 MAX_PAGES    = int(os.environ.get("MAX_PAGES", "50"))
 
 START_TIME = time.monotonic()
@@ -404,49 +405,27 @@ class PlanningRegisterPortal:
         self._log("⚠ Could not find a cookie consent dismiss button "
                    "(may not have appeared, or a new selector needed)")
 
-    async def scrape(self, browser) -> list[dict]:
-        today = date.today()
-        start = today - timedelta(days=DAYS_BACK)
-        # ADDED for Welwyn Hatfield (2026-09-13) — confirmed real via
-        # fylde4_diagnostic.py: its date fields are native HTML5
-        # <input type="date">, which require ISO format (YYYY-MM-DD)
-        # as the real underlying value regardless of the page's
-        # visual DD/MM/YYYY placeholder text. Worcester/Vale of
-        # Glamorgan's own confirmed-working DD/MM/YYYY format is
-        # unchanged when this flag is False (the default).
-        if self.use_iso_dates:
-            start_str = start.isoformat()
-            end_str = today.isoformat()
-        else:
-            start_str = start.strftime("%d/%m/%Y")
-            end_str = today.strftime("%d/%m/%Y")
+    def _fmt(self, d: date) -> str:
+        return d.isoformat() if self.use_iso_dates else d.strftime("%d/%m/%Y")
 
-        all_apps: list[dict] = []
-        seen_refs: set[str] = set()
-
-        context = await browser.new_context(**CONTEXT_OPTIONS)
-        page = await context.new_page()
-
+    async def _search_window(self, page, d_from: date, d_to: date, exact_day: bool):
+        """One Received-date search (d_from..d_to), all result pages. Returns None if the search itself failed.
+        exact_day=True (d_from == d_to): every result was received that day, so it is stored as submitted_date
+        (the results list shows no dates at all, which is why these councils had none before)."""
+        start_str, end_str = self._fmt(d_from), self._fmt(d_to)
         try:
             await page.goto(self.search_url, wait_until="domcontentloaded", timeout=45_000)
             try:
                 await page.wait_for_load_state("networkidle", timeout=15_000)
             except PlaywrightTimeout:
                 pass
-
-            # ADDED for Welwyn Hatfield — cookie banner dismissal must
-            # happen before any other interaction, confirmed via the
-            # real diagnostic run order. No-op for councils where
-            # needs_cookie_dismiss is False (the default).
             await self._dismiss_cookie_banner_if_needed(page)
-
             if self.needs_disclaimer:
                 await self._click_disclaimer_if_present(page)
                 if self.search_url not in page.url:
                     await page.goto(self.search_url, wait_until="domcontentloaded", timeout=45_000)
 
             if await page.locator("#DateReceivedFrom").count() == 0:
-                # unknown form for a new council in this family: list what IS there so the next fix is one step, not a guess
                 try:
                     fields = await page.evaluate("() => [...document.querySelectorAll('input,select')].map(e => e.type + '#' + e.id + '[' + e.name + ']').join(' | ')")
                     self._log(f"FORM DIAGNOSTIC (no #DateReceivedFrom) at {page.url}: {fields[:1500]}")
@@ -461,22 +440,11 @@ class PlanningRegisterPortal:
                     try:
                         await planning_checkbox.first.check(timeout=5_000)
                     except Exception:
-                        # REAL FALLBACK — confirmed needed for Welwyn
-                        # Hatfield via fylde4_diagnostic.py, whose
-                        # checkbox click failed with real errors
-                        # ("outside of viewport", "did not change its
-                        # state") even with force=True. Setting state
-                        # directly via JS and dispatching a real
-                        # 'change' event bypasses mouse-simulation
-                        # entirely — confirmed working end-to-end.
-                        # Worcester/Vale of Glamorgan's own confirmed
-                        # .check() path is tried FIRST and unaffected
-                        # when it already succeeds.
+                        # direct JS fallback (Welwyn Hatfield: a real click fails even with force)
                         await planning_checkbox.first.evaluate(
                             "el => { el.checked = true; "
                             "el.dispatchEvent(new Event('change', {bubbles: true})); }"
                         )
-                        self._log("SearchPlanning checkbox set via direct JS fallback")
 
             form_loc = page.locator("form").filter(has=page.locator("#DateReceivedFrom"))
             search_scope = form_loc if await form_loc.count() > 0 else page
@@ -490,48 +458,42 @@ class PlanningRegisterPortal:
                         await loc.last.click(timeout=5_000)
                     clicked = True
                     break
-
             if not clicked:
-                self._log("⚠ Could not find/click a real submit button — stopping")
-                await context.close()
-                return []
-
+                self._log("⚠ Could not find/click a real submit button")
+                return None
             try:
                 await page.wait_for_load_state("networkidle", timeout=15_000)
             except PlaywrightTimeout:
                 pass
         except Exception as e:
-            self._log(f"⚠ Search fill/submit failed: {type(e).__name__}: {e!r}")
-            await context.close()
-            return []
+            self._log(f"⚠ Search {start_str}..{end_str} failed: {type(e).__name__}: {e!r}")
+            return None
 
-        self._log(f"Post-submit URL: {page.url}")
-
-        html = await page.content()
         parser = _parse_welhat_results_page if self.uses_list_results else _parse_results_page
-        page1_apps = parser(html, self.base_url, self.council_name)
-        for a in page1_apps:
-            if a["reference"] not in seen_refs:
-                seen_refs.add(a["reference"])
-                all_apps.append(a)
-        self._log(f"Page 1: {len(page1_apps)} found (running total {len(all_apps)})")
+        out: list = []
+        seen: set = set()
 
+        def take(apps: list) -> int:
+            n = 0
+            for a in apps:
+                if a["reference"] not in seen:
+                    seen.add(a["reference"])
+                    if exact_day:
+                        a["submitted_date"] = d_from.isoformat()
+                    out.append(a)
+                    n += 1
+            return n
+
+        take(parser(await page.content(), self.base_url, self.council_name))
         page_num = 2
         while page_num <= MAX_PAGES:
             if should_stop():
-                self._log(f"⚠ Time budget reached at page {page_num}, stopping")
                 break
-            # Real confirmed pagination differs by platform template:
-            # Worcester/Vale of Glamorgan use aria-label="Next Page."
-            # (matching Fylde's own); Welwyn Hatfield's real body text
-            # confirmed via welhat_results_diagnostic.py shows plain
-            # "Next" text instead.
             if self.uses_list_results:
                 next_link = page.locator("a:has-text('Next'):visible")
             else:
                 next_link = page.locator("a[aria-label='Next Page.']:visible")
             if await next_link.count() == 0:
-                self._log(f"No visible 'Next' link — stopping at page {page_num - 1}")
                 break
             try:
                 await next_link.first.click(timeout=10_000)
@@ -539,30 +501,65 @@ class PlanningRegisterPortal:
                     await page.wait_for_load_state("networkidle", timeout=10_000)
                 except PlaywrightTimeout:
                     pass
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(1.0)
             except Exception as e:
                 self._log(f"⚠ Could not click Next at page {page_num}: {type(e).__name__}")
                 break
-
-            html = await page.content()
-            page_apps = parser(html, self.base_url, self.council_name)
-            if not page_apps:
-                self._log(f"Page {page_num}: 0 apps parsed — stopping")
-                break
-
-            new_count = 0
-            for a in page_apps:
-                if a["reference"] not in seen_refs:
-                    seen_refs.add(a["reference"])
-                    all_apps.append(a)
-                    new_count += 1
-            self._log(f"Page {page_num}: {new_count} new (running total {len(all_apps)})")
-            if new_count == 0:
-                self._log(f"Page {page_num}: 0 NEW apps — stopping (likely genuine end of data)")
+            page_apps = parser(await page.content(), self.base_url, self.council_name)
+            if not page_apps or take(page_apps) == 0:
                 break
             page_num += 1
+        return out
 
-        await context.close()
+    async def scrape(self, browser) -> list:
+        """Daily Received-date searches for the last DAILY_DAYS days (newest first) so each application gets its real
+        submitted_date; then 8-day windows back to DAYS_BACK only to refresh the status of older, still-open applications
+        (no submitted_date from those: an unknown date must never overwrite a known one)."""
+        today = date.today()
+        windows: list = []
+        for i in range(0, min(DAILY_DAYS, DAYS_BACK) + 1):
+            d = today - timedelta(days=i)
+            windows.append((d, d, True))
+        lo = DAILY_DAYS + 1
+        while lo <= DAYS_BACK:
+            hi = min(lo + 7, DAYS_BACK)
+            windows.append((today - timedelta(days=hi), today - timedelta(days=lo), False))
+            lo = hi + 1
+
+        context = await browser.new_context(**CONTEXT_OPTIONS)
+        page = await context.new_page()
+        all_apps: list = []
+        by_ref: dict = {}
+        failed = 0
+        done = 0
+        try:
+            for d_from, d_to, exact in windows:
+                if should_stop():
+                    self._log(f"⚠ Time budget reached after {done} of {len(windows)} searches, stopping")
+                    break
+                apps = await self._search_window(page, d_from, d_to, exact)
+                if apps is None:
+                    failed += 1
+                    if failed >= 3 and not all_apps:
+                        self._log("⚠ Three searches failed and nothing found yet - giving up on this council")
+                        break
+                    continue
+                done += 1
+                new = 0
+                for a in apps:
+                    prev = by_ref.get(a["reference"])
+                    if prev is None:
+                        by_ref[a["reference"]] = a
+                        all_apps.append(a)
+                        new += 1
+                    elif a.get("submitted_date") and not prev.get("submitted_date"):
+                        prev["submitted_date"] = a["submitted_date"]
+                if apps:
+                    self._log(f"{d_from}..{d_to}: {len(apps)} found, {new} new (total {len(all_apps)})")
+        finally:
+            await context.close()
+        self._log(f"{done} of {len(windows)} searches done ({failed} failed); with submitted date: "
+                  f"{sum(1 for a in all_apps if a.get('submitted_date'))} of {len(all_apps)}")
         return all_apps
 
 
@@ -610,13 +607,21 @@ async def process_council(portal: PlanningRegisterPortal, browser) -> int:
             "lat": lat,
             "lng": lng,
             "source": "planning_register_scraper",
+            **({"submitted_date": a["submitted_date"]} if a.get("submitted_date") else {}),
         })
 
     if fallback_count:
         print(f"    [{portal.council_name}] Council centroid fallback for {fallback_count} apps")
 
     print(f"    [{portal.council_name}] Upserting {len(records)} records with council_id={cid}")
-    ok = await _supa_upsert(records)
+    # PostgREST wants identical keys within one batch: dated and undated rows go separately
+    dated = [r for r in records if "submitted_date" in r]
+    undated = [r for r in records if "submitted_date" not in r]
+    print(f"    [{portal.council_name}] with submitted date: {len(dated)}; without (older status refresh): {len(undated)}")
+    ok = True
+    for batch in (dated, undated):
+        if batch:
+            ok = bool(await _supa_upsert(batch)) and ok
     if ok:
         print(f"    [{portal.council_name}] ✓ Saved {len(records)}")
         await _supa_patch_council(cid, {
