@@ -361,7 +361,7 @@ class PlanningRegisterPortal:
         button says "Accept & Continue" — a partial match, not an
         exact "Accept"/"Agree". Worcester has no disclaimer gate at
         all. Best-effort across several real candidate selectors."""
-        if "Disclaimer" not in page.url:
+        if "Disclaimer" not in page.url and await page.locator("form[action*='Disclaimer/Accept']").count() == 0:
             return
         for selector in [
             "form[action*='Disclaimer/Accept'] input[type='submit']",     # Cambridgeshire County: single button, value "Planning Register"
@@ -402,8 +402,17 @@ class PlanningRegisterPortal:
                     return
             except Exception:
                 continue
-        self._log("⚠ Could not find a cookie consent dismiss button "
-                   "(may not have appeared, or a new selector needed)")
+        if not getattr(self, "_cookie_warned", False):
+            self._cookie_warned = True
+            self._log("(no cookie banner button found - fine if none appeared; not repeated)")
+
+    async def _kill_cookie_overlay(self, page) -> None:
+        """Welwyn Hatfield: after dismissing, #ccc-overlay can still swallow clicks. Remove it outright."""
+        try:
+            await page.evaluate("() => { for (const sel of ['#ccc-overlay', '#ccc']) "
+                                "document.querySelectorAll(sel).forEach(e => e.remove()); }")
+        except Exception:
+            pass
 
     def _fmt(self, d: date) -> str:
         return d.isoformat() if self.use_iso_dates else d.strftime("%d/%m/%Y")
@@ -425,6 +434,26 @@ class PlanningRegisterPortal:
                 if self.search_url not in page.url:
                     await page.goto(self.search_url, wait_until="domcontentloaded", timeout=45_000)
 
+            await self._kill_cookie_overlay(page)
+            try:
+                await page.wait_for_selector("#DateReceivedFrom", timeout=12_000)
+            except PlaywrightTimeout:
+                # form missing (blank page / disclaimer on same URL): reload once and go through the gates again
+                await asyncio.sleep(3)
+                await page.goto(self.search_url, wait_until="domcontentloaded", timeout=45_000)
+                await self._dismiss_cookie_banner_if_needed(page)
+                await self._click_disclaimer_if_present(page)
+                if self.search_url not in page.url:
+                    await page.goto(self.search_url, wait_until="domcontentloaded", timeout=45_000)
+                await self._kill_cookie_overlay(page)
+                try:
+                    await page.wait_for_selector("#DateReceivedFrom", timeout=12_000)
+                except PlaywrightTimeout:
+                    try:
+                        txt = (await page.inner_text("body"))[:300].replace("\n", " ")
+                        self._log(f"PAGE TEXT when form missing ({page.url}): {txt}")
+                    except Exception:
+                        pass
             if await page.locator("#DateReceivedFrom").count() == 0:
                 try:
                     fields = await page.evaluate("() => [...document.querySelectorAll('input,select')].map(e => e.type + '#' + e.id + '[' + e.name + ']').join(' | ')")
@@ -455,7 +484,7 @@ class PlanningRegisterPortal:
                 loc = search_scope.locator(sel)
                 if await loc.count() > 0:
                     async with page.expect_navigation(wait_until="domcontentloaded", timeout=30_000):
-                        await loc.last.click(timeout=5_000)
+                        await loc.last.click(timeout=5_000, force=True)
                     clicked = True
                     break
             if not clicked:
