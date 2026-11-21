@@ -305,7 +305,6 @@ COUNCILS_WITHOUT_DATE_DATA = {
     # 2026-11-20: SQL audit - these councils' scrapers have never stored a submitted date (every row is NULL)
     "Bridgend County Borough Council",
     "Burnley Borough Council",
-    "Cambridgeshire County Council",
     "Dudley Metropolitan Borough Council",
     "Fylde Council",
     "Hartlepool Borough Council",
@@ -318,8 +317,6 @@ COUNCILS_WITHOUT_DATE_DATA = {
     "Redcar and Cleveland Borough Council",
     "Vale of Glamorgan Council",
     "Walsall Metropolitan Borough Council",
-    "Welwyn Hatfield Borough Council",
-    "Worcester City Council",
 }
 
 
