@@ -78,6 +78,8 @@ COUNCILS = [
     ("West Dunbartonshire Council", "https://publicportal.west-dunbarton.gov.uk/online-applications", 530),   # moved from its old ASP system to Idox; certificate chain is invalid (council-side), so 530 is in INSECURE
     ("Winchester City Council", "https://planningapps.winchester.gov.uk/online-applications", 412),   # Playwright scraper gets 429-throttled here; trying the proxy/HTTP route (dry run first)
     # 2026-11-19: the Playwright scraper saves 0 for these three every night (Idox "Error" page, likely blocks the runner address); trying the proxy/HTTP route (dry run first).
+    ("Spelthorne Borough Council", "https://publicaccess.spelthorne.gov.uk/online-applications", 270),
+    ("Bradford Metropolitan District Council", "https://planning.bradford.gov.uk/online-applications", 175),
     ("South Ribble Borough Council", "https://publicaccess.southribble.gov.uk/online-applications", 311),
     ("Dover District Council", "https://publicaccess.dover.gov.uk/online-applications", 272),
     ("Lewes District Council", "https://planningpa.lewes-eastbourne.gov.uk/online-applications", 275),
