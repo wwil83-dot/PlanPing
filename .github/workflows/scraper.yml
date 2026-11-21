@@ -7360,7 +7360,7 @@ jobs:
           DETAIL_MAX: "300"
           MAX_MINUTES: "60"
           DRY_RUN: "0"
-          HTTP_COUNCILS: "311"
+          HTTP_COUNCILS: "270,175"
         run: cd scrapers && python idox_http_scraper.py
 
   idox_http_dry_southeast:
@@ -7384,7 +7384,7 @@ jobs:
           DETAIL_MAX: "30"
           MAX_MINUTES: "20"
           DRY_RUN: "1"
-          HTTP_COUNCILS: "311"
+          HTTP_COUNCILS: "270,175"
         run: cd scrapers && python idox_http_scraper.py
 
   idox_http_dry_winchester:
