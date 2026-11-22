@@ -298,21 +298,15 @@ TYPE_FILTER_OPTIONS = ["householder", "full", "outline", "listed", "tree",
                        "advert", "prior", "major", "other"]
 
 COUNCILS_WITHOUT_DATE_DATA = {
-    "Powys County Council",
-    "Erewash Borough Council",
     "Reading Borough Council",
-    "Wrexham County Borough Council",
     # 2026-11-20: SQL audit - these councils' scrapers have never stored a submitted date (every row is NULL)
     "Bridgend County Borough Council",
-    "Burnley Borough Council",
     "Dudley Metropolitan Borough Council",
     "Fylde Council",
     "Hartlepool Borough Council",
-    "Havant Borough Council",
     "Herefordshire Council",
     "Kirklees Council",
     "London Borough of Havering",
-    "Milton Keynes City Council",
     "Pembrokeshire County Council",
     "Redcar and Cleveland Borough Council",
     "Vale of Glamorgan Council",
