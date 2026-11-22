@@ -436,7 +436,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'scrape_arcus') ||
       (github.event_name == 'schedule' && github.event.schedule == '13 7 * * *') || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'group_0713_early')
     runs-on: [self-hosted, uk-runner]
-    timeout-minutes: 40
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -453,7 +453,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          MAX_MINUTES: "30"
+          MAX_MINUTES: "45"
           CONCURRENCY: "2"
         run: cd scrapers && python arcus_scraper.py
 
