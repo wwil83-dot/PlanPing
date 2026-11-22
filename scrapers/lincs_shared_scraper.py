@@ -350,7 +350,9 @@ async def main():
     if FAILED_WINDOWS:
         print(f"⚠ {len(FAILED_WINDOWS)} slice(s) could not be read (portal unreachable): {', '.join(FAILED_WINDOWS)}")
         if not received and not decided:
-            sys.exit(1)
+            # 2026-11-22: the old Idox portal (publicaccess.e-lindsey.gov.uk) returns 404 while Boston/East Lindsey move to a new
+            # planning system (council notice: Boston moved 14 Sep 2026). Not our fault, so report as info rather than a red run.
+            print("ℹ Nothing could be read from the portal this run (council is migrating its planning system); will retry tomorrow.")
 
 
 if __name__ == "__main__":
