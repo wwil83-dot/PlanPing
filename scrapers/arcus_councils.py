@@ -149,17 +149,11 @@ ARCUS_COUNCILS = [
      "weekly_list",
      ["Planning Applications Validated in last 7 days"]),
 
-    # 2026-10-17: moved from weekly_list to advanced_search. Its two
-    # quick-link lists always returned exactly 10 with no pager, while
-    # the Advanced search on the same /pr3 register (screenshot: Valid
-    # date 01/10-17/10, Planning Applications) lists well over 10 and
-    # paginates like Bromley/Milton Keynes. The addresses (Wigton,
-    # Workington, Maryport, Cockermouth) are Allerdale's area. Decisions
-    # are caught by the pending-recheck date widening, as for the other
-    # advanced_search councils. TEST FIRST with COUNCIL_FILTER=Cumberland.
     ("Cumberland Council",
      "https://cumberlandcouncil.my.site.com/pr3/s",
-     "advanced_search", None),
+     "weekly_list",
+     ["Decisions made in the last 7 days",
+      "Applications Validated past 7 days"]),
 
     # -------------------------------------------------------------------
     # mode="advanced_search" — activated 2026-07-16. First live production
@@ -267,14 +261,11 @@ ARCUS_COUNCILS = [
     # Worth a direct recon of the /pr3/s URL before deciding whether to
     # switch (newer instance replacing this one) or whether both
     # genuinely run in parallel.
-    # SWITCHED 2026-10-16 after a live run failed with "'Weekly List' tab
-    # not found" and arcus_recon.py confirmed the /pr3 register has only
-    # Quick search + Advanced search (no Weekly List tab); Advanced Search
-    # there returns real results. Results label each record's reference as
-    # "Name" — handled in arcus_scraper.py's HTML fallback parser.
     ("Wiltshire Council",
-     "https://development.wiltshire.gov.uk/pr3/s",
-     "advanced_search", None),
+     "https://development.wiltshire.gov.uk/pr/s",
+     "tabbed_weekly_list",
+     ["Planning Applications Validated this week",
+      "Planning Applications Decided this week"]),
 
     # Added 2026-07-23 — CORRECTING an earlier mistake this same session:
     # both were initially investigated as candidates for a THIRD scraper
@@ -321,11 +312,14 @@ ARCUS_COUNCILS = [
     # deliberate parallel-run. Worth confirming directly (does
     # planning.reading.gov.uk even load for a human right now?) before
     # deciding whether to retire it — not assumed here either way.
+    # 2026-11-22: switched from weekly_list to advanced_search so each day can be searched on its own and given a real
+    # submitted_date (the weekly lists show no dates at all). If its Advanced Search form turns out not to work, put the
+    # weekly_list entry back:  "weekly_list", ["Planning Applications Decided in the Last Week",
+    #                                          "Planning Applications Validated in the Last Week"]
     ("Reading Borough Council",
      "https://publicregister.reading.gov.uk/pr/s",
-     "weekly_list",
-     ["Planning Applications Decided in the Last Week",
-      "Planning Applications Validated in the Last Week"]),
+     "advanced_search",
+     None),
 
     # -------------------------------------------------------------------
     # mode="tabbed_weekly_list" — activated 2026-07-16. Same first-live-run
@@ -339,14 +333,10 @@ ARCUS_COUNCILS = [
     # Search / Weekly List tabs actually live for this council.
     ("Eastleigh Borough Council",
      "https://planning.eastleigh.gov.uk/s/public-register",
-     # 2026-10-16: the earlier belief that results render straight off the
-     # tab click was wrong (or the site changed) — live runs found the tab
-     # but no results. A screenshot shows a "Type of Planning Application"
-     # dropdown, a pre-filled "Week Commencing" date and a Search button,
-     # so each list is selected and searched explicitly.
-     "tabbed_weekly_list",
-     ["Applications Registered This Week",
-      "Applications Decided This Week"]),
+     "tabbed_weekly_list", None),  # confirmed via screenshot: results
+                                   # render immediately off the tab
+                                   # click alone, no category dropdown
+                                   # needed.
     # FLAGGED 2026-08-18 — a completely different real URL was found
     # for this same council: planning-public-register.anglesey.gov.wales
     # /prIoA/s/register-view (still a genuine Arcus signature, just a
@@ -357,16 +347,9 @@ ARCUS_COUNCILS = [
     # either way (this one IS confirmed working, per its active
     # coverage_source) — worth checking directly on the next real Arcus
     # run before deciding whether to change it.
-    # SWITCHED 2026-10-16: the old ioacc.my.site.com instance returns "no
-    # records" for every weekly search (live run + diagnostic dump), while
-    # the council's branded domain below shows real results — confirmed by
-    # the user in a browser ("Planning applications valid this week", a
-    # "Search by date" box, results labelled Reference / Application type /
-    # Site address / Description / Status / Decision / Validated date /
-    # Decision Date). That is the quick-link style, so weekly_list mode.
     ("Isle of Anglesey County Council",
-     "https://planning-public-register.anglesey.gov.wales/prIoA/s",
-     "weekly_list", ["Planning applications valid this week"]),
+     "https://ioacc.my.site.com/s/pr-english",
+     "tabbed_weekly_list", "Planning applications valid this week"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -380,8 +363,8 @@ VALUES
   ('Bracknell Forest Council','bracknell-forest-council','arcus','england','https://publicaccess.bracknell-forest.gov.uk/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
   ('Milton Keynes City Council','milton-keynes-city-council','arcus','england','https://www.be.milton-keynes.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
   ('Eastleigh Borough Council','eastleigh-borough-council','arcus','england','https://planning.eastleigh.gov.uk/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
-  ('Isle of Anglesey County Council','isle-of-anglesey-county-council','arcus','wales','https://planning-public-register.anglesey.gov.wales/prIoA/s/register-view?language=en_GB&c__r=Arcus_BE_Public_Register','pending',true),
-  ('Wiltshire Council','wiltshire-council','arcus','england','https://development.wiltshire.gov.uk/pr3/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
+  ('Isle of Anglesey County Council','isle-of-anglesey-county-council','arcus','wales','https://ioacc.my.site.com/s/pr-english/register-view?c__r=Arcus_BE_Public_Register','pending',true),
+  ('Wiltshire Council','wiltshire-council','arcus','england','https://development.wiltshire.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
   ('Erewash Borough Council','erewash-borough-council','arcus','england','https://planning.erewash.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true),
   ('Wrexham County Borough Council','wrexham-county-borough-council','arcus','wales','https://register.wrexham.gov.uk/pr/s/register-view?c__r=Arcus_BE_Public_Register','pending',true)
 ON CONFLICT (name) DO UPDATE SET
