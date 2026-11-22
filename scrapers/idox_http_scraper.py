@@ -167,7 +167,7 @@ class Blocked(Exception):
     pass
 
 
-FLAKY_SERVERS = {190, 170, 65, 355, 371}      # councils whose own server is known to be unreliable (Sandwell: HTTP 500s and timeouts; Bury: Fortinet 504 Gateway Timeout 2026-11-16; Southampton: search form timeouts on all proxies 2026-11-18); a timeout on every address is reported as info, not as a failure
+FLAKY_SERVERS = {190, 170, 65, 355, 371, 449, 234, 232, 175}      # councils whose own server is known to be unreliable (Sandwell: HTTP 500s and timeouts; Bury: Fortinet 504 Gateway Timeout 2026-11-16; Southampton: search form timeouts on all proxies 2026-11-18); a timeout on every address is reported as info, not as a failure. 2026-11-22 added Watford 449, Kingston 234, Sutton 232 (search form timeouts on every proxy) and Bradford 175 (HTTP 403 firewall block after the big backfill); for these a timeout or a block on a slice is info, never a red run
 
 
 class CouncilDown(Exception):
@@ -381,6 +381,10 @@ async def sweep(p: Portal, kind: str, a: date, b: date, out: dict, problems: lis
             problems.append(f"{p.name}: {kind} {a} has too many results for one day")
         return
     except Exception as e:
+        if p.cid in FLAKY_SERVERS and (isinstance(e, Blocked) or re.search(r"imed? ?out|imeout", str(e))):
+            DOWN.append(f"{p.name}: {kind} {a}..{b}: {str(e)[:100]}")      # known-unreliable server: info, retried tomorrow, not a red run
+            p.log(f"ℹ {kind} {a}..{b}: {str(e)[:100]} (known unreliable server, will retry tomorrow)")
+            return
         problems.append(f"{p.name}: {kind} {a}..{b}: {type(e).__name__}: {str(e)[:120]}")
         p.log(f"⚠ {kind} {a}..{b}: {type(e).__name__}: {str(e)[:120]}")
         return
@@ -721,7 +725,7 @@ async def main() -> int:
         for x in PARTIALS:
             print(f"    {x}")
     if DOWN:
-        print("ℹ COUNCIL SERVER ERRORS (the council's own portal returned a 5xx on the search form; nothing wrong on our side, retried every night — check it in a browser if it lasts days):")
+        print("ℹ COUNCIL SERVER ERRORS (the council's own portal returned a 5xx, timed out or blocked us on the search form; nothing wrong on our side, retried every night — check it in a browser if it lasts days):")
         for x in DOWN:
             print(f"    {x}")
     if all_problems:
