@@ -82,6 +82,10 @@ BULK_DAYS_BACK = int(os.environ.get("BULK_DAYS_BACK", "180"))
 # lists are paginated — most councils show 10 per page (Eastleigh 5,
 # Wiltshire 100) — and until now only page 1 was ever read.
 MAX_RESULT_PAGES = int(os.environ.get("MAX_RESULT_PAGES", "30"))
+# DATED_DAYS (2026-11-22): Powys, Erewash, Reading and Wrexham list no dates in their results, so after the normal search
+# an advanced_search council whose results are mostly undated is searched ONE DAY at a time (valid date = that day) for this
+# many days back, and each result is stamped with that day as its submitted_date. 0 turns this off.
+DATED_DAYS = int(os.environ.get("DATED_DAYS", "14"))
 # Base pause (seconds) between result pages, plus 0-2s random jitter, so a
 # paginated search looks like a person clicking through, not a burst.
 PAGE_DELAY_SECONDS = float(os.environ.get("PAGE_DELAY_SECONDS", "4"))
@@ -1610,6 +1614,14 @@ class ArcusPortal:
             except Exception as e:
                 print(f"    ⚠ [{self.council_name}] splitting the validated window failed: {e}")
 
+        undated = [a for a in apps if not a.get("submitted_date")]
+        if DATED_DAYS > 0 and apps and len(undated) >= max(3, len(apps) // 2):
+            print(f"    ℹ [{self.council_name}] {len(undated)} of {len(apps)} results have no date: searching day by day to date them")
+            try:
+                apps = await self._tag_dates_by_day(page, apps, today, first_fmt)
+            except Exception as e:
+                print(f"    ⚠ [{self.council_name}] day-by-day dating failed: {e}")
+
         if use_decision_search:
             try:
                 more = await self._decision_date_search(page, today, normal_days, first_fmt)
@@ -1625,6 +1637,41 @@ class ArcusPortal:
                 print(f"    ℹ [{self.council_name}] decided-in-window search: {len(more)} found, "
                       f"{len(fresh)} not already in the validated list")
                 apps = apps + fresh
+        return apps
+
+    async def _tag_dates_by_day(self, page: Page, apps: list[dict], today: date, fmt: str) -> list[dict]:
+        """Search each of the last DATED_DAYS days on its own (valid date from = to = that day) and stamp every result with
+        that day as its submitted_date. Results found only here are added. Weekend / empty days just log 'none'."""
+        by_ref = {a["reference"]: a for a in apps}
+        dated = 0
+        self._quiet_empty = True
+        try:
+            for i in range(0, DATED_DAYS + 1):
+                if should_stop():
+                    print(f"    ⚠ [{self.council_name}] day-by-day dating stopped: time budget nearly used")
+                    break
+                d = today - timedelta(days=i)
+                if d.weekday() >= 5:
+                    continue                                  # councils do not validate on weekends
+                part = await self._run_window(page, "valid", d, d, fmt)
+                if len(part) >= 250:
+                    print(f"    ⚠ [{self.council_name}] {d}: 250 results on one day, skipped")
+                    continue
+                for a in part:
+                    ref = a["reference"]
+                    if ref in by_ref:
+                        if not by_ref[ref].get("submitted_date"):
+                            by_ref[ref]["submitted_date"] = d.isoformat()
+                            dated += 1
+                    else:
+                        a["submitted_date"] = d.isoformat()
+                        by_ref[ref] = a
+                        apps.append(a)
+                        dated += 1
+                await asyncio.sleep(PAGE_DELAY_SECONDS)
+        finally:
+            self._quiet_empty = False
+        print(f"    ✓ [{self.council_name}] day-by-day dating: {dated} applications given a submitted date")
         return apps
 
     async def _read_advanced_results(self, page: Page, label: str, try_csv: bool = True) -> list[dict]:
@@ -1647,8 +1694,11 @@ class ArcusPortal:
                       f"maximum; the search window is probably too wide to get everything")
             print(f"    ✓ [{self.council_name}] {label}: {len(apps)} via HTML fallback (CSV unavailable)")
         else:
-            print(f"    ⚠ [{self.council_name}] {label}: no results found via CSV or HTML fallback")
-            await self._dump_form_controls(page)
+            if getattr(self, "_quiet_empty", False):
+                print(f"    ℹ [{self.council_name}] {label}: none")
+            else:
+                print(f"    ⚠ [{self.council_name}] {label}: no results found via CSV or HTML fallback")
+                await self._dump_form_controls(page)
         return apps
 
     async def _has_decision_field(self, page: Page) -> bool:
@@ -2176,7 +2226,7 @@ async def process_council(
                 "description":      a.get("description"),
                 "application_type": a.get("application_type"),
                 "status":           a.get("status", "pending"),
-                "submitted_date":   a.get("submitted_date"),
+                **({"submitted_date": a["submitted_date"]} if a.get("submitted_date") else {}),
                 "decision_date":    a.get("decision_date"),
                 "council_url":      a.get("council_url"),
                 "source":           "arcus_scraper",
@@ -2199,11 +2249,16 @@ async def process_council(
             BATCH = 20
             saved = 0
             ok = True
-            for i in range(0, len(records), BATCH):
-                if await _supa_upsert(records[i:i + BATCH]):
-                    saved += len(records[i:i + BATCH])
-                else:
-                    ok = False
+            # rows with a known submitted_date and rows without go in separate batches (a missing key leaves the stored date alone;
+            # an explicit null would erase it)
+            groups = [[r for r in records if "submitted_date" in r], [r for r in records if "submitted_date" not in r]]
+            print(f"    with submitted date: {len(groups[0])}; without: {len(groups[1])}")
+            for grp in groups:
+                for i in range(0, len(grp), BATCH):
+                    if await _supa_upsert(grp[i:i + BATCH]):
+                        saved += len(grp[i:i + BATCH])
+                    else:
+                        ok = False
 
             if ok:
                 await _supa_patch_council(cid, {
