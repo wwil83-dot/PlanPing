@@ -298,7 +298,6 @@ TYPE_FILTER_OPTIONS = ["householder", "full", "outline", "listed", "tree",
                        "advert", "prior", "major", "other"]
 
 COUNCILS_WITHOUT_DATE_DATA = {
-    "Reading Borough Council",
     # 2026-11-20: SQL audit - these councils' scrapers have never stored a submitted date (every row is NULL)
     "Bridgend County Borough Council",
     "Dudley Metropolitan Borough Council",
