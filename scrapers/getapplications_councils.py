@@ -89,6 +89,8 @@ COUNCIL_DB_IDS: dict[str, int | None] = {
     "London Borough of Barking and Dagenham":     226,
     "London Borough of Hackney":                  218,
     "Rother District Council":                    276,
+    # ADDED 2026-11-23 — Great Yarmouth moved to the same getApplications-format portal (/planning/index.html?fa=search, Weekly Received / Weekly Determined lists). Existing DB row 305.
+    "Great Yarmouth Borough Council":             305,
 }
 
 # (council_name_as_in_supabase_db, base_url — host only, no path)
@@ -112,6 +114,7 @@ GETAPPLICATIONS_COUNCILS = [
     ("Blaenau Gwent County Borough Council",  "https://developmentservices.blaenau-gwent.gov.uk"),
     ("Gwynedd Council",                       "https://amg.gwynedd.llyw.cymru"),
     ("Ceredigion County Council",             "https://ceredigion-online.tascomi.com"),
+    ("Great Yarmouth Borough Council",        "https://plan-and-regulatory.great-yarmouth.gov.uk"),
 ]
 
 
