@@ -53,7 +53,7 @@ _CACHEABLE_PREFIXES = ("/application/", "/council/", "/towns/", "/guides/")
 @app.middleware("http")
 async def _bandwidth_policy(request: Request, call_next):
     path = request.url.path
-    if path not in ("/robots.txt", "/sitemap.xml"):
+    if path != "/robots.txt" and not path.startswith("/sitemap"):
         ua = (request.headers.get("user-agent") or "").lower()
         if ua and any(s in ua for s in _BLOCKED_UA_SUBSTRINGS):
             return Response(content="Forbidden", status_code=403,
@@ -1167,17 +1167,76 @@ async def coverage_map_data():
 # query, matching this file's existing caching discipline.
 # ---------------------------------------------------------------------
 
-SITE_BASE_URL = "https://planfind.co.uk"  # CHANGE this if your real production domain differs
+SITE_BASE_URL = "https://www.planfind.co.uk"  # www = the host Search Console and Google already use (changed 2026-11-23 from non-www)
+
+
+# 2026-11-23: the sitemap is now an INDEX: /sitemap-pages.xml (static pages, councils, towns, guides - what /sitemap.xml used to
+# be) plus /sitemap-applications-N.xml listing the most recently submitted/decided applications. Individual application pages
+# are what people actually search for (address searches, ~14% click-through in Search Console) but were never in the sitemap.
+# Kept deliberately small (newest SITEMAP_APP_MAX applications from the last SITEMAP_APP_DAYS days) so Googlebot's crawling
+# stays gentle on the Render bandwidth/CPU; raise the numbers later once crawling is seen to be fine.
+SITEMAP_APP_DAYS = 30
+SITEMAP_APP_MAX = 10000
+SITEMAP_APP_PER_FILE = 5000
+_sitemap_app_cache = {"at": 0.0, "ids": []}
+
+
+async def _sitemap_application_ids(db) -> list:
+    import time as _t
+    if _sitemap_app_cache["ids"] and _t.time() - _sitemap_app_cache["at"] < 6 * 3600:
+        return _sitemap_app_cache["ids"]
+    rows = await db.fetch("""
+        SELECT a.id
+        FROM planning_applications a
+        WHERE a.address IS NOT NULL AND a.address <> ''
+          AND (a.submitted_date::date >= CURRENT_DATE - $1::int
+               OR a.decision_date::date >= CURRENT_DATE - $1::int)
+        ORDER BY GREATEST(COALESCE(a.submitted_date::date, DATE '1900-01-01'),
+                          COALESCE(a.decision_date::date,  DATE '1900-01-01')) DESC, a.id DESC
+        LIMIT $2
+    """, SITEMAP_APP_DAYS, SITEMAP_APP_MAX)
+    ids = [r["id"] for r in rows]
+    _sitemap_app_cache["ids"] = ids
+    _sitemap_app_cache["at"] = _t.time()
+    return ids
 
 
 @app.get("/sitemap.xml")
 async def sitemap():
     async with get_db() as db:
+        ids = await _sitemap_application_ids(db)
+    n_files = (len(ids) + SITEMAP_APP_PER_FILE - 1) // SITEMAP_APP_PER_FILE
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+             f"<sitemap><loc>{SITE_BASE_URL}/sitemap-pages.xml</loc></sitemap>"]
+    for i in range(1, n_files + 1):
+        parts.append(f"<sitemap><loc>{SITE_BASE_URL}/sitemap-applications-{i}.xml</loc></sitemap>")
+    parts.append("</sitemapindex>")
+    return PlainTextResponse(content="\n".join(parts), media_type="application/xml")
+
+
+@app.get("/sitemap-applications-{n}.xml")
+async def sitemap_applications(n: int):
+    async with get_db() as db:
+        ids = await _sitemap_application_ids(db)
+    chunk = ids[(n - 1) * SITEMAP_APP_PER_FILE: n * SITEMAP_APP_PER_FILE] if n >= 1 else []
+    if not chunk:
+        raise HTTPException(404, "No such sitemap")
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    parts += [f"<url><loc>{SITE_BASE_URL}/application/{i}</loc></url>" for i in chunk]
+    parts.append("</urlset>")
+    return PlainTextResponse(content="\n".join(parts), media_type="application/xml")
+
+
+@app.get("/sitemap-pages.xml")
+async def sitemap_pages():
+    async with get_db() as db:
         councils = await _get_cached_councils_with_counts(db)
         towns = await db.fetch("SELECT slug FROM towns")
         guides = await db.fetch("SELECT slug FROM guides")
 
-    # Only real, genuinely covered councils — matching the same
+    # Only real, genuinely covered councils - matching the same
     # covered/pending split already used by /councils, so a council
     # with no real data yet doesn't get indexed as an empty page.
     covered_slugs = [
