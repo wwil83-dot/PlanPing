@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Planning applications in {{ town.name }}, {{ town.county }} — PlanPing{% endblock %}
+{% block title %}Planning Applications in {{ town.name }}, {{ town.county }}{% if total > 0 and not (keyword or status or app_type or date_from or date_to) %} — {{ total }} Recent{% endif %} | PlanFind{% endblock %}
 {% block head_extra %}
 {% if total > 0 %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 {% endif %}
-<meta name="description" content="Recent planning applications in {{ town.name }}, {{ town.county }}. See what's being built nearby — extensions, new builds, conversions and more.">
+<meta name="description" content="{% if total > 0 and not (keyword or status or app_type or date_from or date_to) %}{{ total }} planning application{{ 's' if total != 1 }} within {{ radius }} mile{{ 's' if radius != 1 }} of {{ town.name }}, {{ town.county }} in the last {{ days }} days: extensions, new builds and conversions, mapped with status. Free alerts from PlanFind.{% else %}Recent planning applications in {{ town.name }}, {{ town.county }}. See what's being built nearby: extensions, new builds, conversions and more. Free alerts from PlanFind.{% endif %}">
 {% endblock %}
 
 {% block content %}

@@ -1,6 +1,8 @@
 {% extends "base.html" %}
-{% block title %}{{ app.reference }} — PlanPing{% endblock %}
+{% block title %}{{ (app.address or '')[:70] ~ ' — ' if app.address }}Planning Application {{ app.reference }} | PlanFind{% endblock %}
 {% block head_extra %}
+{% set _st = {'pending':'Awaiting decision','approved':'Approved','refused':'Refused','withdrawn':'Withdrawn','closed':'Closed'} %}
+<meta name="description" content="Planning application {{ app.reference }}{% if app.address %} at {{ app.address }}{% endif %}{% if app.council_name %} ({{ app.council_name }}){% endif %}: {{ ((app.ai_summary or app.description or '')|striptags)[:110] }}{% if app.status %}. Status: {{ _st.get(app.status, app.status|capitalize) }}.{% endif %} Track it free on PlanFind.">
 {% if app.lat and app.lng %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 {% endif %}
