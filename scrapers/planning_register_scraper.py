@@ -44,6 +44,23 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 from planning_register_councils import PLANNING_REGISTER_COUNCILS, COUNCIL_DB_IDS
 
 BROWSER_ARGS = ["--no-sandbox", "--disable-dev-shm-usage"]
+
+# 2026-11-24: Vale of Glamorgan's firewall blocks the runner address ("Sorry, you have been blocked"). Councils listed here are
+# opened through the Webshare UK proxy list (HTTP_PROXY_URLS, http://user:pass@host:port, comma separated); the first address
+# that gets past the firewall is used for the whole council. If no proxy is set, or none gets through, nothing changes.
+PROXY_COUNCILS = {"Vale of Glamorgan Council"}
+PROXIES = [x.strip() for x in os.environ.get("HTTP_PROXY_URLS", "").split(",") if x.strip()]
+
+
+def _proxy_settings(url: str) -> dict:
+    from urllib.parse import urlparse
+    u = urlparse(url)
+    d = {"server": f"{u.scheme or 'http'}://{u.hostname}:{u.port}"}
+    if u.username:
+        d["username"] = u.username
+    if u.password:
+        d["password"] = u.password
+    return d
 CONTEXT_OPTIONS = {
     "user_agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -555,7 +572,24 @@ class PlanningRegisterPortal:
             windows.append((today - timedelta(days=hi), today - timedelta(days=lo), False))
             lo = hi + 1
 
-        context = await browser.new_context(**CONTEXT_OPTIONS)
+        context = None
+        if self.council_name in PROXY_COUNCILS and PROXIES:
+            for pi, purl in enumerate(PROXIES):
+                ctx = await browser.new_context(proxy=_proxy_settings(purl), **CONTEXT_OPTIONS)
+                try:
+                    pg = await ctx.new_page()
+                    await pg.goto(f"{self.base_url}/Search/Advanced", wait_until="domcontentloaded", timeout=30000)
+                    body = (await pg.inner_text("body"))[:300].lower()
+                    if "you have been blocked" not in body and "access denied" not in body:
+                        self._log(f"using proxy {pi + 1} of {len(PROXIES)}")
+                        context = ctx
+                        break
+                    self._log(f"proxy {pi + 1} of {len(PROXIES)} is blocked too")
+                except Exception as e:
+                    self._log(f"proxy {pi + 1} of {len(PROXIES)} unusable: {str(e)[:80]}")
+                await ctx.close()
+        if context is None:
+            context = await browser.new_context(**CONTEXT_OPTIONS)
         page = await context.new_page()
         all_apps: list = []
         by_ref: dict = {}
