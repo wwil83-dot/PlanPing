@@ -42,6 +42,9 @@
         · <a href="{{ council.portal_url }}" target="_blank" rel="noopener">Visit council portal →</a>
         {% endif %}
       </p>
+      {% if intro %}
+      <p class="results-sub council-intro" style="margin-top:.5rem">{{ intro }}</p>
+      {% endif %}
       {% if council.status %}
       <p class="results-sub" style="margin-top:.3rem">
         {{ council.status.emoji }} Our data:

@@ -55,6 +55,7 @@
         {14: 'Last 14 days', 30: 'Last 30 days', 90: 'Last 3 months',
          180: 'Last 6 months', 365: 'Last 12 months'}.get(days, 'Last ' + days|string + ' days')
       }}</p>
+      {% if intro %}<p class="results-sub council-intro" style="margin-top:.4rem">{{ intro }}</p>{% endif %}
     </div>
   </div>
 
