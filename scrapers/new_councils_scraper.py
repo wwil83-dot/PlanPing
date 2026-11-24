@@ -177,18 +177,17 @@ async def barnsley(browser) -> list:
                 await page.wait_for_timeout(800)
             except Exception:
                 pass
-            for sel, d in (("dateReceivedFrom", start), ("dateReceivedTo", end)):
-                val = d.strftime("%d/%m/%Y")
-                try:                                # type it like a person: the box has a date mask and ignores a plain fill
-                    box = page.locator(f"#{sel}")
-                    await box.click(timeout=8000)
-                    await box.press("Control+a")
-                    await box.press_sequentially(val, delay=40)
-                    await box.press("Tab")
-                except Exception:                   # still hidden: set it directly
-                    await page.evaluate("([s, v]) => { const e = document.getElementById(s); e.value = v; "
-                                        "e.dispatchEvent(new Event('input', {bubbles: true})); "
-                                        "e.dispatchEvent(new Event('change', {bubbles: true})); }", [sel, val])
+            # exactly what the recon did (that run returned results): locate by name, case-insensitive, then fill
+            for key, d in (("DateReceivedFrom", start), ("ReceivedFrom", start), ("DateReceivedTo", end), ("ReceivedTo", end)):
+                loc = page.locator(f"input[name*='{key}' i], input[id*='{key}' i]")
+                if await loc.count():
+                    try:
+                        await loc.first.fill(d.strftime("%d/%m/%Y"), timeout=8000)
+                    except Exception as e:
+                        print(f"      ⚠ barnsley could not fill {key}: {str(e)[:80]}")
+            vals = await page.evaluate("() => ['dateReceivedFrom','dateReceivedTo'].map(n => { const e = document.querySelector(`input[name=${n}]`); return e ? e.value : null; })")
+            if vals[0] != start.strftime("%d/%m/%Y"):
+                print(f"      ⚠ barnsley date boxes read back as {vals} (wanted {start:%d/%m/%Y}..{end:%d/%m/%Y})")
             await page.get_by_role("button", name=re.compile("^search$", re.I)).first.click()   # same click the recon used
             await page.wait_for_load_state("domcontentloaded")
             await page.wait_for_timeout(2500)
