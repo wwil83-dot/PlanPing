@@ -3750,6 +3750,7 @@ jobs:
           MAX_MINUTES: "40"
           DAYS_BACK: "30"
           DAILY_DAYS: "14"
+          HTTP_PROXY_URLS: ${{ secrets.PROBE_PROXY_URLS }},${{ secrets.PROBE_PROXY_URLS_2 }}
         run: cd scrapers && python planning_register_scraper.py
 
   bridgend_results_diagnostic:
