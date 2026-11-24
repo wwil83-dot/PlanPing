@@ -308,7 +308,6 @@ COUNCILS_WITHOUT_DATE_DATA = {
     "London Borough of Havering",
     "Pembrokeshire County Council",
     "Redcar and Cleveland Borough Council",
-    "Vale of Glamorgan Council",
     "Walsall Metropolitan Borough Council",
 }
 
