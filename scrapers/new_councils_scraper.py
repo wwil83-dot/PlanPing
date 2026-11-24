@@ -220,7 +220,8 @@ async def barnsley(browser) -> list:
     out = []
     for ref, r in got.items():
         status = E._normalise_status(r["raw_status"])
-        ds = L.decision_to_status(r["decision"]) if r["decision"] else None
+        dec = r["decision"] if not re.search(r"consideration|registered|pending", r["decision"] or "", re.I) else ""   # "Under Consideration" is not a decision
+        ds = L.decision_to_status(dec) if dec else None
         if ds:
             status = ds
         out.append({"reference": ref, "address": r["address"] or None, "postcode": r["postcode"],
