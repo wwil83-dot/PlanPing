@@ -179,14 +179,19 @@ async def barnsley(browser) -> list:
                 pass
             for sel, d in (("dateReceivedFrom", start), ("dateReceivedTo", end)):
                 val = d.strftime("%d/%m/%Y")
-                try:
-                    await page.fill(f"#{sel}", val, timeout=8000)
+                try:                                # type it like a person: the box has a date mask and ignores a plain fill
+                    box = page.locator(f"#{sel}")
+                    await box.click(timeout=8000)
+                    await box.press("Control+a")
+                    await box.press_sequentially(val, delay=40)
+                    await box.press("Tab")
                 except Exception:                   # still hidden: set it directly
                     await page.evaluate("([s, v]) => { const e = document.getElementById(s); e.value = v; "
                                         "e.dispatchEvent(new Event('input', {bubbles: true})); "
                                         "e.dispatchEvent(new Event('change', {bubbles: true})); }", [sel, val])
-            async with page.expect_navigation(wait_until="domcontentloaded", timeout=45000):
-                await page.locator("input[type=submit][name=submit], input[type=submit]").first.click()
+            await page.get_by_role("button", name=re.compile("^search$", re.I)).first.click()   # same click the recon used
+            await page.wait_for_load_state("domcontentloaded")
+            await page.wait_for_timeout(2500)
             pages = 0
             while True:
                 pages += 1
@@ -201,7 +206,12 @@ async def barnsley(browser) -> list:
                         await nxt.first.click()
                 except Exception:
                     break
-            hdr = re.search(r"Results for Application Search\s*:\s*(\d+)", short(await page.inner_text("body"), 400))
+            body = short(await page.inner_text("body"), 1500)
+            hdr = re.search(r"Results for Application Search\s*:\s*(\d+)", body)
+            if not hdr or not rows:
+                vals = await page.evaluate("() => ['dateReceivedFrom','dateReceivedTo'].map(i => (document.getElementById(i)||{}).value)")
+                tinfo = await page.evaluate("() => [...document.querySelectorAll('table')].map(t => t.querySelectorAll('tr').length + 'tr/' + (t.querySelector('tr:nth-child(2)')||{children:[]}).children.length + 'c')")
+                print(f"      ⚠ barnsley diagnostic: url {page.url}; date fields now {vals}; tables {tinfo}; body: {body[:500]}")
             print(f"    ℹ barnsley {start:%d/%m}-{end:%d/%m}: page claims {hdr.group(1) if hdr else '?'}, read {pages} page(s), total {len(got)}")
         except Exception as e:
             print(f"    ✗ barnsley {start:%d/%m}-{end:%d/%m}: {type(e).__name__}: {str(e)[:100]}")
