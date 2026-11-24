@@ -172,8 +172,19 @@ async def barnsley(browser) -> list:
         end = min(start + timedelta(days=6), today)
         try:
             await page.goto(f"{BARNSLEY_BASE}/Home/AdvanceSearch", wait_until="domcontentloaded", timeout=60000)
-            await page.fill("#dateReceivedFrom", start.strftime("%d/%m/%Y"))
-            await page.fill("#dateReceivedTo", end.strftime("%d/%m/%Y"))
+            try:                                   # the date fields sit in a collapsed "Search by dates" panel
+                await page.get_by_text("Search by dates").first.click(timeout=10000)
+                await page.wait_for_timeout(800)
+            except Exception:
+                pass
+            for sel, d in (("dateReceivedFrom", start), ("dateReceivedTo", end)):
+                val = d.strftime("%d/%m/%Y")
+                try:
+                    await page.fill(f"#{sel}", val, timeout=8000)
+                except Exception:                   # still hidden: set it directly
+                    await page.evaluate("([s, v]) => { const e = document.getElementById(s); e.value = v; "
+                                        "e.dispatchEvent(new Event('input', {bubbles: true})); "
+                                        "e.dispatchEvent(new Event('change', {bubbles: true})); }", [sel, val])
             async with page.expect_navigation(wait_until="domcontentloaded", timeout=45000):
                 await page.locator("input[type=submit][name=submit], input[type=submit]").first.click()
             pages = 0
