@@ -658,41 +658,27 @@ async def _council_intro_stats(db, council_id: int):
     return stats
 
 
-def _council_intro(name: str, st) -> Optional[str]:
-    """Plain-English summary; None when there is too little recent data to say anything useful."""
+def _council_intro(name: str, st) -> Optional[dict]:
+    """Figures for the 'at a glance' panel; None when there is too little recent data to say anything useful."""
     if not st or st["recent"] < 3:
         return None
-    parts = [f"{name} received {_plural(st['recent'], 'planning application')} in the last 30 days."]
-    types = [(lbl, n) for lbl, n in st["types"] if lbl]
-    if len(types) >= 2:
-        bits = [f"{lbl[0].lower() + lbl[1:]} ({n})" for lbl, n in types]
-        parts.append("The most common types of work were " + ", ".join(bits[:-1]) + " and " + bits[-1] + ".")
-    if st["decided"] >= 10:
-        pct = round(100 * st["approved"] / st["decided"])
-        parts.append(f"Of the {st['decided']:,} applications decided in the last 90 days, {pct}% were approved.")
-    return " ".join(parts)
+    types = [(lbl[0].upper() + lbl[1:], n) for lbl, n in st["types"] if lbl]
+    pct = round(100 * st["approved"] / st["decided"]) if st["decided"] >= 10 else None
+    return {"name": name, "recent": st["recent"], "decided": st["decided"], "pct": pct,
+            "types": types if len(types) >= 2 else []}
 
 
-def _town_intro(town_name: str, county: str, apps: list, radius: float, days: int) -> Optional[str]:
+def _town_intro(town_name: str, county: str, apps: list, radius: float, days: int) -> Optional[dict]:
     """Built from the applications already loaded for the page, so it costs no extra query."""
     n = len(apps)
     if n < 3:
         return None
-    pending = sum(1 for a in apps if (a.get("status") or "pending") == "pending")
-    approved = sum(1 for a in apps if a.get("status") == "approved")
-    refused = sum(1 for a in apps if a.get("status") == "refused")
-    miles = f"{radius:g} mile{'' if radius == 1 else 's'}"
-    txt = f"PlanFind found {_plural(n, 'planning application')} within {miles} of {town_name} in the last {days} days"
-    bits = []
-    if pending:
-        bits.append(f"{pending} awaiting a decision")
-    if approved:
-        bits.append(f"{approved} approved")
-    if refused:
-        bits.append(f"{refused} refused")
-    if bits:
-        txt += ": " + ", ".join(bits[:-1]) + (" and " if len(bits) > 1 else "") + bits[-1]
-    return txt + "."
+    return {"name": town_name, "total": n, "days": days,
+            "miles": f"{radius:g} mile{'' if radius == 1 else 's'}",
+            "pending": sum(1 for a in apps if (a.get("status") or "pending") == "pending"),
+            "approved": sum(1 for a in apps if a.get("status") == "approved"),
+            "refused": sum(1 for a in apps if a.get("status") == "refused")}
+
 
 @app.get("/council/{slug}", response_class=HTMLResponse)
 async def council_page(request: Request, slug: str):
