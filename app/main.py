@@ -3,6 +3,7 @@ PlanPing — FastAPI backend
 Run with: uvicorn app.main:app --reload
 """
 import os
+import asyncio
 import csv
 import io
 import markdown as _markdown_lib
@@ -605,6 +606,94 @@ async def application_detail(request: Request, app_id: int):
         "neighbours": neighbours,
     })
 
+
+# ---------------------------------------------------------------------
+# Council / town intro text (added 2026-11-24, SEO). A few plain sentences built only from numbers we already hold, so each
+# council and town page reads differently. Council figures cost two small queries, so they are cached for 6 hours per council
+# (about 340 entries). If a query fails or is slow the page simply renders without the text, exactly as before.
+# ---------------------------------------------------------------------
+_COUNCIL_INTRO_TTL = timedelta(hours=6)
+_COUNCIL_INTRO_FAIL_TTL = timedelta(minutes=10)
+_COUNCIL_INTRO_CACHE: dict = {}      # council_id -> (cached_at, stats dict or None)
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n:,} {word}{'' if n == 1 else 's'}"
+
+
+async def _council_intro_stats(db, council_id: int):
+    now = datetime.now(timezone.utc)
+    hit = _COUNCIL_INTRO_CACHE.get(council_id)
+    if hit and now - hit[0] < (_COUNCIL_INTRO_TTL if hit[1] is not None else _COUNCIL_INTRO_FAIL_TTL):
+        return hit[1]
+    stats = None
+    try:
+        row = await asyncio.wait_for(db.fetchrow("""
+            SELECT COUNT(*) FILTER (WHERE submitted_date >= CURRENT_DATE - INTERVAL '30 days') AS recent,
+                   COUNT(*) FILTER (WHERE decision_date >= CURRENT_DATE - INTERVAL '90 days'
+                                      AND status IN ('approved', 'refused')) AS decided,
+                   COUNT(*) FILTER (WHERE decision_date >= CURRENT_DATE - INTERVAL '90 days'
+                                      AND status = 'approved') AS approved
+            FROM planning_applications
+            WHERE council_id = $1
+              AND (submitted_date >= CURRENT_DATE - INTERVAL '90 days'
+                   OR decision_date >= CURRENT_DATE - INTERVAL '90 days')
+        """, council_id), timeout=3)
+        types = await asyncio.wait_for(db.fetch("""
+            SELECT work_type, COUNT(*) AS n
+            FROM planning_applications
+            WHERE council_id = $1
+              AND submitted_date >= CURRENT_DATE - INTERVAL '30 days'
+              AND work_type IS NOT NULL
+              AND NOT (work_type = ANY($2::text[]))
+            GROUP BY work_type
+            ORDER BY n DESC
+            LIMIT 3
+        """, council_id, _TREND_EXCLUDE), timeout=3)
+        stats = {"recent": row["recent"], "decided": row["decided"], "approved": row["approved"],
+                 "types": [(WORK_TYPES.get(t["work_type"], t["work_type"]), t["n"]) for t in types]}
+    except Exception:
+        stats = None
+    _COUNCIL_INTRO_CACHE[council_id] = (now, stats)
+    return stats
+
+
+def _council_intro(name: str, st) -> Optional[str]:
+    """Plain-English summary; None when there is too little recent data to say anything useful."""
+    if not st or st["recent"] < 3:
+        return None
+    parts = [f"{name} received {_plural(st['recent'], 'planning application')} in the last 30 days."]
+    types = [(lbl, n) for lbl, n in st["types"] if lbl]
+    if len(types) >= 2:
+        bits = [f"{lbl[0].lower() + lbl[1:]} ({n})" for lbl, n in types]
+        parts.append("The most common types of work were " + ", ".join(bits[:-1]) + " and " + bits[-1] + ".")
+    if st["decided"] >= 10:
+        pct = round(100 * st["approved"] / st["decided"])
+        parts.append(f"Of the {st['decided']:,} applications decided in the last 90 days, {pct}% were approved.")
+    return " ".join(parts)
+
+
+def _town_intro(town_name: str, county: str, apps: list, radius: float, days: int) -> Optional[str]:
+    """Built from the applications already loaded for the page, so it costs no extra query."""
+    n = len(apps)
+    if n < 3:
+        return None
+    pending = sum(1 for a in apps if (a.get("status") or "pending") == "pending")
+    approved = sum(1 for a in apps if a.get("status") == "approved")
+    refused = sum(1 for a in apps if a.get("status") == "refused")
+    miles = f"{radius:g} mile{'' if radius == 1 else 's'}"
+    txt = f"PlanFind found {_plural(n, 'planning application')} within {miles} of {town_name} in the last {days} days"
+    bits = []
+    if pending:
+        bits.append(f"{pending} awaiting a decision")
+    if approved:
+        bits.append(f"{approved} approved")
+    if refused:
+        bits.append(f"{refused} refused")
+    if bits:
+        txt += ": " + ", ".join(bits[:-1]) + (" and " if len(bits) > 1 else "") + bits[-1]
+    return txt + "."
+
 @app.get("/council/{slug}", response_class=HTMLResponse)
 async def council_page(request: Request, slug: str):
     async with get_db() as db:
@@ -640,6 +729,7 @@ async def council_page(request: Request, slug: str):
         bng_allocation_count = await db.fetchval("""
             SELECT COUNT(*) FROM bng_allocations WHERE council_id = $1
         """, council["id"])
+        intro_stats = await _council_intro_stats(db, council["id"])
 
     apps = [dict(r) for r in recent]
     for a in apps:
@@ -698,6 +788,7 @@ async def council_page(request: Request, slug: str):
         "bng_sites": bng_sites,
         "bng_map_markers": bng_map_markers,
         "bng_allocation_count": bng_allocation_count,
+        "intro": _council_intro(council["name"], intro_stats),
     })
 
 
@@ -1504,6 +1595,8 @@ async def town_page(request: Request, slug: str, radius: float = TOWN_RADIUS_MIL
         "lng": town["lng"],
         "council": dict(council) if council else None,
         "coverage": coverage,
+        "intro": (None if (keyword or status or app_type or date_from_parsed or date_to_parsed)
+                  else _town_intro(town["name"], town["county"] or "", applications, radius, days)),
     })
 
 
