@@ -1,6 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Planning Applications in {{ town.name }}, {{ town.county }}{% if total > 0 and not (keyword or status or app_type or date_from or date_to) %} — {{ total }} Recent{% endif %} | PlanFind{% endblock %}
 {% block head_extra %}
+<style>
+.glance{margin:1.1rem 0 .4rem;background:#fff;border:1px solid var(--border);border-radius:14px;padding:1rem 1.1rem 1.05rem;box-shadow:0 1px 3px rgba(14,61,110,.06)}
+.glance-head{font-size:.72rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:.7rem}
+.glance-grid{display:flex;flex-wrap:wrap;gap:.7rem}
+.glance-tile{flex:1 1 150px;min-width:140px;border-radius:12px;padding:.8rem .95rem;background:var(--blue-light);border-left:4px solid var(--blue);display:flex;flex-direction:column;gap:.2rem}
+.glance-tile.good{background:var(--green-light);border-left-color:var(--green)}
+.glance-tile.warn{background:var(--amber-bg);border-left-color:var(--amber)}
+.glance-tile.bad{background:var(--red-bg);border-left-color:var(--red)}
+.glance-num{font-size:1.85rem;font-weight:800;line-height:1.05;color:var(--blue-dark);letter-spacing:-.02em}
+.glance-tile.good .glance-num{color:#1f6b2a}.glance-tile.warn .glance-num{color:var(--amber)}.glance-tile.bad .glance-num{color:var(--red)}
+.glance-label{font-size:.82rem;color:var(--muted);line-height:1.35}
+.glance-types{margin-top:.85rem;display:flex;flex-wrap:wrap;align-items:center;gap:.45rem}
+.glance-types>span{font-size:.8rem;color:var(--muted);margin-right:.2rem}
+.glance-chip{font-style:normal;font-size:.82rem;font-weight:600;color:var(--blue-dark);background:#fff;border:1px solid var(--border);border-radius:999px;padding:.22rem .7rem}
+.glance-chip b{color:var(--blue);margin-left:.25rem}
+@media (max-width:520px){.glance-num{font-size:1.6rem}.glance-tile{flex-basis:100%}}
+</style>
 {% if total > 0 %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 {% endif %}
@@ -55,7 +72,17 @@
         {14: 'Last 14 days', 30: 'Last 30 days', 90: 'Last 3 months',
          180: 'Last 6 months', 365: 'Last 12 months'}.get(days, 'Last ' + days|string + ' days')
       }}</p>
-      {% if intro %}<p class="results-sub council-intro" style="margin-top:.4rem">{{ intro }}</p>{% endif %}
+      {% if intro %}
+      <section class="glance" aria-label="Planning applications near {{ town.name }} at a glance">
+        <div class="glance-head">At a glance &middot; last {{ intro.days }} days</div>
+        <div class="glance-grid">
+          <div class="glance-tile"><span class="glance-num">{{ intro.total }}</span><span class="glance-label">applications within<br>{{ intro.miles }} of {{ intro.name }}</span></div>
+          {% if intro.pending %}<div class="glance-tile warn"><span class="glance-num">{{ intro.pending }}</span><span class="glance-label">awaiting<br>a decision</span></div>{% endif %}
+          {% if intro.approved %}<div class="glance-tile good"><span class="glance-num">{{ intro.approved }}</span><span class="glance-label">approved</span></div>{% endif %}
+          {% if intro.refused %}<div class="glance-tile bad"><span class="glance-num">{{ intro.refused }}</span><span class="glance-label">refused</span></div>{% endif %}
+        </div>
+      </section>
+      {% endif %}
     </div>
   </div>
 

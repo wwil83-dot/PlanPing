@@ -1,6 +1,23 @@
 {% extends "base.html" %}
 {% block title %}{{ council.name }} Planning Applications — Search &amp; Track | PlanFind{% endblock %}
 {% block head_extra %}
+<style>
+.glance{margin:1.1rem 0 .4rem;background:#fff;border:1px solid var(--border);border-radius:14px;padding:1rem 1.1rem 1.05rem;box-shadow:0 1px 3px rgba(14,61,110,.06)}
+.glance-head{font-size:.72rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:.7rem}
+.glance-grid{display:flex;flex-wrap:wrap;gap:.7rem}
+.glance-tile{flex:1 1 150px;min-width:140px;border-radius:12px;padding:.8rem .95rem;background:var(--blue-light);border-left:4px solid var(--blue);display:flex;flex-direction:column;gap:.2rem}
+.glance-tile.good{background:var(--green-light);border-left-color:var(--green)}
+.glance-tile.warn{background:var(--amber-bg);border-left-color:var(--amber)}
+.glance-tile.bad{background:var(--red-bg);border-left-color:var(--red)}
+.glance-num{font-size:1.85rem;font-weight:800;line-height:1.05;color:var(--blue-dark);letter-spacing:-.02em}
+.glance-tile.good .glance-num{color:#1f6b2a}.glance-tile.warn .glance-num{color:var(--amber)}.glance-tile.bad .glance-num{color:var(--red)}
+.glance-label{font-size:.82rem;color:var(--muted);line-height:1.35}
+.glance-types{margin-top:.85rem;display:flex;flex-wrap:wrap;align-items:center;gap:.45rem}
+.glance-types>span{font-size:.8rem;color:var(--muted);margin-right:.2rem}
+.glance-chip{font-style:normal;font-size:.82rem;font-weight:600;color:var(--blue-dark);background:#fff;border:1px solid var(--border);border-radius:999px;padding:.22rem .7rem}
+.glance-chip b{color:var(--blue);margin-left:.25rem}
+@media (max-width:520px){.glance-num{font-size:1.6rem}.glance-tile{flex-basis:100%}}
+</style>
 <meta name="description" content="Search recent {{ council.name }} planning applications: new submissions, decisions and status updates, mapped and searchable. Get free email alerts from PlanFind when applications are submitted near you.">
 {% if recent %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
@@ -42,9 +59,6 @@
         · <a href="{{ council.portal_url }}" target="_blank" rel="noopener">Visit council portal →</a>
         {% endif %}
       </p>
-      {% if intro %}
-      <p class="results-sub council-intro" style="margin-top:.5rem">{{ intro }}</p>
-      {% endif %}
       {% if council.status %}
       <p class="results-sub" style="margin-top:.3rem">
         {{ council.status.emoji }} Our data:
@@ -59,6 +73,16 @@
         {% endif %}
         ({{ council.status.label }}) — the dates on individual applications below show when each was submitted to the council, not when we last checked.
       </p>
+      {% endif %}
+      {% if intro %}
+      <section class="glance" aria-label="{{ council.name }} planning applications at a glance">
+        <div class="glance-head">At a glance</div>
+        <div class="glance-grid">
+          <div class="glance-tile"><span class="glance-num">{{ intro.recent }}</span><span class="glance-label">new planning applications<br>in the last 30 days</span></div>
+          {% if intro.pct is not none %}<div class="glance-tile good"><span class="glance-num">{{ intro.pct }}%</span><span class="glance-label">approved, of {{ intro.decided }}<br>decided in the last 90 days</span></div>{% endif %}
+        </div>
+        {% if intro.types %}<div class="glance-types"><span>Most common work</span>{% for lbl, n in intro.types %}<em class="glance-chip">{{ lbl }} <b>{{ n }}</b></em>{% endfor %}</div>{% endif %}
+      </section>
       {% endif %}
       {% if council.date_unavailable_note %}
       <p class="results-sub" style="margin-top:.3rem">
