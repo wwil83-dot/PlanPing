@@ -112,8 +112,8 @@ def _esc(v) -> str:
     return _html.escape(str(v or ""), quote=True)
 
 
-def _build_email(sub: dict, apps: list) -> tuple:
-    count = len(apps)
+def _build_email(sub: dict, apps: list, total: int = 0) -> tuple:
+    count = max(total, len(apps))
     plural = "s" if count != 1 else ""
     postcode = _esc(sub.get("postcode") or "your area")
     unsub_url = f"{BASE_URL}/unsubscribe/{sub['unsubscribe_token']}"
@@ -175,9 +175,9 @@ def _build_email(sub: dict, apps: list) -> tuple:
 async def _fetch_apps(ids: list) -> list:
     flt = f"in.({','.join(str(i) for i in ids[:20])})"
     try:
-        return await _get("planning_applications", select=_SELECT + ",ai_summary", id=flt)
+        return await _get("planning_applications", select=_SELECT + ",ai_summary", id=flt, order="submitted_date.desc.nullslast")
     except Exception:
-        return await _get("planning_applications", select=_SELECT, id=flt)   # no ai_summary column: plain descriptions
+        return await _get("planning_applications", select=_SELECT, id=flt, order="submitted_date.desc.nullslast")   # no ai_summary column: plain descriptions
 
 
 async def dispatch_alerts() -> None:
@@ -226,13 +226,15 @@ async def dispatch_alerts() -> None:
         if not apps:
             continue
 
-        subject, body_html, unsub_url = _build_email(sub, apps)
+        subject, body_html, unsub_url = _build_email(sub, apps, total=len(new_ids))
         if await _send_email(email, subject, body_html, unsub_url):
             sent += 1
             print(f"    Sent: {subject}")
-            code = await _insert("alert_log", [{"subscription_id": sub_id, "application_id": a["id"]} for a in apps],
+            # log EVERY new application, not just the ones shown: the email links to the full list, and anything left
+            # unlogged would arrive again tomorrow as a confusing second email
+            code = await _insert("alert_log", [{"subscription_id": sub_id, "application_id": i} for i in new_ids],
                                  upsert=True)
-            print(f"    Logged {len(apps)} alert record(s) (HTTP {code})")
+            print(f"    Logged {len(new_ids)} alert record(s) (HTTP {code})")
         elif RESEND_API_KEY:
             failed += 1
             print("    NOT logged as sent - will try again on the next run")
