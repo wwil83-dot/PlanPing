@@ -7645,7 +7645,7 @@ jobs:
           DETAIL_MAX: "30"
           MAX_MINUTES: "45"
           DRY_RUN: "1"
-          HTTP_COUNCILS: "261,36,316,323,216,70"
+          HTTP_COUNCILS: "261,36,316,323,70"
         run: cd scrapers && python idox_http_scraper.py
 
   idox_http_backfill_westdun:
@@ -7791,7 +7791,7 @@ jobs:
           DETAIL_MAX: "60"
           MAX_MINUTES: "60"
           DRY_RUN: "0"
-          HTTP_COUNCILS: "440,530,412,272,275,43,175,270,261,316,70,323,36,216"
+          HTTP_COUNCILS: "440,530,412,272,275,43,175,270,261,316,70,323,36"
         run: cd scrapers && python idox_http_scraper.py
 
   idox_http_backfill_blocked:
