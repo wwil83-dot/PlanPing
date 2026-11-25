@@ -208,7 +208,7 @@
   <div class="cta-band">
     <div>
       <strong>Want to know about future applications?</strong>
-      <span>Get a free weekly digest for {{ postcode }}.</span>
+      <span>Get free email alerts for {{ postcode }}.</span>
     </div>
     <button class="btn btn-primary" onclick="openModal('modal-alert')">Set up free alert</button>
   </div>
@@ -221,7 +221,7 @@
   <div class="modal">
     <button class="modal-close" onclick="closeModalById('modal-alert')">✕</button>
     <h3 class="modal-title">Get planning alerts</h3>
-    <p class="modal-sub">Free weekly digest of new applications near {{ postcode }}.</p>
+    <p class="modal-sub">Free email alerts for new applications near {{ postcode }}.</p>
     <form action="/api/alert" method="post">
       <input type="hidden" name="postcode" value="{{ postcode }}">
       <div class="form-group">
