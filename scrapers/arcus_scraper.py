@@ -2018,14 +2018,69 @@ class ArcusPortal:
             print(f"    ✓ [{self.council_name}] Weekly List tab: {len(apps)} via CSV")
             return apps
 
-        html = await page.content()
-        apps = _parse_results_html_fallback(html, self.council_name)
+        async def _read_results_html():
+            h = await page.content()
+            got = _parse_results_html_fallback(h, self.council_name)
+            if not got:
+                try:
+                    bt = await page.inner_text("body")
+                except Exception:
+                    bt = None
+                got = _parse_card_results(h, self.council_name, body_text=bt, quiet=True)
+            return got
+
+        apps = await _read_results_html()
+
+        # FIX (2026-11-25): Eastleigh/Anglesey went stale. Their weekly list
+        # is keyed on a week-commencing date; the default/blank date returns
+        # nothing. Retry explicitly with the Monday of this week and the
+        # previous three weeks.
         if not apps:
-            try:
-                body_text = await page.inner_text("body")
-            except Exception:
-                body_text = None
-            apps = _parse_card_results(html, self.council_name, body_text=body_text, quiet=True)
+            import base64, json as _json
+            from datetime import date as _d, timedelta as _td
+            today = _d.today()
+            monday = today - _td(days=today.weekday())
+            for back in range(0, 4):
+                wk = monday - _td(weeks=back)
+                try:
+                    if "weekly-list-results" in page.url and "search=" in page.url:
+                        # Anglesey: the search is a base64 JSON blob in the URL.
+                        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+                        u = urlparse(page.url)
+                        q = parse_qs(u.query)
+                        raw = q["search"][0]
+                        data = _json.loads(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)))
+                        data["start_date"] = wk.strftime("%Y-%m-%dT00:00:00.000Z")
+                        q["search"] = [base64.b64encode(_json.dumps(data, separators=(",", ":")).encode()).decode().rstrip("=")]
+                        newq = urlencode({k: v[0] for k, v in q.items()})
+                        await page.goto(urlunparse(u._replace(query=newq)), wait_until="domcontentloaded", timeout=45_000)
+                        await asyncio.sleep(5)
+                    else:
+                        # Eastleigh: type the date into "Week Commencing", search again.
+                        wc = page.get_by_label("Week Commencing", exact=False)
+                        if await wc.count() == 0:
+                            break
+                        await wc.first.fill(wk.strftime("%d/%m/%Y"), timeout=5_000)
+                        await asyncio.sleep(1)
+                        btn = wc.first.locator(
+                            "xpath=ancestor::*[.//button[normalize-space()='Search']][1]"
+                        ).get_by_role("button", name="Search", exact=False)
+                        if await btn.count() == 0:
+                            btn = page.get_by_role("button", name="Search", exact=False)
+                        await btn.last.click(timeout=5_000, force=True)
+                        await asyncio.sleep(5)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=15_000)
+                    except PlaywrightTimeout:
+                        pass
+                except Exception as e:
+                    print(f"    ⚠ [{self.council_name}] week retry {wk} failed: {e}")
+                    continue
+                got = await self._try_csv_download(page) or await _read_results_html()
+                if got:
+                    print(f"    ℹ [{self.council_name}] results found for week commencing {wk}")
+                    apps = got
+                    break
         if apps:
             async def _parse_here(pg):
                 h = await pg.content()
