@@ -1892,7 +1892,22 @@ async def confirm(request: Request, token: str):
 
 
 @app.get("/unsubscribe/{token}", response_class=HTMLResponse)
+async def unsubscribe_confirm(request: Request, token: str):
+    """Changed 2026-11-25: opening the link no longer unsubscribes. Email scanners (Outlook, corporate filters) open every
+    link in a message, which would have removed people silently. The person now confirms with a button (POST below)."""
+    async with get_db() as db:
+        row = await db.fetchrow(
+            "SELECT postcode FROM alert_subscriptions WHERE unsubscribe_token=$1", token
+        )
+    return render("unsubscribe_confirm.html", {
+        "request": request, "found": bool(row), "token": token,
+        "postcode": row["postcode"] if row else None,
+    })
+
+
+@app.post("/unsubscribe/{token}", response_class=HTMLResponse)
 async def unsubscribe(request: Request, token: str):
+    # Also answers the one-click List-Unsubscribe POST that mail apps (Gmail, Apple Mail) send from the unsubscribe button.
     async with get_db() as db:
         result = await db.execute(
             "DELETE FROM alert_subscriptions WHERE unsubscribe_token=$1", token
