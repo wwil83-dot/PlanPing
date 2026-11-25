@@ -186,14 +186,26 @@ async def dispatch_alerts() -> None:
     print(f"RESEND_API_KEY: {'set' if RESEND_API_KEY else 'NOT SET (dry-run mode)'}")
 
     subs = await _get("alert_subscriptions",
-                      select="id,email,postcode,lat,lng,radius_miles,unsubscribe_token", confirmed="eq.true")
+                      select="id,email,postcode,lat,lng,radius_miles,frequency,unsubscribe_token", confirmed="eq.true")
     print(f"\n{len(subs)} confirmed subscriber(s)\n")
     sent = failed = 0
 
     for sub in subs:
         sub_id, email = sub["id"], sub["email"]
         radius = float(sub["radius_miles"])
-        print(f"  [{email}] {sub.get('postcode', '')} r={radius}mi")
+        freq = (sub.get("frequency") or "weekly").lower()
+        print(f"  [{email}] {sub.get('postcode', '')} r={radius}mi  {freq}")
+        # 2026-11-25: the form's "weekly digest" choice used to be ignored. Weekly subscribers now get their digest on Mondays
+        # (everything new since the last one), but a brand-new subscriber's FIRST digest goes out straight away rather than
+        # making them wait up to a week. "instant" is not built yet, so it behaves like daily. FORCE_WEEKLY=1 overrides.
+        if freq == "weekly" and date.today().weekday() != 0 and os.environ.get("FORCE_WEEKLY") != "1":
+            try:
+                prior = await _get("alert_log", select="application_id", subscription_id=f"eq.{sub_id}", limit="1")
+            except Exception:
+                prior = [1]
+            if prior:
+                print("    weekly digest: next one goes out on Monday - skip today")
+                continue
         try:
             nearby = await _rpc("applications_near", {"p_lat": sub["lat"], "p_lng": sub["lng"],
                                                       "p_miles": radius, "p_days_back": DAYS_BACK})
