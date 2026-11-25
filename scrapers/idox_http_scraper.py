@@ -104,7 +104,6 @@ COUNCILS = [
     ("Exeter City Council", "https://publicaccess.exeter.gov.uk/online-applications", 36),
     ("West Lancashire Borough Council", "https://pa.westlancs.gov.uk/online-applications", 316),
     ("Powys County Council", "https://pa.powys.gov.uk/online-applications", 323),
-    ("Peterborough City Council", "https://planpa.peterborough.gov.uk/online-applications", 216),
     ("Swindon Borough Council", "https://pa.swindon.gov.uk/publicaccess", 70),
     # Durham: nightly browser scraper only has 618 rows since 20 Jul (about a third of the volume), so it gets the HTTP sweep too.
     ("Durham County Council", "https://publicaccess.durham.gov.uk/online-applications", 201),
@@ -175,7 +174,7 @@ class Blocked(Exception):
     pass
 
 
-FLAKY_SERVERS = {190, 170, 65, 355, 371, 449, 234, 232, 175, 390, 389, 216, 36}      # councils whose own server is known to be unreliable (Sandwell: HTTP 500s and timeouts; Bury: Fortinet 504 Gateway Timeout 2026-11-16; Southampton: search form timeouts on all proxies 2026-11-18); a timeout on every address is reported as info, not as a failure. 2026-11-25 added Bolsover 390 and North East Derbyshire 389 (same server: search form and detail-page timeouts). 2026-11-22 added Watford 449, Kingston 234, Sutton 232 (search form timeouts on every proxy) and Bradford 175 (HTTP 403 firewall block after the big backfill); for these a timeout or a block on a slice is info, never a red run
+FLAKY_SERVERS = {190, 170, 65, 355, 371, 449, 234, 232, 175, 390, 389, 36}      # councils whose own server is known to be unreliable (Sandwell: HTTP 500s and timeouts; Bury: Fortinet 504 Gateway Timeout 2026-11-16; Southampton: search form timeouts on all proxies 2026-11-18); a timeout on every address is reported as info, not as a failure. 2026-11-25 added Bolsover 390 and North East Derbyshire 389 (same server: search form and detail-page timeouts). 2026-11-22 added Watford 449, Kingston 234, Sutton 232 (search form timeouts on every proxy) and Bradford 175 (HTTP 403 firewall block after the big backfill); for these a timeout or a block on a slice is info, never a red run
 
 
 class CouncilDown(Exception):

@@ -831,8 +831,6 @@ IDOX_COUNCILS = [
     ("Portsmouth City Council",
      "https://publicaccess.portsmouth.gov.uk/online-applications"),
 
-    ("Reading Borough Council",
-     "https://planning.reading.gov.uk/online-applications"),
 
     # BROKEN — Milton Keynes moved to Arcus BE (be.milton-keynes.gov.uk), same as Manchester/Salford.
     # ("Milton Keynes City Council",
@@ -1532,8 +1530,6 @@ IDOX_COUNCILS = [
     ("Brentwood Borough Council",
      "https://publicaccess.brentwood.gov.uk/online-applications"),
 
-    ("Peterborough City Council",
-     "https://planpa.peterborough.gov.uk/online-applications"),
 
     ("Norwich City Council",
      "https://planning.norwich.gov.uk/online-applications"),
