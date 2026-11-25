@@ -125,7 +125,13 @@
         try {
           btn.disabled = true;
           const r = await fetch(form.action, { method: 'POST', body: new FormData(form) });
-          const j = await r.json();
+          let j = {};
+          try { j = await r.json(); } catch (e) {}
+          if (!r.ok) {
+            // 2026-11-25: failures used to show "Done." (the JSON has `detail`, not `message`), so a failed sign-up looked successful
+            showToast(typeof j.detail === 'string' ? j.detail : 'Sorry, that did not go through. Please check the details and try again.');
+            return;
+          }
           showToast(j.message || 'Done.');
           document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
           form.reset();
