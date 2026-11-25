@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Unsubscribe from PlanFind alerts{% endblock %}
+{% block head_extra %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block content %}
+<header class="hero hero-compact">
+  <div class="hero-inner">
+    <h1 style="font-size:1.7rem;margin-bottom:.4rem">Unsubscribe from alerts</h1>
+  </div>
+</header>
+<main class="main" style="max-width:560px">
+  {% if found %}
+  <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:1.5rem">
+    <p style="font-size:.95rem;margin-bottom:1rem">
+      Stop planning alerts{% if postcode %} for <strong>{{ postcode }}</strong>{% endif %}?
+      You will no longer get emails about new applications near this postcode.
+    </p>
+    <form method="post" action="/unsubscribe/{{ token }}">
+      <button type="submit" style="background:#b91c1c;color:#fff;border:0;border-radius:10px;padding:.7rem 1.3rem;font-size:.95rem;font-weight:700;cursor:pointer">Yes, unsubscribe me</button>
+      <a href="/" style="margin-left:1rem;color:var(--muted);font-size:.9rem">No, keep my alerts</a>
+    </form>
+  </div>
+  {% else %}
+  <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:1.5rem">
+    <p style="font-size:.95rem">This alert has already been removed, or the link is no longer valid. You won't get any more emails for it.</p>
+    <p style="margin-top:1rem"><a href="/">Back to PlanFind</a></p>
+  </div>
+  {% endif %}
+</main>
+{% endblock %}
