@@ -3,24 +3,33 @@ PlanFind alert system.
 Sends confirmation emails and dispatches new application alerts.
 """
 import os
+import html as _html
 import httpx
 from app.db import get_db
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 FROM_EMAIL     = os.environ.get("FROM_EMAIL", "alerts@planfind.co.uk")
-BASE_URL       = os.environ.get("BASE_URL", "https://planfind.onrender.com")
+BASE_URL       = (os.environ.get("BASE_URL", "https://www.planfind.co.uk") or "https://www.planfind.co.uk").rstrip("/")
 
 
-async def _send(to: str, subject: str, html: str):
+async def _send(to: str, subject: str, html: str) -> bool:
     if not RESEND_API_KEY:
         print(f"[EMAIL] {to}: {subject}")
-        return
-    async with httpx.AsyncClient() as client:
-        await client.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
-            json={"from": FROM_EMAIL, "to": to, "subject": subject, "html": html},
-        )
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+                json={"from": FROM_EMAIL, "to": to, "subject": subject, "html": html},
+            )
+    except Exception as e:
+        print(f"[EMAIL ERROR] {to}: {type(e).__name__}: {e}")
+        return False
+    if r.status_code not in (200, 201):
+        print(f"[EMAIL ERROR] {to}: HTTP {r.status_code} {r.text[:200]}")
+        return False
+    return True
 
 
 async def send_confirmation(email: str, postcode: str):
@@ -33,17 +42,30 @@ async def send_confirmation(email: str, postcode: str):
             return
 
     confirm_url = f"{BASE_URL}/confirm/{row['confirm_token']}"
+    pc = _html.escape(postcode or "", quote=True)
+    # Redesigned 2026-11-25: same look as the alert emails (see dispatch_alerts.py).
     html = f"""
-    <p>Hi,</p>
-    <p>You asked to be alerted when new planning applications are submitted near
-    <strong>{postcode}</strong>.</p>
-    <p><a href="{confirm_url}" style="background:#1d4ed8;color:#fff;padding:10px 20px;
-    border-radius:6px;text-decoration:none;display:inline-block;margin:12px 0">
-    Confirm my alert</a></p>
-    <p style="color:#6b7280;font-size:13px">
-    If you didn't request this, just ignore this email.<br>
-    PlanFind · <a href="{BASE_URL}">planfind.co.uk</a>
-    </p>
+    <div style="background:#f4f7fb;padding:24px 12px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto">
+        <tr><td style="background:#0e3d6e;border-radius:14px 14px 0 0;padding:22px 24px">
+          <div style="font-size:22px;font-weight:800;color:#ffffff;letter-spacing:-.01em">PlanFind</div>
+          <div style="font-size:13px;color:#b9d3f0;margin-top:2px">Planning applications near you</div>
+        </td></tr>
+        <tr><td style="background:#ffffff;border:1px solid #dde4ed;border-top:0;border-radius:0 0 14px 14px;padding:26px 24px">
+          <div style="font-size:20px;font-weight:800;color:#0e3d6e;margin-bottom:10px">One click to confirm your alert</div>
+          <p style="font-size:15px;line-height:1.55;color:#374151;margin:0 0 18px 0">
+            You asked to be told when new planning applications are submitted near
+            <strong>{pc}</strong>. Confirm below and we'll email you each time something new appears, with the
+            address, what is proposed and where it stands.
+          </p>
+          <p style="margin:0 0 20px 0"><a href="{confirm_url}" style="display:inline-block;background:#2e8b3a;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;padding:13px 26px">Confirm my alert</a></p>
+          <p style="font-size:13px;line-height:1.5;color:#8a97a8;margin:0">
+            If you didn't ask for this, just ignore this email and nothing will be sent.<br>
+            PlanFind &middot; <a href="{BASE_URL}" style="color:#8a97a8">planfind.co.uk</a>
+          </p>
+        </td></tr>
+      </table>
+    </div>
     """
     await _send(email, f"Confirm your PlanFind alert for {postcode}", html)
 
