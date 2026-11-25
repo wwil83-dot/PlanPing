@@ -1834,20 +1834,30 @@ async def create_alert(
     background_tasks: BackgroundTasks,
     email: str = Form(...),
     postcode: str = Form(...),
-    radius_miles: int = Form(1),
+    radius_miles: float = Form(1.0),
     frequency: str = Form("weekly"),
 ):
+    # 2026-11-25: was `int`, so the form's 0.25 / 0.5 mile options failed validation and nothing was saved. The column holds
+    # whole miles, so anything under 1 is stored as 1.
+    radius_miles = max(1, min(int(round(radius_miles)), 5))
+    if frequency not in ("weekly", "daily", "instant"):
+        frequency = "weekly"
     postcode = postcode.strip().upper()
     location = await postcode_lookup(postcode)
     if not location:
         raise HTTPException(400, "Invalid postcode")
 
     async with get_db() as db:
-        existing = await db.fetchval(
-            "SELECT id FROM alert_subscriptions WHERE email=$1 AND postcode=$2",
+        existing = await db.fetchrow(
+            "SELECT id, confirmed FROM alert_subscriptions WHERE email=$1 AND postcode=$2",
             email, postcode
         )
         if existing:
+            if not existing["confirmed"]:
+                # 2026-11-25: sign-ups that never got (or lost) the confirmation email can ask again by submitting the form again
+                from app.alerts import send_confirmation
+                background_tasks.add_task(send_confirmation, email, postcode)
+                return {"ok": True, "message": "We've sent a fresh confirmation email. Please check your inbox (and spam)."}
             return {"ok": True, "message": "You already have an alert for this postcode."}
 
         await db.execute("""
@@ -1855,7 +1865,7 @@ async def create_alert(
                 (email, postcode, lat, lng, radius_miles, frequency)
             VALUES ($1,$2,$3,$4,$5,$6)
         """, email, postcode, location["lat"], location["lng"],
-            min(radius_miles, 5), frequency)
+            radius_miles, frequency)
 
     from app.alerts import send_confirmation
     background_tasks.add_task(send_confirmation, email, postcode)
