@@ -261,11 +261,12 @@ ARCUS_COUNCILS = [
     # Worth a direct recon of the /pr3/s URL before deciding whether to
     # switch (newer instance replacing this one) or whether both
     # genuinely run in parallel.
+    # 2026-11-25: Wiltshire's /pr3 register has no Weekly List tab (Quick /
+    # Advanced / Map only) -> advanced_search. The register URL itself is
+    # set in REGISTER_URL_OVERRIDES in arcus_scraper.py.
     ("Wiltshire Council",
-     "https://development.wiltshire.gov.uk/pr/s",
-     "tabbed_weekly_list",
-     ["Planning Applications Validated this week",
-      "Planning Applications Decided this week"]),
+     "https://development.wiltshire.gov.uk/pr3/s",
+     "advanced_search", None),
 
     # Added 2026-07-23 — CORRECTING an earlier mistake this same session:
     # both were initially investigated as candidates for a THIRD scraper

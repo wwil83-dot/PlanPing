@@ -392,6 +392,15 @@ async def scrape() -> list[dict]:
 
             html = await page.content()
             page_apps = _parse_results_page(html)
+            if page_num == 1 and not page_apps:
+                # DIAGNOSTIC (2026-11-25): site changed; show what we got.
+                try:
+                    bt = (await page.inner_text("body"))[:700].replace("\n", " | ")
+                    tables = await page.locator("table").count()
+                    print(f"    ⚠ PAGE DIAGNOSTIC: url={page.url} title={await page.title()!r} "
+                          f"tables={tables} text={bt!r}")
+                except Exception as e:
+                    print(f"    ⚠ PAGE DIAGNOSTIC failed: {e}")
 
             current_refs = frozenset(a["reference"] for a in page_apps)
             if page_num > 1 and current_refs and current_refs == previous_refs:

@@ -98,6 +98,14 @@ COUNCILS = [
     ("Three Rivers District Council", "https://www3.threerivers.gov.uk/online-applications", 291),
     ("Uttlesford District Council", "https://publicaccess.uttlesford.gov.uk/online-applications", 288),
     ("West Berkshire Council", "https://publicaccess.westberks.gov.uk/online-applications", 258),
+    # 2026-11-25: the Playwright scraper gets nothing from these every night (connection reset, empty response, Idox "Error" page,
+    # timeouts: the runner address looks blocked). Trying the proxy/HTTP route; dry run first.
+    ("Cornwall Council", "https://planning.cornwall.gov.uk/online-applications", 261),
+    ("Exeter City Council", "https://publicaccess.exeter.gov.uk/online-applications", 36),
+    ("West Lancashire Borough Council", "https://pa.westlancs.gov.uk/online-applications", 316),
+    ("Powys County Council", "https://pa.powys.gov.uk/online-applications", 323),
+    ("Peterborough City Council", "https://planpa.peterborough.gov.uk/online-applications", 216),
+    ("Swindon Borough Council", "https://pa.swindon.gov.uk/publicaccess", 70),
     # Durham: nightly browser scraper only has 618 rows since 20 Jul (about a third of the volume), so it gets the HTTP sweep too.
     ("Durham County Council", "https://publicaccess.durham.gov.uk/online-applications", 201),
 ]

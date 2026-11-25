@@ -146,13 +146,18 @@ def _parse_weeklylist_csv(raw_bytes: bytes, council_name: str) -> list[dict]:
 
     apps = []
     for row in reader:
-        reference = (row.get("application_number") or "").strip()
+        # 2026-11-25: new register prefixes cells with a label and newline
+        # ("Application No.\nP26/S4791/LDP"); keep only the value.
+        reference = (row.get("application_number") or "").replace("Application No.", "").strip()
+        reference = reference.splitlines()[-1].strip() if reference else ""
         if not reference:
             continue
 
-        location = (row.get("location1") or "").strip()
-        proposal = (row.get("proposal1") or "").strip()
-        applicant = (row.get("applicants_name") or "").strip()
+        def _flat(v):
+            return re.sub(r"\s+", " ", (v or "")).strip()
+        location = _flat(row.get("location1"))
+        proposal = _flat(row.get("proposal1"))
+        applicant = _flat(row.get("applicants_name"))
         received_raw = (row.get("received_complete_date") or "").strip()
         # HONEST LIMITATION (see module docstring) — real values never
         # confirmed beyond the column name; passed through as-is
@@ -301,6 +306,46 @@ async def scrape_council(browser, council_name: str, base_url: str) -> list[dict
             continue
         if btn_date >= cutoff:
             relevant_buttons.append((btn_date, btn))
+
+    # FIX (2026-11-25): the councils' "new planning register" re-skin dropped
+    # button.getWeeklyListCSV. The page still lists one row per week
+    # ("23 November to 29 November") with a CSV and a PDF icon. Fall back to
+    # finding each row by its label and clicking the CSV control inside it.
+    if not csv_buttons:
+        import re as _re
+        today = date.today()
+        label_re = _re.compile(r"^\s*(\d{1,2})\s+([A-Za-z]+)\s+to\s+\d{1,2}\s+[A-Za-z]+\s*$")
+        labels = page.get_by_text(_re.compile(r"^\s*\d{1,2}\s+[A-Za-z]+\s+to\s+\d{1,2}\s+[A-Za-z]+\s*$"))
+        n_labels = await labels.count()
+        _log(council_name, f"Fallback: {n_labels} week rows found by label")
+        shown = False
+        for i in range(n_labels):
+            lab = labels.nth(i)
+            try:
+                txt = (await lab.inner_text()).strip()
+                m = label_re.match(txt)
+                if not m:
+                    continue
+                start = datetime.strptime(f"{m.group(1)} {m.group(2)} {today.year}", "%d %B %Y").date()
+                if start > today + timedelta(days=7):
+                    start = start.replace(year=start.year - 1)
+                row = lab.locator("xpath=ancestor::*[.//*[contains(normalize-space(.),'CSV')]][1]")
+                if not shown:
+                    shown = True
+                    try:
+                        html = await row.first.evaluate("e => e.outerHTML")
+                        _log(council_name, f"Fallback row HTML: {html[:600]!r}")
+                    except Exception:
+                        pass
+                ctl = row.first.locator("a:has-text('CSV'), button:has-text('CSV'), [class*='CSV' i], [aria-label*='CSV' i], [title*='CSV' i]")
+                if await ctl.count() == 0:
+                    ctl = row.first.get_by_text("CSV", exact=True)
+                if await ctl.count() == 0:
+                    continue
+                if start >= cutoff:
+                    relevant_buttons.append((start, ctl.first))
+            except Exception as e:
+                _log(council_name, f"⚠ Fallback row {i} failed: {type(e).__name__}: {e}")
 
     _log(council_name, f"Real buttons within the last {DAYS_BACK} days: {len(relevant_buttons)}")
 

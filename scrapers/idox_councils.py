@@ -525,7 +525,7 @@ IDOX_COUNCILS = [
     # (redirects to Gloucester's server, see SOUTH WEST section below).
     # -------------------------------------------------------------------------
     ("Torridge District Council",
-     "http://publicaccess.torridge.gov.uk/online-applications"),
+     "https://publicaccess.torridge.gov.uk/online-applications"),
 
     ("Teignbridge District Council",
      "https://publicaccess.teignbridge.gov.uk/online-applications"),
