@@ -1876,13 +1876,13 @@ async def create_alert(
 
 @app.get("/pricing", response_class=HTMLResponse)
 async def pricing(request: Request):
-    council_count = None
+    council_count = app_count = None
     try:
         async with get_db() as db:
-            council_count, _ = await _get_cached_homepage_stats(db)
+            council_count, app_count = await _get_cached_homepage_stats(db)
     except Exception:
-        pass  # the page renders fine without the count
-    return render("pricing.html", {"request": request, "council_count": council_count})
+        pass  # the page renders fine without the counts
+    return render("pricing.html", {"request": request, "council_count": council_count, "app_count": app_count})
 
 
 _PRICING_TABLE_READY = False
