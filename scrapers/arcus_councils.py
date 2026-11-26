@@ -348,9 +348,12 @@ ARCUS_COUNCILS = [
     # either way (this one IS confirmed working, per its active
     # coverage_source) — worth checking directly on the next real Arcus
     # run before deciding whether to change it.
+    # 2026-11-26: the Weekly List on the old my.site.com address returns "no
+    # records" for every week; switched to Advanced Search on the branded
+    # register (register URL set in REGISTER_URL_OVERRIDES in arcus_scraper.py).
     ("Isle of Anglesey County Council",
-     "https://ioacc.my.site.com/s/pr-english",
-     "tabbed_weekly_list", "Planning applications valid this week"),
+     "https://planning-public-register.anglesey.gov.wales/prIoA/s",
+     "advanced_search", None),
 ]
 
 # ---------------------------------------------------------------------------
