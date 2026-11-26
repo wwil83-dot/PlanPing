@@ -101,6 +101,8 @@
   .pf-list li::before { content: ''; position: absolute; left: 0; top: .08rem; width: 1.15rem; height: 1.15rem; border-radius: 4px; background: linear-gradient(180deg, #4a93ff, #2468d8); }
   .pf-list li::after { content: ''; position: absolute; left: .36rem; top: .3rem; width: .45rem; height: .24rem; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg); }
   .pf-plan .pf-btn { width: 100%; }
+  .pf-founding { background: #fff7d6; border: 1px solid #f0d77a; border-radius: 12px; padding: .75rem .9rem; margin: 0 0 1.2rem; font-size: .86rem; line-height: 1.5; color: #5c4300; }
+  .pf-founding b { display: block; font-size: .95rem; color: #3f2e00; }
   .pf-fine { text-align: center; color: var(--muted); font-size: .88rem; margin-top: 2rem; }
 
   /* use cases */
@@ -242,6 +244,7 @@
           <li>Free email alerts for new applications near you</li>
           <li>Street history and planning trends</li>
           <li>Council coverage pages and guides</li>
+          <li>Bulk postcode search and CSV export, free during launch</li>
         </ul>
         <a class="pf-btn pf-btn--green" href="/postcode-search">Start searching</a>
       </article>
@@ -255,8 +258,8 @@
         <p class="pf-feat-h">Features:</p>
         <ul class="pf-list">
           <li>Everything in Free</li>
-          <li>Several saved areas, all in one weekly email</li>
           <li>Instant alerts the day an application appears</li>
+          <li>Several areas in one weekly email</li>
           <li>Downloadable area reports</li>
         </ul>
         <a class="pf-btn pf-btn--outline" href="#join" data-tier="plus">Join the Plus waitlist</a>
@@ -269,10 +272,11 @@
         <p class="pf-for">For builders, architects, planners and developers who find work through planning data.</p>
         <div class="pf-price"><b data-m="£29" data-y="£290">£29</b><span data-m="a month" data-y="a year">a month</span></div>
         <p class="pf-price-note" data-m="Planned price · cancel any time" data-y="Planned price · two months free">Planned price · cancel any time</p>
+        <div class="pf-founding"><b>Founding price: £19 a month for life</b>For the first 100 people on the Professional waitlist, for as long as you stay subscribed.</div>
         <p class="pf-feat-h">Features:</p>
         <ul class="pf-list">
           <li>Everything in Plus</li>
-          <li>Bulk search of up to 100 postcodes with CSV export</li>
+          <li>Bulk search of up to 100 postcodes with CSV export and no launch limits</li>
           <li>Filters for large sites, farm diversification and commercial conversion</li>
           <li>Biodiversity net gain site tracking</li>
           <li>Alerts by work type, such as extensions or new dwellings</li>
@@ -280,7 +284,7 @@
         <a class="pf-btn pf-btn--blue" href="#join" data-tier="professional">Join the Professional waitlist</a>
       </article>
     </div>
-    <p class="pf-fine">Prices are planned and may change before launch.</p>
+    <p class="pf-fine">Prices are planned and may change before launch. Bulk search and CSV export are free during launch. We will tell you on this page and by email before any limits apply.</p>
   </div>
 </section>
 
@@ -319,8 +323,8 @@
   <div class="pf-wrap">
     <div class="pf-band">
       <div class="pf-title">
-        <h2>Tell us what would make it worth paying for</h2>
-        <p>We will email you once, when the plan you pick opens. Your answers decide what we build first.</p>
+        <h2>Join before launch and lock in the founding price</h2>
+        <p>The first 100 people on the Professional waitlist keep £19 a month for life. We will email you once, when your plan opens, and your answers decide what we build first.</p>
       </div>
       <form class="pf-form" action="/api/pricing-waitlist" method="post" onsubmit="return false">
         <label class="pf-full">Email address
@@ -366,6 +370,10 @@
         <details class="pf-q" open>
           <summary>Will search stay free?</summary>
           <p>Yes. Searching by postcode and getting email alerts near your home are free, and we have no plan to change that.</p>
+        </details>
+        <details class="pf-q">
+          <summary>Will anything I use now become paid?</summary>
+          <p>Search and email alerts near your home stay free. Bulk search and CSV export are free during launch, and some limits will apply once the paid plans open. We will announce it on this page and by email first.</p>
         </details>
         <details class="pf-q">
           <summary>When will the paid plans open?</summary>
