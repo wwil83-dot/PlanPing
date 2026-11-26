@@ -3,6 +3,7 @@ PlanPing — FastAPI backend
 Run with: uvicorn app.main:app --reload
 """
 import os
+import re
 import asyncio
 import csv
 import io
@@ -1322,7 +1323,7 @@ async def sitemap_pages():
     ]
 
     static_urls = [
-        "/", "/councils", "/trends", "/guides", "/towns", "/about",
+        "/", "/councils", "/trends", "/guides", "/towns", "/about", "/pricing",
         "/coverage-gaps", "/find-a-professional", "/large-sites",
         "/farm-diversification", "/commercial-conversion",
         "/postcode-search", "/bulk-search", "/street-history", "/activity",
@@ -1871,6 +1872,62 @@ async def create_alert(
     background_tasks.add_task(send_confirmation, email, postcode)
 
     return {"ok": True, "message": "Check your email to confirm your alert."}
+
+
+@app.get("/pricing", response_class=HTMLResponse)
+async def pricing(request: Request):
+    council_count = None
+    try:
+        async with get_db() as db:
+            council_count, _ = await _get_cached_homepage_stats(db)
+    except Exception:
+        pass  # the page renders fine without the count
+    return render("pricing.html", {"request": request, "council_count": council_count})
+
+
+_PRICING_TABLE_READY = False
+
+
+@app.post("/api/pricing-waitlist")
+async def pricing_waitlist(
+    email: str = Form(...),
+    tier: str = Form("professional"),
+    role: str = Form("other"),
+    note: str = Form(""),
+    website: str = Form(""),
+):
+    """2026-11-26: waitlist for the planned paid plans. Stored in pricing_waitlist (created on first use)."""
+    global _PRICING_TABLE_READY
+    if website.strip():  # hidden field: only bots fill it in
+        return {"ok": True, "message": "You're on the list."}
+    email = email.strip().lower()
+    if len(email) > 254 or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+    if tier not in ("plus", "professional", "both"):
+        tier = "professional"
+    if role not in ("homeowner", "landlord", "builder", "architect", "developer", "other"):
+        role = "other"
+    note = note.strip()[:300]
+    async with get_db() as db:
+        if not _PRICING_TABLE_READY:
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS pricing_waitlist (
+                    id BIGSERIAL PRIMARY KEY,
+                    email TEXT NOT NULL,
+                    tier TEXT NOT NULL,
+                    role TEXT,
+                    note TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    UNIQUE (email, tier)
+                )
+            """)
+            _PRICING_TABLE_READY = True
+        await db.execute("""
+            INSERT INTO pricing_waitlist (email, tier, role, note)
+            VALUES ($1,$2,$3,$4)
+            ON CONFLICT (email, tier) DO UPDATE SET role = EXCLUDED.role, note = EXCLUDED.note
+        """, email, tier, role, note or None)
+    return {"ok": True, "message": "You're on the list. We'll email you when your plan opens."}
 
 
 @app.post("/api/waitlist")
