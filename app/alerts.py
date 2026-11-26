@@ -70,6 +70,38 @@ async def send_confirmation(email: str, postcode: str):
     await _send(email, f"Confirm your PlanFind alert for {postcode}", html)
 
 
+async def send_waitlist_confirmation(email: str, tier: str):
+    """2026-11-26: confirmation for the pricing-page waitlist (sent once, when the address is first added)."""
+    plan = {"plus": "PlanFind Plus", "professional": "PlanFind Professional", "both": "PlanFind Plus and PlanFind Professional"}.get(tier, "PlanFind Professional")
+    plan = _html.escape(plan, quote=True)
+    html = f"""
+    <div style="background:#f4f7fb;padding:24px 12px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto">
+        <tr><td style="background:#0e3d6e;border-radius:14px 14px 0 0;padding:22px 24px">
+          <div style="font-size:22px;font-weight:800;color:#ffffff;letter-spacing:-.01em">PlanFind</div>
+          <div style="font-size:13px;color:#b9d3f0;margin-top:2px">Planning applications near you</div>
+        </td></tr>
+        <tr><td style="background:#ffffff;border:1px solid #dde4ed;border-top:0;border-radius:0 0 14px 14px;padding:26px 24px">
+          <div style="font-size:20px;font-weight:800;color:#0e3d6e;margin-bottom:10px">You're on the waitlist</div>
+          <p style="font-size:15px;line-height:1.55;color:#374151;margin:0 0 14px 0">
+            Thanks for your interest in <strong>{plan}</strong>. We'll email you once, when the plan opens.
+            There's nothing to pay and nothing more you need to do.
+          </p>
+          <p style="font-size:15px;line-height:1.55;color:#374151;margin:0 0 20px 0">
+            Searching planning applications and email alerts near your home stay free.
+          </p>
+          <p style="margin:0 0 20px 0"><a href="{BASE_URL}/postcode-search" style="display:inline-block;background:#2e8b3a;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:10px">Search planning applications</a></p>
+          <p style="font-size:13px;line-height:1.5;color:#8a97a8;margin:0">
+            Didn't sign up, or want your address removed? Tell us at <a href="{BASE_URL}/about#contact" style="color:#8a97a8">planfind.co.uk/about</a> and we'll delete it.<br>
+            PlanFind &middot; <a href="{BASE_URL}" style="color:#8a97a8">planfind.co.uk</a>
+          </p>
+        </td></tr>
+      </table>
+    </div>
+    """
+    await _send(email, "You're on the PlanFind waitlist", html)
+
+
 async def dispatch_alerts():
     """
     Find new applications that subscribed users haven't been alerted about.

@@ -1890,6 +1890,7 @@ _PRICING_TABLE_READY = False
 
 @app.post("/api/pricing-waitlist")
 async def pricing_waitlist(
+    background_tasks: BackgroundTasks,
     email: str = Form(...),
     tier: str = Form("professional"),
     role: str = Form("other"),
@@ -1922,12 +1923,16 @@ async def pricing_waitlist(
                 )
             """)
             _PRICING_TABLE_READY = True
-        await db.execute("""
+        is_new = await db.fetchval("""
             INSERT INTO pricing_waitlist (email, tier, role, note)
             VALUES ($1,$2,$3,$4)
             ON CONFLICT (email, tier) DO UPDATE SET role = EXCLUDED.role, note = EXCLUDED.note
+            RETURNING (xmax = 0)
         """, email, tier, role, note or None)
-    return {"ok": True, "message": "You're on the list. We'll email you when your plan opens."}
+    if is_new:  # a confirmation email goes out only the first time this address joins for this plan
+        from app.alerts import send_waitlist_confirmation
+        background_tasks.add_task(send_waitlist_confirmation, email, tier)
+    return {"ok": True, "message": "You're on the list. Check your email for a confirmation."}
 
 
 @app.post("/api/waitlist")
