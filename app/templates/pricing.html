@@ -2,283 +2,312 @@
 {% block title %}Pricing — PlanFind{% endblock %}
 {% block head_extra %}
 <meta name="description" content="PlanFind search and postcode alerts are free. Join the waitlist for PlanFind Plus and PlanFind Professional, built for builders, architects and developers.">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --pr-ink: #0a2540;
-    --pr-blue: #0e3d6e;
-    --pr-line: #c3d3e6;
-    --pr-paper: #f4f7fb;
-    --pr-notice: #f7c948;
-    --pr-notice-deep: #e0a800;
-    --pr-ok: #1f7a34;
-    --pr-pending: #8a5a00;
-  }
-  .pr-display { font-family: 'Fraunces', Georgia, serif; font-optical-sizing: auto; }
+  .pf { --ink: #0a1f3d; --navy: #061a36; --navy-2: #0e3d6e; --blue: #2f7cf6; --blue-2: #1a5fa8; --soft: #eef4fc; --line: #e3eaf4; --muted: #5a6b82; --ok: #16a05c;
+        font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif; color: var(--ink); }
+  .pf *, .pf *::before, .pf *::after { box-sizing: border-box; }
+  :where(.pf) :is(h1, h2, h3) { font-family: inherit; color: var(--ink); letter-spacing: -.02em; margin: 0; }
+  :where(.pf) p { margin: 0; }
+  .pf-wrap { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem; }
 
-  /* ---------- hero: a planning notice pinned on a post ---------- */
-  .pr-hero {
-    position: relative; overflow: hidden;
-    background-color: var(--pr-paper);
-    background-image:
-      linear-gradient(var(--pr-line) 1px, transparent 1px),
-      linear-gradient(90deg, var(--pr-line) 1px, transparent 1px);
-    background-size: 44px 44px;
-    background-position: -1px -1px;
-    border-bottom: 1px solid var(--pr-line);
-  }
-  .pr-hero::before { /* fade the drafting grid out toward the left so the headline stays calm */
-    content: ''; position: absolute; inset: 0;
-    background: linear-gradient(90deg, var(--pr-paper) 0%, var(--pr-paper) 38%, rgba(244,247,251,.55) 62%, rgba(244,247,251,0) 100%);
-    pointer-events: none;
-  }
-  .pr-hero-inner {
-    position: relative; z-index: 1; max-width: 1120px; margin: 0 auto;
-    padding: 4rem 1.5rem 4.4rem;
-    display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 3rem; align-items: center;
-  }
-  .pr-hero h1 {
-    font-family: 'Fraunces', Georgia, serif; font-weight: 600;
-    font-size: clamp(2.3rem, 4.6vw, 3.6rem); line-height: 1.05; letter-spacing: -.02em;
-    color: var(--pr-ink); margin: 0 0 1.1rem; max-width: 18ch;
-  }
-  .pr-hero p { font-size: 1.12rem; line-height: 1.65; color: #3b4d63; max-width: 34rem; margin: 0 0 1.6rem; }
-  .pr-hero-actions { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; }
-  .pr-btn {
-    display: inline-block; border: 0; cursor: pointer; text-decoration: none;
-    font: 600 1rem/1 'Inter', sans-serif; padding: .95rem 1.5rem; border-radius: 10px;
-    background: var(--pr-ink); color: #fff; transition: transform .15s ease, background .15s ease;
-  }
-  .pr-btn:hover { background: var(--pr-blue); transform: translateY(-1px); }
-  .pr-btn:focus-visible, .pr-field:focus-visible, .pr-select:focus-visible { outline: 3px solid var(--pr-notice-deep); outline-offset: 2px; }
-  .pr-btn--ghost { background: transparent; color: var(--pr-ink); box-shadow: inset 0 0 0 2px var(--pr-ink); }
-  .pr-btn--ghost:hover { background: var(--pr-ink); color: #fff; }
+  /* buttons */
+  .pf-btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; border: 0; cursor: pointer; text-decoration: none; font-family: inherit; font-weight: 700; font-size: .95rem; line-height: 1; padding: .95rem 1.5rem; border-radius: 12px; transition: transform .15s ease, box-shadow .15s ease, background .15s ease; }
+  .pf-btn:hover { transform: translateY(-1px); }
+  .pf-btn:focus-visible, .pf input:focus-visible, .pf select:focus-visible, .pf summary:focus-visible, .pf-toggle button:focus-visible { outline: 3px solid #8bb8ff; outline-offset: 2px; }
+  .pf-btn--light { background: #fff; color: var(--blue-2); }
+  .pf-btn--ghost { background: transparent; color: #fff; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.55); }
+  .pf-btn--ghost:hover { background: rgba(255,255,255,.1); }
+  .pf-btn--blue { background: linear-gradient(180deg, #4a93ff, #2468d8); color: #fff; box-shadow: 0 8px 20px rgba(47,124,246,.35); }
+  .pf-btn--outline { background: #fff; color: var(--navy-2); box-shadow: inset 0 0 0 1.5px var(--navy-2); }
+  .pf-btn--outline:hover { background: var(--soft); }
+  .pf-btn--dark { background: var(--navy-2); color: #fff; box-shadow: 0 8px 20px rgba(14,61,110,.3); }
+  .pf-btn--dark:hover { background: var(--navy); }
+  .pf-btn--green { background: var(--ok); color: #fff; }
 
-  .pr-post { position: relative; display: flex; justify-content: center; min-height: 380px; }
-  .pr-post::before { /* the lamp post */
-    content: ''; position: absolute; top: 0; bottom: -4.4rem; left: 50%; width: 18px; margin-left: -9px;
-    background: linear-gradient(90deg, #5d6b7c, #8c99a9 45%, #4d5a6a);
-    border-radius: 3px 3px 0 0;
+  /* ---------- hero panel ---------- */
+  .pf-hero-shell { padding: 1.2rem 1.2rem 0; }
+  .pf-hero {
+    position: relative; overflow: hidden; max-width: 1240px; margin: 0 auto; border-radius: 28px; color: #fff; text-align: center;
+    background:
+      radial-gradient(900px 420px at 50% -10%, rgba(47,124,246,.55), transparent 65%),
+      radial-gradient(500px 300px at 90% 90%, rgba(22,184,106,.22), transparent 70%),
+      linear-gradient(180deg, #08224a 0%, #061a36 55%, #041229 100%);
+    padding: 4rem 1.5rem 0;
   }
-  .pr-notice {
-    position: relative; z-index: 1; width: min(100%, 410px); align-self: center;
-    background: var(--pr-notice); color: #1c1500;
-    padding: 1.1rem 1.2rem 1.2rem; border-radius: 4px;
-    transform: rotate(-2.2deg);
-    box-shadow: 0 1px 0 rgba(0,0,0,.08), 0 18px 34px rgba(10,37,64,.28);
-    outline: 2px solid rgba(255,255,255,.35); outline-offset: -8px;
-  }
-  .pr-notice::before, .pr-notice::after { /* cable ties around the post */
-    content: ''; position: absolute; left: 50%; width: 30px; height: 8px; margin-left: -15px;
-    background: #222; border-radius: 2px;
-  }
-  .pr-notice::before { top: 8px; }
-  .pr-notice::after { bottom: 8px; }
-  .pr-notice h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 1.35rem; line-height: 1.15; margin: 0 0 .7rem; text-align: center; }
-  .pr-notice dl { margin: 0; font-size: .86rem; line-height: 1.45; background: rgba(255,255,255,.5); padding: .6rem .75rem; border-radius: 3px; position: relative; z-index: 2; }
-  .pr-notice dt { font-weight: 700; display: inline; }
-  .pr-notice dt::after { content: ': '; }
-  .pr-notice dd { display: inline; margin: 0; }
-  .pr-notice dd::after { content: ''; display: block; margin-bottom: .3rem; }
-  .pr-notice dl { padding-bottom: 1.4rem; }
-  .pr-stamp {
-    position: absolute; right: -18px; bottom: -22px; z-index: 3;
-    font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 1.5rem; color: #b3261e;
-    border: 3px solid #b3261e; border-radius: 6px; padding: .15rem .65rem;
-    transform: rotate(-9deg); background: rgba(255,255,255,.55);
-    animation: pr-stamp .55s cubic-bezier(.2,.9,.3,1.3) .5s both;
-  }
-  @keyframes pr-stamp { from { opacity: 0; transform: rotate(-9deg) scale(2.4); } to { opacity: 1; transform: rotate(-9deg) scale(1); } }
+  .pf-hero h1 { color: #fff; font-weight: 800; font-size: clamp(2.2rem, 4.6vw, 3.7rem); line-height: 1.08; max-width: 18ch; margin: 0 auto 1.1rem; }
+  .pf-hero .pf-sub { color: rgba(255,255,255,.82); max-width: 40rem; margin: 0 auto 1.8rem; line-height: 1.7; font-size: 1.05rem; }
+  .pf-hero-actions { display: flex; gap: .8rem; justify-content: center; flex-wrap: wrap; }
 
-  /* ---------- tiers: three plan sheets ---------- */
-  .pr-wrap { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem; }
-  .pr-section { padding: 4rem 0 0; }
-  .pr-section > .pr-wrap > h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: clamp(1.7rem, 3vw, 2.3rem); letter-spacing: -.015em; color: var(--pr-ink); margin: 0 0 .5rem; }
-  .pr-lead { color: #4a5b70; max-width: 40rem; line-height: 1.65; margin: 0 0 2rem; }
+  /* example window cut off at the bottom of the hero */
+  .pf-window { position: relative; margin: 3.2rem auto 0; max-width: 880px; height: 330px; overflow: hidden; border-radius: 20px 20px 0 0; background: #0b2447; padding: 10px 10px 0; box-shadow: 0 -8px 60px rgba(47,124,246,.25); text-align: left; }
+  .pf-win-body { display: grid; grid-template-columns: 170px 1fr; height: 100%; background: #fff; border-radius: 12px 12px 0 0; overflow: hidden; }
+  .pf-side { background: #0d2a52; color: #cfe0f7; padding: 1.1rem .9rem; font-size: .78rem; }
+  .pf-side b { display: block; color: #fff; font-size: .95rem; margin-bottom: 1rem; }
+  .pf-side span { display: block; padding: .45rem .6rem; border-radius: 8px; margin-bottom: .25rem; }
+  .pf-side span.on { background: linear-gradient(180deg, #4a93ff, #2468d8); color: #fff; font-weight: 600; }
+  .pf-main { padding: 1rem 1.2rem; color: var(--ink); }
+  .pf-main-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .8rem; }
+  .pf-main-head strong { font-size: .98rem; }
+  .pf-pill { font-size: .7rem; font-weight: 600; padding: .25rem .6rem; border-radius: 999px; background: var(--soft); color: var(--blue-2); white-space: nowrap; }
+  .pf-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-bottom: .8rem; }
+  .pf-mini div { border: 1px solid var(--line); border-radius: 10px; padding: .55rem .7rem; }
+  .pf-mini small { display: block; font-size: .68rem; color: var(--muted); }
+  .pf-mini b { font-size: 1.25rem; }
+  .pf-row { display: grid; grid-template-columns: 1fr auto; gap: .5rem; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: .55rem .75rem; margin-bottom: .5rem; font-size: .78rem; }
+  .pf-row b { display: block; font-size: .8rem; }
+  .pf-row span { color: var(--muted); }
+  .pf-tag { font-size: .68rem; font-weight: 700; padding: .2rem .5rem; border-radius: 6px; }
+  .pf-tag--p { background: #fff2cc; color: #8a5a00; }
+  .pf-tag--a { background: #e3f3e6; color: #1f7a34; }
+  .pf-eg { position: absolute; left: 24px; top: 20px; z-index: 2; font-size: .68rem; color: #cfe0f7; background: rgba(6,26,54,.7); padding: .2rem .55rem; border-radius: 999px; }
 
-  .pr-tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.4rem; align-items: stretch; }
-  .pr-sheet {
-    position: relative; display: flex; flex-direction: column;
-    background: #fff; border: 2px solid var(--pr-ink); border-radius: 6px;
-    box-shadow: 6px 6px 0 var(--pr-line);
+  /* ---------- sections ---------- */
+  .pf-section { padding: 5rem 0 0; }
+  .pf-title { text-align: center; max-width: 38rem; margin: 0 auto 2rem; }
+  .pf-title h2 { font-weight: 800; font-size: clamp(1.7rem, 3.2vw, 2.4rem); line-height: 1.15; margin-bottom: .6rem; }
+  .pf-title p { color: var(--muted); line-height: 1.65; }
+
+  /* stat tiles */
+  .pf-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-top: -1px; padding-top: 2.4rem; }
+  .pf-stat { display: flex; justify-content: space-between; align-items: center; gap: 1rem; background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 1.3rem 1.5rem; box-shadow: 0 10px 30px rgba(10,31,61,.05); }
+  .pf-stat b { display: block; font-size: 2.1rem; font-weight: 800; letter-spacing: -.03em; line-height: 1.1; }
+  .pf-stat span { color: var(--muted); font-size: .92rem; }
+  .pf-ico { flex: none; width: 52px; height: 52px; border-radius: 50%; background: var(--soft); display: grid; place-items: center; }
+  .pf-ico svg { width: 24px; height: 24px; stroke: var(--blue-2); fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* billing toggle */
+  .pf-toggle { display: inline-flex; padding: 4px; background: #fff; border: 1px solid var(--line); border-radius: 12px; margin-top: 1.2rem; }
+  .pf-toggle button { border: 0; background: transparent; font: 600 .85rem 'Plus Jakarta Sans', sans-serif; color: var(--muted); padding: .55rem 1.1rem; border-radius: 9px; cursor: pointer; }
+  .pf-toggle button[aria-pressed="true"] { background: linear-gradient(180deg, #4a93ff, #2468d8); color: #fff; box-shadow: 0 4px 12px rgba(47,124,246,.35); }
+
+  /* plan cards */
+  .pf-plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.4rem; align-items: stretch; }
+  .pf-plan { position: relative; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 22px; padding: 1.8rem 1.7rem 1.7rem; box-shadow: 0 14px 40px rgba(10,31,61,.06); }
+  .pf-plan--hot { border: 2px solid #3b86f0; background: linear-gradient(180deg, #f3f8ff, #fff 38%); box-shadow: 0 22px 56px rgba(47,124,246,.2); }
+  .pf-badge { position: absolute; top: 1.5rem; right: 1.5rem; font-size: .72rem; font-weight: 700; color: #fff; background: linear-gradient(180deg, #4a93ff, #2468d8); padding: .3rem .7rem; border-radius: 8px; }
+  .pf-plan h3 { font-size: 1.55rem; font-weight: 700; }
+  .pf-state { display: inline-block; align-self: flex-start; margin-top: .6rem; font-size: .74rem; font-weight: 700; padding: .25rem .6rem; border-radius: 6px; }
+  .pf-state--ok { background: #e1f5e8; color: #14803f; }
+  .pf-state--pending { background: #fff2cc; color: #8a5a00; }
+  .pf-for { color: var(--muted); font-size: .92rem; line-height: 1.55; margin: .9rem 0 1.2rem; min-height: 4.8em; }
+  .pf-price { display: flex; align-items: baseline; gap: .4rem; margin-bottom: .2rem; }
+  .pf-price b { font-size: 3rem; font-weight: 800; letter-spacing: -.04em; line-height: 1; }
+  .pf-price span { color: var(--muted); font-size: .95rem; }
+  .pf-price-note { color: var(--muted); font-size: .82rem; min-height: 1.3em; margin-bottom: 1.2rem; }
+  .pf-feat-h { font-weight: 700; font-size: 1.05rem; margin-bottom: .7rem; }
+  .pf-list { list-style: none; margin: 0 0 1.6rem; padding: 0; flex: 1; display: grid; gap: .65rem; align-content: start; }
+  .pf-list li { position: relative; padding-left: 1.9rem; font-size: .94rem; line-height: 1.45; color: #243a58; }
+  .pf-list li::before { content: ''; position: absolute; left: 0; top: .08rem; width: 1.15rem; height: 1.15rem; border-radius: 4px; background: linear-gradient(180deg, #4a93ff, #2468d8); }
+  .pf-list li::after { content: ''; position: absolute; left: .36rem; top: .3rem; width: .45rem; height: .24rem; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg); }
+  .pf-plan .pf-btn { width: 100%; }
+  .pf-fine { text-align: center; color: var(--muted); font-size: .88rem; margin-top: 2rem; }
+
+  /* use cases */
+  .pf-uses { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+  .pf-use { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 1.5rem; box-shadow: 0 10px 30px rgba(10,31,61,.05); }
+  .pf-use .pf-ico { margin-bottom: 1rem; border-radius: 14px; }
+  .pf-use h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: .45rem; }
+  .pf-use p { color: var(--muted); font-size: .92rem; line-height: 1.6; }
+
+  /* waitlist band */
+  .pf-band {
+    position: relative; overflow: hidden; border-radius: 28px; color: #fff; padding: 3.4rem 2rem;
+    background:
+      radial-gradient(520px 320px at 8% 100%, rgba(22,184,106,.55), transparent 65%),
+      radial-gradient(520px 340px at 100% 100%, rgba(130,60,255,.5), transparent 65%),
+      radial-gradient(600px 300px at 60% 0%, rgba(47,124,246,.45), transparent 70%),
+      linear-gradient(180deg, #08224a, #041229);
   }
-  .pr-sheet--feature { box-shadow: 6px 6px 0 var(--pr-notice); }
-  .pr-sheet-head { padding: 1.4rem 1.5rem 1rem; }
-  .pr-status {
-    display: inline-block; font-size: .8rem; font-weight: 600; padding: .25rem .6rem; border-radius: 4px; margin-bottom: .9rem;
+  .pf-band .pf-title h2, .pf-band .pf-title p { color: #fff; }
+  .pf-band .pf-title p { color: rgba(255,255,255,.82); }
+  .pf-form { position: relative; max-width: 640px; margin: 0 auto; display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; }
+  .pf-form label { display: grid; gap: .35rem; font-size: .85rem; font-weight: 600; color: #e8f0fb; }
+  .pf-form .pf-full { grid-column: 1 / -1; }
+  .pf-form input[type=email], .pf-form input[type=text], .pf-form select { width: 100%; font: 500 .98rem 'Plus Jakarta Sans', sans-serif; padding: .9rem 1rem; border-radius: 12px; border: 0; background: #fff; color: var(--ink); }
+  .pf-form .pf-btn { grid-column: 1 / -1; justify-self: center; min-width: 14rem; }
+  .pf-form small { grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,.7); font-size: .8rem; line-height: 1.5; }
+  .pf-trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+  /* faq */
+  .pf-faq { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 3rem; align-items: start; padding-bottom: 5rem; }
+  .pf-faq-intro h2 { font-weight: 800; font-size: clamp(1.7rem, 3vw, 2.3rem); line-height: 1.15; margin-bottom: .8rem; }
+  .pf-faq-intro p { color: var(--muted); line-height: 1.65; margin-bottom: 1.4rem; max-width: 24rem; }
+  .pf-q { background: #fff; border: 1px solid var(--line); border-radius: 14px; margin-bottom: .7rem; box-shadow: 0 6px 18px rgba(10,31,61,.04); }
+  .pf-q summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.05rem 1.3rem; font-weight: 600; font-size: .98rem; }
+  .pf-q summary::-webkit-details-marker { display: none; }
+  .pf-q summary::after { content: ''; width: .55rem; height: .55rem; border-right: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: rotate(45deg); transition: transform .2s ease; flex: none; margin-top: -.2rem; }
+  .pf-q[open] summary::after { transform: rotate(-135deg); margin-top: .2rem; }
+  .pf-q p { padding: 0 1.3rem 1.2rem; color: var(--muted); line-height: 1.65; font-size: .95rem; }
+  .pf-q a { color: var(--blue-2); font-weight: 600; }
+
+  @media (max-width: 960px) {
+    .pf-plans { grid-template-columns: 1fr; max-width: 520px; margin: 0 auto; }
+    .pf-uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pf-faq { grid-template-columns: 1fr; gap: 1.6rem; }
+    .pf-for { min-height: 0; }
   }
-  .pr-status--ok { background: #e3f3e6; color: var(--pr-ok); }
-  .pr-status--pending { background: #fff2cc; color: var(--pr-pending); }
-  .pr-sheet h3 { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 1.6rem; margin: 0 0 .25rem; color: var(--pr-ink); }
-  .pr-for { color: #4a5b70; font-size: .95rem; margin: 0; }
-  .pr-feats { list-style: none; margin: 0; padding: 0 1.5rem 1.3rem; flex: 1; }
-  .pr-feats li { position: relative; padding: .5rem 0 .5rem 1.7rem; border-top: 1px solid #e4ebf4; font-size: .95rem; line-height: 1.45; color: #243447; }
-  .pr-feats li::before { content: ''; position: absolute; left: .15rem; top: .82rem; width: .55rem; height: .3rem; border-left: 2px solid var(--pr-ok); border-bottom: 2px solid var(--pr-ok); transform: rotate(-45deg); }
-  .pr-feats li.pr-soon { color: #56667a; }
-  .pr-feats li.pr-soon::before { border-color: var(--pr-notice-deep); }
-  /* drawing title block at the foot of each sheet */
-  .pr-block { border-top: 2px solid var(--pr-ink); display: grid; grid-template-columns: 1fr 1fr; }
-  .pr-block > div { padding: .8rem 1.5rem; }
-  .pr-block > div + div { border-left: 2px solid var(--pr-ink); }
-  .pr-block small { display: block; font-size: .78rem; color: #56667a; margin-bottom: .15rem; }
-  .pr-block b { font-family: 'Fraunces', Georgia, serif; font-size: 1.55rem; color: var(--pr-ink); line-height: 1.1; }
-  .pr-block b span { font-family: 'Inter', sans-serif; font-size: .85rem; font-weight: 500; color: #56667a; }
-  .pr-sheet .pr-btn { margin: 0 1.5rem 1.5rem; text-align: center; }
-  .pr-sheet .pr-btn--free { background: var(--pr-ok); }
-  .pr-sheet .pr-btn--free:hover { background: #17622a; }
-  .pr-fine { margin: 1.3rem 0 0; font-size: .9rem; color: #56667a; }
-
-  /* ---------- what professionals get ---------- */
-  .pr-pro { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0; border: 2px solid var(--pr-ink); border-radius: 6px; background: #fff; overflow: hidden; }
-  .pr-pro > div { padding: 1.4rem 1.5rem; border-right: 2px solid var(--pr-line); border-bottom: 2px solid var(--pr-line); }
-  .pr-pro h3 { font-family: 'Fraunces', Georgia, serif; font-size: 1.15rem; margin: 0 0 .4rem; color: var(--pr-ink); }
-  .pr-pro p { margin: 0; font-size: .95rem; line-height: 1.55; color: #3b4d63; }
-  .pr-pro svg { width: 34px; height: 34px; margin-bottom: .7rem; stroke: var(--pr-blue); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-
-  /* ---------- waitlist ---------- */
-  .pr-join { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 2.5rem; align-items: start; background: var(--pr-ink); color: #fff; border-radius: 10px; padding: 2.6rem; }
-  .pr-join h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: clamp(1.6rem, 2.8vw, 2.1rem); line-height: 1.15; margin: 0 0 .8rem; color: #fff; }
-  .pr-join p { color: #c9d8ea; line-height: 1.65; margin: 0; }
-  .pr-form { display: grid; gap: .9rem; }
-  .pr-form label { display: grid; gap: .35rem; font-size: .9rem; font-weight: 600; color: #e6eef8; }
-  .pr-field, .pr-select { width: 100%; font: 400 1rem 'Inter', sans-serif; padding: .85rem .9rem; border-radius: 8px; border: 2px solid transparent; background: #fff; color: var(--pr-ink); }
-  .pr-form .pr-btn { background: var(--pr-notice); color: #1c1500; justify-self: start; }
-  .pr-form .pr-btn:hover { background: #ffd966; }
-  .pr-trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
-  .pr-form small { color: #a9bdd6; line-height: 1.5; }
-
-  /* ---------- questions ---------- */
-  .pr-faq { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.2rem 2.5rem; padding-bottom: 4.5rem; }
-  .pr-faq h3 { font-family: 'Fraunces', Georgia, serif; font-size: 1.15rem; margin: 0 0 .35rem; color: var(--pr-ink); }
-  .pr-faq p { margin: 0; color: #3b4d63; line-height: 1.6; font-size: .97rem; }
-
-  @media (max-width: 900px) {
-    .pr-hero-inner { grid-template-columns: 1fr; padding-top: 2.6rem; gap: 2rem; }
-    .pr-hero::before { background: linear-gradient(180deg, var(--pr-paper) 0%, rgba(244,247,251,.8) 60%, rgba(244,247,251,.2) 100%); }
-    .pr-post { min-height: 330px; }
-    .pr-tiers { grid-template-columns: 1fr; }
-    .pr-join { grid-template-columns: 1fr; padding: 1.8rem; }
+  @media (max-width: 640px) {
+    .pf-hero { padding-top: 2.8rem; border-radius: 22px; }
+    .pf-win-body { grid-template-columns: 1fr; }
+    .pf-side { display: none; }
+    .pf-window { display: none; }
+    .pf-hero { padding-bottom: 2.6rem; }
+    .pf-stats { grid-template-columns: 1fr; }
+    .pf-uses { grid-template-columns: 1fr; }
+    .pf-form { grid-template-columns: 1fr; }
+    .pf-band { padding: 2.4rem 1.2rem; border-radius: 22px; }
   }
-  @media (prefers-reduced-motion: reduce) { .pr-stamp { animation: none; } .pr-btn { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .pf-btn { transition: none; } .pf-q summary::after { transition: none; } }
 </style>
 {% endblock %}
 
 {% block content %}
-<header class="pr-hero">
-  <div class="pr-hero-inner">
-    <div>
-      <h1>Free for neighbours. Built for people who build.</h1>
-      <p>Searching planning applications and getting alerts near your home will always be free on PlanFind. If planning is part of your work, two paid plans are on the way. Join the waitlist and tell us what would help you most.</p>
-      <div class="pr-hero-actions">
-        <a class="pr-btn" href="#join">Join the waitlist</a>
-        <a class="pr-btn pr-btn--ghost" href="/postcode-search">Search for free</a>
+<div class="pf">
+
+<div class="pf-hero-shell">
+  <header class="pf-hero">
+    <h1>Free for neighbours. Built for people who build.</h1>
+    <p class="pf-sub">Searching planning applications and getting alerts near your home will always be free on PlanFind. If planning is part of your work, two paid plans are on the way. Join the waitlist and tell us what would help you most.</p>
+    <div class="pf-hero-actions">
+      <a class="pf-btn pf-btn--light" href="#join">Join the waitlist</a>
+      <a class="pf-btn pf-btn--ghost" href="/postcode-search">Search for free</a>
+    </div>
+
+    <div class="pf-window" aria-hidden="true">
+      <span class="pf-eg">Example alert</span>
+      <div class="pf-win-body">
+        <div class="pf-side">
+          <b>PlanFind</b>
+          <span class="on">Alerts</span>
+          <span>Search</span>
+          <span>Street history</span>
+          <span>Trends</span>
+          <span>Reports</span>
+        </div>
+        <div class="pf-main">
+          <div class="pf-main-head"><strong>New applications near your postcode</strong><span class="pf-pill">Within 1 mile · last 14 days</span></div>
+          <div class="pf-mini">
+            <div><small>New this week</small><b>12</b></div>
+            <div><small>Pending</small><b>9</b></div>
+            <div><small>Decided</small><b>3</b></div>
+          </div>
+          <div class="pf-row"><div><b>Single-storey rear extension</b><span>Example Road · 0.2 mi</span></div><span class="pf-tag pf-tag--p">Pending</span></div>
+          <div class="pf-row"><div><b>Change of use to a small HMO</b><span>Sample Street · 0.4 mi</span></div><span class="pf-tag pf-tag--p">Pending</span></div>
+          <div class="pf-row"><div><b>Loft conversion with dormer</b><span>Mill Lane · 0.7 mi</span></div><span class="pf-tag pf-tag--a">Approved</span></div>
+        </div>
       </div>
     </div>
-    <div class="pr-post" aria-hidden="true">
-      <div class="pr-notice">
-        <h2>Notice of proposed pricing</h2>
-        <dl>
-          <dt>Proposal</dt><dd>Keep postcode search and email alerts free for everyone</dd>
-          <dt>Applicant</dt><dd>PlanFind</dd>
-          <dt>Reference</dt><dd>PF/FREE/001</dd>
-          <dt>Coverage</dt><dd>{{ council_count or 340 }}+ councils across the UK</dd>
-        </dl>
-        <div class="pr-stamp">Approved</div>
-      </div>
+  </header>
+</div>
+
+<div class="pf-wrap">
+  <div class="pf-stats">
+    <div class="pf-stat">
+      <div><b>{{ council_count or 340 }}+</b><span>Councils covered</span></div>
+      <div class="pf-ico"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg></div>
+    </div>
+    <div class="pf-stat">
+      <div><b>{{ "{:,}".format(app_count) if app_count else "500,000+" }}</b><span>Planning applications</span></div>
+      <div class="pf-ico"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M9 16h7"/></svg></div>
+    </div>
+    <div class="pf-stat">
+      <div><b>Nightly</b><span>Updated from council registers</span></div>
+      <div class="pf-ico"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg></div>
     </div>
   </div>
-</header>
+</div>
 
-<section class="pr-section" id="plans">
-  <div class="pr-wrap">
-    <h2>Three plans, one live today</h2>
-    <p class="pr-lead">Each plan is shown with its status, the way a planning application is. Free is approved and live. The other two are pending until enough people ask for them.</p>
+<section class="pf-section" id="plans">
+  <div class="pf-wrap">
+    <div class="pf-title">
+      <h2>Three plans, one live today</h2>
+      <p>Free is approved and live. The other two are pending until enough people ask for them. No card details, and no commitment to join the waitlist.</p>
+      <div class="pf-toggle" role="group" aria-label="Billing period">
+        <button type="button" id="pf-monthly" aria-pressed="true">Monthly</button>
+        <button type="button" id="pf-yearly" aria-pressed="false">Yearly</button>
+      </div>
+    </div>
 
-    <div class="pr-tiers">
-      <article class="pr-sheet">
-        <div class="pr-sheet-head">
-          <span class="pr-status pr-status--ok">Approved · live now</span>
-          <h3>Free</h3>
-          <p class="pr-for">For residents, neighbours and anyone curious about what is being built nearby.</p>
-        </div>
-        <ul class="pr-feats">
+    <div class="pf-plans">
+      <article class="pf-plan">
+        <h3>Free</h3>
+        <span class="pf-state pf-state--ok">Approved · live now</span>
+        <p class="pf-for">For residents, neighbours and anyone curious about what is being built nearby.</p>
+        <div class="pf-price"><b>£0</b><span>always</span></div>
+        <p class="pf-price-note">No card needed</p>
+        <p class="pf-feat-h">Features:</p>
+        <ul class="pf-list">
           <li>Search by postcode, town or council</li>
           <li>Free email alerts for new applications near you</li>
           <li>Street history and planning trends</li>
           <li>Council coverage pages and guides</li>
         </ul>
-        <div class="pr-block">
-          <div><small>Price</small><b>£0</b></div>
-          <div><small>Billing</small><b><span>Never</span></b></div>
-        </div>
-        <a class="pr-btn pr-btn--free" href="/postcode-search">Start searching</a>
+        <a class="pf-btn pf-btn--green" href="/postcode-search">Start searching</a>
       </article>
 
-      <article class="pr-sheet">
-        <div class="pr-sheet-head">
-          <span class="pr-status pr-status--pending">Pending · join the waitlist</span>
-          <h3>Plus</h3>
-          <p class="pr-for">For landlords, buyers and homeowners who watch more than one place.</p>
-        </div>
-        <ul class="pr-feats">
-          <li class="pr-soon">Everything in Free</li>
-          <li class="pr-soon">Several saved areas, all in one weekly email</li>
-          <li class="pr-soon">Instant alerts the day an application appears</li>
-          <li class="pr-soon">Downloadable area reports</li>
+      <article class="pf-plan">
+        <h3>Plus</h3>
+        <span class="pf-state pf-state--pending">Pending · join the waitlist</span>
+        <p class="pf-for">For landlords, buyers and homeowners who watch more than one place.</p>
+        <div class="pf-price"><b data-m="£2.99" data-y="£24">£2.99</b><span data-m="a month" data-y="a year">a month</span></div>
+        <p class="pf-price-note" data-m="Planned price" data-y="Planned price, about £2 a month">Planned price</p>
+        <p class="pf-feat-h">Features:</p>
+        <ul class="pf-list">
+          <li>Everything in Free</li>
+          <li>Several saved areas, all in one weekly email</li>
+          <li>Instant alerts the day an application appears</li>
+          <li>Downloadable area reports</li>
         </ul>
-        <div class="pr-block">
-          <div><small>Planned price</small><b>£2.99<span> a month</span></b></div>
-          <div><small>Or yearly</small><b>£24</b></div>
-        </div>
-        <a class="pr-btn" href="#join" data-tier="plus">Join the Plus waitlist</a>
+        <a class="pf-btn pf-btn--outline" href="#join" data-tier="plus">Join the Plus waitlist</a>
       </article>
 
-      <article class="pr-sheet pr-sheet--feature">
-        <div class="pr-sheet-head">
-          <span class="pr-status pr-status--pending">Pending · join the waitlist</span>
-          <h3>Professional</h3>
-          <p class="pr-for">For builders, architects, planners and developers who find work through planning data.</p>
-        </div>
-        <ul class="pr-feats">
-          <li class="pr-soon">Everything in Plus</li>
-          <li class="pr-soon">Bulk search of up to 100 postcodes with CSV export</li>
-          <li class="pr-soon">Filters for large sites, farm diversification and commercial conversion</li>
-          <li class="pr-soon">Biodiversity net gain site tracking</li>
-          <li class="pr-soon">Alerts by work type, such as extensions or new dwellings</li>
+      <article class="pf-plan pf-plan--hot">
+        <span class="pf-badge">Built for trades</span>
+        <h3>Professional</h3>
+        <span class="pf-state pf-state--pending">Pending · join the waitlist</span>
+        <p class="pf-for">For builders, architects, planners and developers who find work through planning data.</p>
+        <div class="pf-price"><b data-m="£29" data-y="£290">£29</b><span data-m="a month" data-y="a year">a month</span></div>
+        <p class="pf-price-note" data-m="Planned price · cancel any time" data-y="Planned price · two months free">Planned price · cancel any time</p>
+        <p class="pf-feat-h">Features:</p>
+        <ul class="pf-list">
+          <li>Everything in Plus</li>
+          <li>Bulk search of up to 100 postcodes with CSV export</li>
+          <li>Filters for large sites, farm diversification and commercial conversion</li>
+          <li>Biodiversity net gain site tracking</li>
+          <li>Alerts by work type, such as extensions or new dwellings</li>
         </ul>
-        <div class="pr-block">
-          <div><small>Planned price</small><b>£29<span> a month</span></b></div>
-          <div><small>Billing</small><b><span>Cancel any time</span></b></div>
-        </div>
-        <a class="pr-btn" href="#join" data-tier="professional">Join the Professional waitlist</a>
+        <a class="pf-btn pf-btn--blue" href="#join" data-tier="professional">Join the Professional waitlist</a>
       </article>
     </div>
-    <p class="pr-fine">Prices are planned and may change before launch. Joining the waitlist costs nothing and does not commit you to buy.</p>
+    <p class="pf-fine">Prices are planned and may change before launch.</p>
   </div>
 </section>
 
-<section class="pr-section">
-  <div class="pr-wrap">
-    <h2>What the Professional plan is for</h2>
-    <p class="pr-lead">These are the jobs builders and consultants use planning data for, and what we plan to build the Professional plan around.</p>
-    <div class="pr-pro">
-      <div>
-        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 28V12l12-8 12 8v16M12 28V18h8v10"/></svg>
+<section class="pf-section">
+  <div class="pf-wrap">
+    <div class="pf-title">
+      <h2>What the Professional plan is for</h2>
+      <p>These are the jobs builders and consultants use planning data for, and what we plan to build the Professional plan around.</p>
+    </div>
+    <div class="pf-uses">
+      <div class="pf-use">
+        <div class="pf-ico"><svg viewBox="0 0 24 24"><path d="M3 21V10l9-6 9 6v11M9 21v-7h6v7"/></svg></div>
         <h3>Find work early</h3>
         <p>See new extensions, conversions and housing schemes in the weeks after they are submitted, before the contractors are chosen.</p>
       </div>
-      <div>
-        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 22l8-8 5 5 11-12M22 7h6v6"/></svg>
+      <div class="pf-use">
+        <div class="pf-ico"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-9M15 6h6v6"/></svg></div>
         <h3>Spot larger sites</h3>
         <p>Filter for schemes by size and type, from farm diversification to commercial buildings changing use.</p>
       </div>
-      <div>
-        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 4c6 4 9 9 9 14a9 9 0 0 1-18 0c0-5 3-10 9-14zM16 28V16"/></svg>
+      <div class="pf-use">
+        <div class="pf-ico"><svg viewBox="0 0 24 24"><path d="M12 3c4.5 3 7 6.5 7 10.5a7 7 0 0 1-14 0C5 9.500 7.500 6 12 3zM12 21v-9"/></svg></div>
         <h3>Track biodiversity gain</h3>
         <p>Follow sites that offer or need biodiversity net gain units, with the councils that cover them.</p>
       </div>
-      <div>
-        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 4h14l6 6v18H6zM20 4v6h6M11 17h10M11 22h10"/></svg>
+      <div class="pf-use">
+        <div class="pf-ico"><svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg></div>
         <h3>Take the data with you</h3>
         <p>Search up to 100 postcodes at once and download the results as a spreadsheet for your own pipeline.</p>
       </div>
@@ -286,26 +315,26 @@
   </div>
 </section>
 
-<section class="pr-section" id="join">
-  <div class="pr-wrap">
-    <div class="pr-join">
-      <div>
+<section class="pf-section" id="join">
+  <div class="pf-wrap">
+    <div class="pf-band">
+      <div class="pf-title">
         <h2>Tell us what would make it worth paying for</h2>
         <p>We will email you once, when the plan you pick opens. Your answers decide what we build first.</p>
       </div>
-      <form class="pr-form" action="/api/pricing-waitlist" method="post" onsubmit="return false">
-        <label>Email address
-          <input class="pr-field" type="email" name="email" autocomplete="email" required placeholder="you@example.com">
+      <form class="pf-form" action="/api/pricing-waitlist" method="post" onsubmit="return false">
+        <label class="pf-full">Email address
+          <input type="email" name="email" autocomplete="email" required placeholder="you@example.com">
         </label>
         <label>Which plan are you interested in?
-          <select class="pr-select" name="tier" id="pr-tier">
+          <select name="tier" id="pf-tier">
             <option value="professional">Professional</option>
             <option value="plus">Plus</option>
             <option value="both">Both</option>
           </select>
         </label>
         <label>What best describes you?
-          <select class="pr-select" name="role">
+          <select name="role">
             <option value="homeowner">Homeowner or resident</option>
             <option value="landlord">Landlord or property buyer</option>
             <option value="builder">Builder or tradesperson</option>
@@ -314,48 +343,69 @@
             <option value="other">Something else</option>
           </select>
         </label>
-        <label>What would you use it for? (optional)
-          <input class="pr-field" type="text" name="note" maxlength="300" placeholder="For example: finding extension work in Kent">
+        <label class="pf-full">What would you use it for? (optional)
+          <input type="text" name="note" maxlength="300" placeholder="For example: finding extension work in Kent">
         </label>
-        <div class="pr-trap" aria-hidden="true"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
-        <button class="pr-btn" type="button" data-post>Join the waitlist</button>
+        <div class="pf-trap" aria-hidden="true"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+        <button class="pf-btn pf-btn--light" type="button" data-post>Join the waitlist</button>
         <small>We use your email only to tell you when your plan opens. You can ask us to delete it at any time.</small>
       </form>
     </div>
   </div>
 </section>
 
-<section class="pr-section">
-  <div class="pr-wrap">
-    <h2>Questions</h2>
-    <div class="pr-faq" style="margin-top:1.4rem">
-      <div>
-        <h3>Will search stay free?</h3>
-        <p>Yes. Searching by postcode and getting email alerts near your home are free, and we have no plan to change that.</p>
+<section class="pf-section">
+  <div class="pf-wrap">
+    <div class="pf-faq">
+      <div class="pf-faq-intro">
+        <h2>Frequently asked questions</h2>
+        <p>Short answers about what stays free, what is coming and what we do with your email.</p>
+        <a class="pf-btn pf-btn--blue" href="/about#contact">Ask us a question</a>
       </div>
       <div>
-        <h3>When will the paid plans open?</h3>
-        <p>We have not set a date. We will build them once enough people on the waitlist ask for the same things.</p>
-      </div>
-      <div>
-        <h3>Will I be charged for joining?</h3>
-        <p>No. The waitlist is only an email address. You will not be asked for card details until a plan opens, and you can say no then.</p>
-      </div>
-      <div>
-        <h3>Where does the data come from?</h3>
-        <p>Directly from council planning registers across England, Scotland, Wales and Northern Ireland, refreshed every night. See <a href="/councils">which councils we cover</a>.</p>
+        <details class="pf-q" open>
+          <summary>Will search stay free?</summary>
+          <p>Yes. Searching by postcode and getting email alerts near your home are free, and we have no plan to change that.</p>
+        </details>
+        <details class="pf-q">
+          <summary>When will the paid plans open?</summary>
+          <p>We have not set a date. We will build them once enough people on the waitlist ask for the same things.</p>
+        </details>
+        <details class="pf-q">
+          <summary>Will I be charged for joining?</summary>
+          <p>No. The waitlist is only an email address. You will not be asked for card details until a plan opens, and you can say no then.</p>
+        </details>
+        <details class="pf-q">
+          <summary>Where does the data come from?</summary>
+          <p>Directly from council planning registers across England, Scotland, Wales and Northern Ireland, refreshed every night. See <a href="/councils">which councils we cover</a>.</p>
+        </details>
       </div>
     </div>
   </div>
 </section>
 
+</div>
+
 <script>
-  // Choosing a plan card pre-selects it in the form.
-  document.querySelectorAll('[data-tier]').forEach(function (a) {
-    a.addEventListener('click', function () {
-      var s = document.getElementById('pr-tier');
-      if (s) s.value = a.getAttribute('data-tier');
+  (function () {
+    // Plan buttons pre-select that plan in the waitlist form.
+    document.querySelectorAll('[data-tier]').forEach(function (a) {
+      a.addEventListener('click', function () {
+        var s = document.getElementById('pf-tier');
+        if (s) s.value = a.getAttribute('data-tier');
+      });
     });
-  });
+    // Monthly / yearly toggle swaps the planned prices.
+    var mBtn = document.getElementById('pf-monthly'), yBtn = document.getElementById('pf-yearly');
+    function setBilling(key) {
+      mBtn.setAttribute('aria-pressed', key === 'm');
+      yBtn.setAttribute('aria-pressed', key === 'y');
+      document.querySelectorAll('[data-m]').forEach(function (el) {
+        el.textContent = el.getAttribute('data-' + key);
+      });
+    }
+    mBtn.addEventListener('click', function () { setBilling('m'); });
+    yBtn.addEventListener('click', function () { setBilling('y'); });
+  })();
 </script>
 {% endblock %}
