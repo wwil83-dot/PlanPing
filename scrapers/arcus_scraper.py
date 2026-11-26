@@ -2039,9 +2039,13 @@ class ArcusPortal:
             import base64, json as _json
             from datetime import date as _d, timedelta as _td
             today = _d.today()
-            monday = today - _td(days=today.weekday())
-            for back in range(0, 4):
-                wk = monday - _td(weeks=back)
+            # 2026-11-26: the portals' "week commencing" is a rolling 7-day
+            # window, NOT a Monday (Eastleigh pre-fills today minus 7, e.g.
+            # 19/11 on 26/11; Anglesey's saved search did the same). So try
+            # the pre-filled default first (just press Search), then
+            # today-7, -14, -21, -28.
+            for back in range(0, 5):
+                wk = today - _td(weeks=back)
                 try:
                     if "weekly-list-results" in page.url and "search=" in page.url:
                         # Anglesey: the search is a base64 JSON blob in the URL.
@@ -2050,7 +2054,7 @@ class ArcusPortal:
                         q = parse_qs(u.query)
                         raw = q["search"][0]
                         data = _json.loads(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)))
-                        data["start_date"] = wk.strftime("%Y-%m-%dT00:00:00.000Z")
+                        data["start_date"] = (wk - _td(days=7)).strftime("%Y-%m-%dT00:00:00.000Z")
                         q["search"] = [base64.b64encode(_json.dumps(data, separators=(",", ":")).encode()).decode().rstrip("=")]
                         newq = urlencode({k: v[0] for k, v in q.items()})
                         await page.goto(urlunparse(u._replace(query=newq)), wait_until="domcontentloaded", timeout=45_000)
@@ -2060,8 +2064,9 @@ class ArcusPortal:
                         wc = page.get_by_label("Week Commencing", exact=False)
                         if await wc.count() == 0:
                             break
-                        await wc.first.fill(wk.strftime("%d/%m/%Y"), timeout=5_000)
-                        await asyncio.sleep(1)
+                        if back > 0:
+                            await wc.first.fill(wk.strftime("%d/%m/%Y"), timeout=5_000)
+                            await asyncio.sleep(1)
                         btn = wc.first.locator(
                             "xpath=ancestor::*[.//button[normalize-space()='Search']][1]"
                         ).get_by_role("button", name="Search", exact=False)
