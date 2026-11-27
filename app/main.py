@@ -1416,6 +1416,7 @@ async def robots():
         "Disallow: /bulk-search\n"
         "Disallow: /street-history?\n"
         "Disallow: /find-a-professional?*page=\n"
+        "Disallow: /admin/\n"
         "Disallow: /api/\n"
         "Disallow: /confirm/\n"
         "Disallow: /unsubscribe/\n"
@@ -1952,6 +1953,103 @@ async def pricing(request: Request):
     except Exception:
         pass  # the page renders fine without the counts
     return render("pricing.html", {"request": request, "council_count": council_count, "app_count": app_count})
+
+
+# ---------------------------------------------------------------------
+# 2026-11-27: private "interest" dashboard at /admin/interest.
+# Needs ADMIN_PASSWORD set on Render (any username). With it unset the pages return 404.
+# Optional ADMIN_IGNORE_EMAILS (comma-separated) hides your own test addresses.
+# ---------------------------------------------------------------------
+import base64 as _b64
+import secrets as _secrets
+
+
+def _admin_check(request: Request):
+    """None = admin disabled, True = allowed, False = wrong or missing password."""
+    pw = os.environ.get("ADMIN_PASSWORD", "")
+    if not pw:
+        return None
+    h = request.headers.get("authorization", "")
+    if h.lower().startswith("basic "):
+        try:
+            given = _b64.b64decode(h[6:]).decode("utf-8", "ignore").partition(":")[2]
+        except Exception:
+            return False
+        return _secrets.compare_digest(given.encode(), pw.encode())
+    return False
+
+
+async def _admin_gate(request: Request):
+    ok = _admin_check(request)
+    if ok is None:
+        raise HTTPException(status_code=404)
+    if not ok:
+        await asyncio.sleep(1)  # slows password guessing
+        raise HTTPException(status_code=401, headers={"WWW-Authenticate": 'Basic realm="PlanFind admin"'})
+
+
+def _admin_ignored() -> list:
+    return [e.strip().lower() for e in os.environ.get("ADMIN_IGNORE_EMAILS", "").split(",") if e.strip()]
+
+
+async def _safe_rows(db, sql: str, *args) -> list:
+    try:
+        return await db.fetch(sql, *args)
+    except Exception:
+        return []  # table or column missing: show an empty section instead of an error
+
+
+@app.get("/admin/interest", response_class=HTMLResponse)
+async def admin_interest(request: Request):
+    await _admin_gate(request)
+    ig = _admin_ignored()
+    async with get_db() as db:
+        pricing = await _safe_rows(db, "SELECT created_at, email, tier, role, note FROM pricing_waitlist WHERE NOT (lower(email) = ANY($1::text[])) ORDER BY created_at DESC LIMIT 200", ig)
+        p_tier = await _safe_rows(db, "SELECT tier, count(*) AS n FROM pricing_waitlist WHERE NOT (lower(email) = ANY($1::text[])) GROUP BY tier ORDER BY n DESC", ig)
+        p_role = await _safe_rows(db, "SELECT role, count(*) AS n FROM pricing_waitlist WHERE NOT (lower(email) = ANY($1::text[])) GROUP BY role ORDER BY n DESC", ig)
+        trades = await _safe_rows(db, "SELECT created_at, email, trade, postcode, radius_miles FROM lead_waitlist WHERE NOT (lower(email) = ANY($1::text[])) ORDER BY created_at DESC LIMIT 200", ig)
+        t_trade = await _safe_rows(db, "SELECT trade, count(*) AS n FROM lead_waitlist WHERE NOT (lower(email) = ANY($1::text[])) GROUP BY trade ORDER BY n DESC", ig)
+        p_tot = await _safe_rows(db, "SELECT count(*) AS n, count(*) FILTER (WHERE created_at > now() - interval '7 days') AS n7 FROM pricing_waitlist WHERE NOT (lower(email) = ANY($1::text[]))", ig)
+        t_tot = await _safe_rows(db, "SELECT count(*) AS n, count(*) FILTER (WHERE created_at > now() - interval '7 days') AS n7 FROM lead_waitlist WHERE NOT (lower(email) = ANY($1::text[]))", ig)
+        a_tot = await _safe_rows(db, "SELECT count(*) AS n FROM alert_subscriptions WHERE confirmed = TRUE AND NOT (lower(email) = ANY($1::text[]))", ig)
+        a_day = await _safe_rows(db, "SELECT date_trunc('day', created_at)::date AS day, count(*) AS n FROM alert_subscriptions WHERE NOT (lower(email) = ANY($1::text[])) GROUP BY 1 ORDER BY 1 DESC LIMIT 14", ig)
+    a7 = sum(r["n"] for r in a_day[:7]) if a_day else None
+    ctx = {
+        "request": request, "ignored": ig,
+        "pricing": pricing, "pricing_by_tier": p_tier, "pricing_by_role": p_role,
+        "pricing_total": p_tot[0]["n"] if p_tot else 0, "pricing_7d": p_tot[0]["n7"] if p_tot else 0,
+        "trades": trades, "trades_by_trade": t_trade,
+        "trades_total": t_tot[0]["n"] if t_tot else 0, "trades_7d": t_tot[0]["n7"] if t_tot else 0,
+        "alerts_total": a_tot[0]["n"] if a_tot else 0, "alerts_by_day": a_day, "alerts_7d": a7,
+    }
+    resp = render("admin_interest.html", ctx)
+    resp.headers["Cache-Control"] = "no-store"
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return resp
+
+
+@app.get("/admin/interest.csv")
+async def admin_interest_csv(request: Request, table: str = "pricing"):
+    await _admin_gate(request)
+    ig = _admin_ignored()
+    queries = {
+        "pricing": ("SELECT created_at, email, tier, role, note FROM pricing_waitlist WHERE NOT (lower(email) = ANY($1::text[])) ORDER BY created_at DESC", ["created_at", "email", "tier", "role", "note"]),
+        "trades": ("SELECT created_at, email, trade, postcode, radius_miles FROM lead_waitlist WHERE NOT (lower(email) = ANY($1::text[])) ORDER BY created_at DESC", ["created_at", "email", "trade", "postcode", "radius_miles"]),
+    }
+    if table not in queries:
+        raise HTTPException(status_code=404)
+    sql, cols = queries[table]
+    async with get_db() as db:
+        rows = await _safe_rows(db, sql, ig)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(cols)
+    for r in rows:
+        w.writerow([r[c] for c in cols])
+    return Response(content=buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=planfind_{table}.csv",
+                             "Cache-Control": "no-store", "X-Robots-Tag": "noindex"})
+
 
 
 _PRICING_TABLE_READY = False
