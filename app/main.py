@@ -1604,6 +1604,22 @@ GUIDE_CATEGORY_META = {
         "title": "Large Sites",
         "description": "Major applications, large developments, and how they differ.",
     },
+    "home_improvements": {
+        "title": "Homes and Extensions",
+        "description": "Extensions, lofts, heritage rules and trees: what you can do and what needs consent.",
+    },
+    "commenting_objecting": {
+        "title": "Commenting and Objecting",
+        "description": "How to have your say on an application, what counts, and what happens when rules are broken.",
+    },
+    "decisions_appeals": {
+        "title": "Decisions and Appeals",
+        "description": "Conditions, refusals, appeals and certificates of lawfulness.",
+    },
+    "planning_terms": {
+        "title": "Planning Terms Explained",
+        "description": "Application types, use classes, developer contributions and biodiversity net gain in plain English.",
+    },
 }
 
 GUIDE_CATEGORY_TAG = {
