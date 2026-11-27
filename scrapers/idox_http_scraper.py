@@ -91,7 +91,9 @@ COUNCILS = [
     ("South Gloucestershire Council", "https://developments.southglos.gov.uk/online-applications", 262),
     ("Southampton City Council", "https://planningpublicaccess.southampton.gov.uk/online-applications", 65),
     ("St. Helens Metropolitan Borough Council", "https://publicaccess.sthelens.gov.uk/online-applications", 181),
-    ("Stafford Borough Council", "https://www12.staffordbc.gov.uk/online-applications", 476),
+    # Stafford (476) removed 2026-11-27: its server returns HTTP 403 to every proxy address.
+    # The browser-based Idox batches already cover it (latest application 24 Nov).
+    # ("Stafford Borough Council", "https://www12.staffordbc.gov.uk/online-applications", 476),
     ("Sunderland City Council", "https://online-applications.sunderland.gov.uk/online-applications", 68),
     ("Swansea Council", "https://property.swansea.gov.uk/online-applications", 373),
     ("Tendring District Council", "https://idox.tendringdc.gov.uk/online-applications", 265),
