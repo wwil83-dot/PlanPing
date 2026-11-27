@@ -44,7 +44,7 @@
     <div class="gd-meta">
       {% if guide.reading_minutes %}<span>{{ guide.reading_minutes }} min read</span>{% endif %}
       <span>Updated {{ (guide.updated_at or guide.published_at).strftime('%B %Y') }}</span>
-      <span>Applies to England</span>
+      <span>{% if guide.category == 'uk_nations' %}Wales, Scotland and Northern Ireland{% else %}Applies to England{% endif %}</span>
     </div>
   </div>
 </header>
@@ -62,7 +62,7 @@
       <div><b>See real applications near you</b><span>Search any UK postcode to see what is being built, extended or converted.</span></div>
       <a href="/postcode-search">Search by postcode</a>
     </div>
-    <p class="gd-disc">General information for England, not legal or professional advice. Rules change and local policies vary, so confirm the details with your council or a qualified planning consultant before acting.</p>
+    <p class="gd-disc">General information{% if guide.category != 'uk_nations' %} for England{% endif %}, not legal or professional advice. Rules change and local policies vary, so confirm the details with your council or a qualified planning consultant before acting.</p>
 
     {% if related %}
     <div class="gd-rel">
