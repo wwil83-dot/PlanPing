@@ -22,8 +22,11 @@
   .gx-sec-d { color: var(--muted); font-size: .9rem; margin: 0 0 1.1rem; max-width: 60ch; }
   .gx-count { margin-left: auto; font-size: .78rem; font-weight: 600; color: var(--muted); background: #fff; border: 1px solid var(--border); padding: .2rem .65rem; border-radius: 999px; }
   .gx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: .9rem; }
-  .gx-card { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--border); border-top: 3px solid var(--accent, var(--blue)); border-radius: 12px; padding: 1.1rem 1.2rem; text-decoration: none; color: var(--text); box-shadow: 0 1px 4px rgba(10,31,61,.04); transition: transform .15s, box-shadow .15s; }
-  .gx-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(10,31,61,.1); }
+  .gx-card { position: relative; overflow: hidden; display: flex; flex-direction: column; min-height: 190px; background: linear-gradient(160deg, #fff 0%, #f4f9ff 100%); border: 1px solid #dce7f5; border-top: 3px solid var(--accent, var(--blue)); border-radius: 18px; padding: 1.3rem 1.3rem 1.1rem; text-decoration: none; color: var(--text); box-shadow: 0 12px 30px rgba(16,42,84,.07); transition: transform .2s, box-shadow .2s, border-color .2s; }
+  .gx-card::after { content: ''; position: absolute; right: -18px; bottom: -18px; width: 140px; height: 140px; border-radius: 50%; background: radial-gradient(circle, var(--accent, #1766b2) 0%, transparent 70%); opacity: .13; pointer-events: none; }
+  .gx-wm { position: absolute; right: -24px; bottom: -26px; width: 124px; height: 124px; color: var(--accent, #1766b2); opacity: .1; pointer-events: none; }
+  .gx-card > :not(.gx-wm) { position: relative; z-index: 1; }
+  .gx-card:hover { transform: translateY(-4px); box-shadow: 0 18px 38px rgba(16,42,84,.13); border-color: #cfe0f5; }
   .gx-card h3 { font-size: 1rem; font-weight: 650; color: var(--blue-dark); margin: 0 0 .4rem; line-height: 1.35; }
   .gx-card p { font-size: .84rem; color: var(--muted); line-height: 1.55; margin: 0; flex: 1; }
   .gx-meta { margin-top: .8rem; font-size: .75rem; color: var(--muted); display: flex; justify-content: space-between; }
@@ -95,6 +98,7 @@
       <div class="gx-grid">
         {% for g in guides_by_category[cat_key] %}
         <a href="/guides/{{ g.slug }}" class="gx-card" data-s="{{ (g.title ~ ' ' ~ g.summary)|lower }}">
+          <svg class="gx-wm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ icons[cat_key] | safe }}</svg>
           <h3>{{ g.title }}</h3>
           <p>{{ g.summary }}</p>
           <div class="gx-meta"><span>{% if g.reading_minutes %}{{ g.reading_minutes }} min read{% endif %}</span><span>Read guide</span></div>
