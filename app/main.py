@@ -1669,6 +1669,10 @@ GUIDE_CATEGORY_META = {
         "title": "Planning Terms Explained",
         "description": "Application types, use classes, developer contributions and biodiversity net gain in plain English.",
     },
+    "uk_nations": {
+        "title": "Planning Across the UK",
+        "description": "How planning works in Wales, Scotland and Northern Ireland, and where it differs from England.",
+    },
 }
 
 GUIDE_CATEGORY_TAG = {
