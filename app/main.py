@@ -44,10 +44,43 @@ app.include_router(leads_router)
 _BLOCKED_UA_SUBSTRINGS = (
     "ahrefsbot", "semrushbot", "bytespider", "petalbot", "mj12bot",
     "dotbot", "dataforseobot", "blexbot", "barkrowler", "serpstatbot",
+    # 2026-11-27: AI-training / bulk crawlers that were ~40% of requests
+    "meta-externalagent", "amazonbot", "ccbot",
 ) + tuple(
     s.strip().lower()
     for s in os.environ.get("EXTRA_BLOCKED_UAS", "").split(",") if s.strip()
 )
+
+# Exact IPs or prefixes ("192.236.") to refuse, set on Render as EXTRA_BLOCKED_IPS (comma-separated).
+_BLOCKED_IPS = tuple(
+    s.strip() for s in os.environ.get("EXTRA_BLOCKED_IPS", "").split(",") if s.strip()
+)
+
+# Simple per-IP rate limit (per worker, in memory). A person browsing never gets near this;
+# scrapers walking /application/<id> do. Search engines are exempt.
+import time as _time
+from collections import deque as _deque
+_RATE_LIMIT = int(os.environ.get("RATE_LIMIT_PER_MIN", "90"))
+_RATE_EXEMPT_UAS = ("googlebot", "bingbot", "duckduckbot", "applebot", "facebookexternalhit")
+_rate_hits: dict = {}
+_rate_last_clean = 0.0
+
+
+def _rate_limited(ip: str) -> bool:
+    global _rate_last_clean
+    now = _time.monotonic()
+    q = _rate_hits.get(ip)
+    if q is None:
+        q = _rate_hits[ip] = _deque()
+    q.append(now)
+    while q and now - q[0] > 60:
+        q.popleft()
+    if now - _rate_last_clean > 300:           # drop idle IPs now and then
+        _rate_last_clean = now
+        for k in [k for k, v in _rate_hits.items() if not v or now - v[-1] > 120]:
+            _rate_hits.pop(k, None)
+    return len(q) > _RATE_LIMIT
+
 
 _CACHEABLE_PREFIXES = ("/application/", "/council/", "/towns/", "/guides/")
 
@@ -61,6 +94,16 @@ async def _bandwidth_policy(request: Request, call_next):
             return Response(content="Forbidden", status_code=403,
                             media_type="text/plain",
                             headers={"Cache-Control": "no-store"})
+
+    ip = request.client.host if request.client else ""
+    if ip and not path.startswith("/static/") and path != "/robots.txt" and not path.startswith("/sitemap"):
+        if _BLOCKED_IPS and any(ip == b or (b.endswith(".") and ip.startswith(b)) for b in _BLOCKED_IPS):
+            return Response(content="Forbidden", status_code=403, media_type="text/plain",
+                            headers={"Cache-Control": "no-store"})
+        ua_l = (request.headers.get("user-agent") or "").lower()
+        if not any(x in ua_l for x in _RATE_EXEMPT_UAS) and _rate_limited(ip):
+            return Response(content="Too many requests", status_code=429, media_type="text/plain",
+                            headers={"Retry-After": "60", "Cache-Control": "no-store"})
 
     response = await call_next(request)
 
@@ -1363,7 +1406,8 @@ async def robots():
     # Search Console (2026-10-17) showed the filtered town pages
     # (?town=...) are starting to get impressions for local trade
     # searches, so those stay crawlable.
-    blocked = ["AhrefsBot", "SemrushBot", "Bytespider", "PetalBot", "MJ12bot", "DotBot"]
+    blocked = ["AhrefsBot", "SemrushBot", "Bytespider", "PetalBot", "MJ12bot", "DotBot",
+               "meta-externalagent", "Amazonbot", "CCBot"]
     parts = [f"User-agent: {b}\nDisallow: /\n" for b in blocked]
     parts.append(
         "User-agent: *\n"
