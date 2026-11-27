@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Interest dashboard | PlanFind{% endblock %}
+{% block head_extra %}
+<meta name="robots" content="noindex, nofollow">
+<style>
+  .ad { max-width: 1100px; margin: 0 auto; padding: 1.6rem 1rem 3rem; }
+  .ad h1 { font-size: 1.6rem; color: var(--blue-dark); margin: 0 0 .2rem; }
+  .ad .sub { color: var(--muted); font-size: .88rem; margin: 0 0 1.4rem; }
+  .ad-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .8rem; margin-bottom: 1.8rem; }
+  .ad-tile { background: #fff; border: 1px solid #dce7f5; border-radius: 14px; padding: .9rem 1.1rem; box-shadow: 0 6px 18px rgba(16,42,84,.05); }
+  .ad-tile b { display: block; font-size: 1.7rem; letter-spacing: -.02em; color: var(--blue-dark); line-height: 1.1; }
+  .ad-tile span { font-size: .78rem; color: var(--muted); }
+  .ad h2 { font-size: 1.1rem; color: var(--blue-dark); margin: 2rem 0 .6rem; display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; }
+  .ad h2 a { font-size: .78rem; font-weight: 600; color: var(--blue); }
+  .ad-split { display: flex; gap: .5rem; flex-wrap: wrap; margin: 0 0 .8rem; }
+  .ad-pill { font-size: .8rem; background: #eef4fb; border: 1px solid #dbe5f1; border-radius: 999px; padding: .25rem .75rem; color: var(--blue-dark); }
+  .ad-wrap { overflow-x: auto; background: #fff; border: 1px solid #dce7f5; border-radius: 14px; }
+  .ad table { border-collapse: collapse; width: 100%; font-size: .84rem; }
+  .ad th { text-align: left; padding: .6rem .8rem; background: #f4f8fd; color: var(--blue-dark); font-weight: 650; white-space: nowrap; }
+  .ad td { padding: .55rem .8rem; border-top: 1px solid #eaf0f8; vertical-align: top; }
+  .ad .empty { color: var(--muted); padding: 1rem; font-size: .88rem; }
+  .ad .note { font-size: .78rem; color: var(--muted); margin-top: 1.6rem; }
+</style>
+{% endblock %}
+{% block content %}
+<main class="ad">
+  <h1>Interest dashboard</h1>
+  <p class="sub">Private. Shows who has joined the waitlists and signed up for alerts{% if ignored %}, hiding {{ ignored|length }} test address{{ '' if ignored|length == 1 else 'es' }}{% endif %}.</p>
+
+  <div class="ad-tiles">
+    <div class="ad-tile"><b>{{ pricing_total }}</b><span>pricing waitlist signups</span></div>
+    <div class="ad-tile"><b>{{ pricing_7d }}</b><span>of those in the last 7 days</span></div>
+    <div class="ad-tile"><b>{{ trades_total }}</b><span>trade lead signups</span></div>
+    <div class="ad-tile"><b>{{ trades_7d }}</b><span>of those in the last 7 days</span></div>
+    <div class="ad-tile"><b>{{ alerts_total }}</b><span>confirmed alert subscriptions</span></div>
+    <div class="ad-tile"><b>{{ alerts_7d if alerts_7d is not none else 'n/a' }}</b><span>new alert signups in 7 days</span></div>
+  </div>
+
+  <h2>Pricing waitlist <a href="/admin/interest.csv?table=pricing">Download CSV</a></h2>
+  <div class="ad-split">
+    {% for r in pricing_by_tier %}<span class="ad-pill">{{ r.tier }}: {{ r.n }}</span>{% endfor %}
+    {% for r in pricing_by_role %}<span class="ad-pill">{{ r.role or 'no role' }}: {{ r.n }}</span>{% endfor %}
+  </div>
+  <div class="ad-wrap">
+  {% if pricing %}
+    <table><tr><th>When</th><th>Email</th><th>Plan</th><th>Role</th><th>Note</th></tr>
+    {% for r in pricing %}<tr><td>{{ r.created_at.strftime('%d %b %H:%M') }}</td><td>{{ r.email }}</td><td>{{ r.tier }}</td><td>{{ r.role or '' }}</td><td>{{ r.note or '' }}</td></tr>{% endfor %}
+    </table>
+  {% else %}<p class="empty">Nobody yet.</p>{% endif %}
+  </div>
+
+  <h2>Trade leads waitlist <a href="/admin/interest.csv?table=trades">Download CSV</a></h2>
+  <div class="ad-split">{% for r in trades_by_trade %}<span class="ad-pill">{{ r.trade }}: {{ r.n }}</span>{% endfor %}</div>
+  <div class="ad-wrap">
+  {% if trades %}
+    <table><tr><th>When</th><th>Email</th><th>Trade</th><th>Postcode</th><th>Radius</th></tr>
+    {% for r in trades %}<tr><td>{{ r.created_at.strftime('%d %b %H:%M') }}</td><td>{{ r.email }}</td><td>{{ r.trade }}</td><td>{{ r.postcode }}</td><td>{{ r.radius_miles or '' }}{{ ' mi' if r.radius_miles else '' }}</td></tr>{% endfor %}
+    </table>
+  {% else %}<p class="empty">Nobody yet.</p>{% endif %}
+  </div>
+
+  <h2>Alert signups, last 14 days</h2>
+  <div class="ad-wrap">
+  {% if alerts_by_day %}
+    <table><tr><th>Day</th><th>New signups</th></tr>
+    {% for r in alerts_by_day %}<tr><td>{{ r.day.strftime('%a %d %b') }}</td><td>{{ r.n }}</td></tr>{% endfor %}
+    </table>
+  {% else %}<p class="empty">No signup dates available.</p>{% endif %}
+  </div>
+
+  <p class="note">Showing the latest 200 rows in each list. The CSV has everything. To hide your own test emails, set ADMIN_IGNORE_EMAILS on Render (comma-separated).</p>
+</main>
+{% endblock %}
