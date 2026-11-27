@@ -69,7 +69,12 @@ async def _bandwidth_policy(request: Request, call_next):
         if path.startswith(_CACHEABLE_PREFIXES):
             response.headers["Cache-Control"] = "public, max-age=300, s-maxage=1800"
         elif path.startswith("/static/"):
-            response.headers["Cache-Control"] = "public, max-age=3600"
+            # pictures and fonts rarely change: let browsers/CDN keep them a week.
+            # CSS/JS stay at one hour so style edits show up quickly.
+            if path.lower().endswith((".webp", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".woff", ".woff2")):
+                response.headers["Cache-Control"] = "public, max-age=604800"
+            else:
+                response.headers["Cache-Control"] = "public, max-age=3600"
     return response
 
 
