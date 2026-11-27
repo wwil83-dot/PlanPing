@@ -1,14 +1,35 @@
 {% extends "base.html" %}
-{% block title %}{{ guide.title }} — PlanFind Guides{% endblock %}
+{% block title %}{{ guide.title }} | PlanFind Guides{% endblock %}
 {% block head_extra %}
 <meta name="description" content="{{ guide.summary }}">
+<link rel="canonical" href="https://planfind.co.uk/guides/{{ guide.slug }}">
+<script type="application/ld+json">
+{{ {"@context":"https://schema.org","@type":"Article","headline":guide.title,"description":guide.summary,"author":{"@type":"Organization","name":"PlanFind"},"publisher":{"@type":"Organization","name":"PlanFind"},"mainEntityOfPage":"https://planfind.co.uk/guides/" ~ guide.slug} | tojson }}
+</script>
 <style>
-  .guide-body h2 { font-size: 1.2rem; font-weight: 700; color: var(--blue-dark); margin: 1.75rem 0 .6rem; }
-  .guide-body h2:first-child { margin-top: 0; }
-  .guide-body p { font-size: .92rem; color: var(--text); line-height: 1.75; margin-bottom: 1rem; }
-  .guide-body ul { margin: 0 0 1rem 1.25rem; }
-  .guide-body li { font-size: .92rem; color: var(--text); line-height: 1.7; margin-bottom: .4rem; }
-  .guide-body strong { color: var(--blue-dark); }
+  .gd-layout { max-width: 1040px; margin: 0 auto; padding: 2rem 1rem 3rem; display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 2.5rem; align-items: start; }
+  .gd-toc { position: sticky; top: 90px; font-size: .85rem; }
+  .gd-toc h4 { font-size: .78rem; font-weight: 700; color: var(--muted); margin: 0 0 .6rem; }
+  .gd-toc ol { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--border); }
+  .gd-toc a { display: block; padding: .35rem .8rem; color: var(--muted); text-decoration: none; line-height: 1.4; margin-left: -2px; border-left: 2px solid transparent; }
+  .gd-toc a:hover, .gd-toc a.on { color: var(--blue-dark); border-left-color: var(--blue); }
+  .gd-body { min-width: 0; max-width: 700px; }
+  .gd-body h2 { font-size: 1.25rem; font-weight: 700; color: var(--blue-dark); margin: 2rem 0 .6rem; scroll-margin-top: 90px; }
+  .gd-body h2:first-child { margin-top: 0; }
+  .gd-body p { font-size: 1rem; color: var(--text); line-height: 1.8; margin: 0 0 1.05rem; }
+  .gd-body ul, .gd-body ol { margin: 0 0 1.1rem 1.3rem; padding: 0; }
+  .gd-body li { font-size: 1rem; color: var(--text); line-height: 1.75; margin-bottom: .4rem; }
+  .gd-body strong { color: var(--blue-dark); }
+  .gd-body a { color: var(--blue); }
+  .gd-meta { display: flex; gap: .5rem 1rem; flex-wrap: wrap; font-size: .82rem; color: rgba(255,255,255,.8); margin-top: .5rem; }
+  .gd-cta { margin-top: 2.2rem; background: linear-gradient(135deg, var(--blue-dark), var(--blue-mid)); color: #fff; border-radius: 14px; padding: 1.3rem 1.5rem; display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .gd-cta b { font-size: 1.02rem; display: block; margin-bottom: .2rem; }
+  .gd-cta span { font-size: .88rem; opacity: .85; }
+  .gd-cta a { background: #fff; color: var(--blue-dark); font-weight: 700; font-size: .9rem; padding: .6rem 1.1rem; border-radius: 10px; text-decoration: none; white-space: nowrap; }
+  .gd-disc { margin-top: 1.5rem; font-size: .8rem; color: var(--muted); line-height: 1.6; }
+  .gd-rel { margin-top: 2.2rem; padding-top: 1.6rem; border-top: 1px solid var(--border); }
+  .gd-rel h3 { font-size: 1rem; font-weight: 650; color: var(--blue-dark); margin: 0 0 .9rem; }
+  @media (max-width: 860px) { .gd-layout { grid-template-columns: 1fr; gap: 1rem; } .gd-toc { position: static; background: var(--blue-light); border-radius: 12px; padding: .9rem 1rem; } .gd-toc ol { border: 0; } .gd-toc a { padding: .25rem 0; margin: 0; border: 0; } }
 </style>
 {% endblock %}
 {% block content %}
@@ -17,37 +38,69 @@
     <div style="font-size:.8rem;margin-bottom:.75rem">
       <a href="/guides" style="color:rgba(255,255,255,.75)">Guides</a>
       <span style="color:rgba(255,255,255,.5)"> / </span>
-      <span style="color:rgba(255,255,255,.75)">{{ category_meta.title }}</span>
+      <a href="/guides#{{ guide.category }}" style="color:rgba(255,255,255,.75)">{{ category_meta.title }}</a>
     </div>
-    <h1 style="font-size:1.7rem;margin-bottom:.4rem">{{ guide.title }}</h1>
-    {% if guide.reading_minutes %}
-    <p class="hero-sub" style="margin-bottom:0;font-size:.85rem">{{ guide.reading_minutes }} min read</p>
-    {% endif %}
+    <h1 style="font-size:1.8rem;margin-bottom:.4rem;max-width:30ch">{{ guide.title }}</h1>
+    <div class="gd-meta">
+      {% if guide.reading_minutes %}<span>{{ guide.reading_minutes }} min read</span>{% endif %}
+      <span>Updated {{ (guide.updated_at or guide.published_at).strftime('%B %Y') }}</span>
+      <span>Applies to England</span>
+    </div>
   </div>
 </header>
 
-<main class="main" style="max-width:760px">
-  <div class="guide-body">
+<div class="gd-layout">
+  <aside class="gd-toc" id="gd-toc" aria-label="On this page" hidden>
+    <h4>On this page</h4>
+    <ol id="gd-toc-list"></ol>
+  </aside>
+
+  <main class="gd-body" id="gd-body">
     {{ body_html | safe }}
-  </div>
 
-  {% if related %}
-  <div style="margin-top:2.5rem;padding-top:1.75rem;border-top:1px solid var(--border)">
-    <h3 style="font-size:1rem;font-weight:600;color:var(--blue-dark);margin-bottom:.9rem">More in {{ category_meta.title }}</h3>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem">
-      {% for r in related %}
-      <a href="/guides/{{ r.slug }}" class="guide-card cat-{{ guide.category }}">
-        <div class="guide-card-title" style="font-size:.88rem">{{ r.title }}</div>
-        <div class="guide-card-summary" style="font-size:.78rem">{{ r.summary }}</div>
-      </a>
-      {% endfor %}
+    <div class="gd-cta">
+      <div><b>See real applications near you</b><span>Search any UK postcode to see what is being built, extended or converted.</span></div>
+      <a href="/postcode-search">Search by postcode</a>
     </div>
-  </div>
-  {% endif %}
+    <p class="gd-disc">General information for England, not legal or professional advice. Rules change and local policies vary, so confirm the details with your council or a qualified planning consultant before acting.</p>
 
-  <div class="coverage-note" style="margin-top:2.5rem">
-    Ready to see what's actually happening near you?
-    <a href="/postcode-search">Search by postcode</a> or <a href="/towns">browse by town</a>.
-  </div>
-</main>
+    {% if related %}
+    <div class="gd-rel">
+      <h3>More in {{ category_meta.title }}</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.7rem">
+        {% for r in related %}
+        <a href="/guides/{{ r.slug }}" class="guide-card cat-{{ guide.category }}">
+          <div class="guide-card-title" style="font-size:.88rem">{{ r.title }}</div>
+          <div class="guide-card-summary" style="font-size:.78rem">{{ r.summary }}</div>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </main>
+</div>
+
+<script>
+(function () {
+  var hs = document.querySelectorAll('#gd-body h2');
+  if (hs.length < 3) return;
+  var list = document.getElementById('gd-toc-list'), links = [];
+  hs.forEach(function (h, i) {
+    h.id = 's' + (i + 1);
+    var li = document.createElement('li'), a = document.createElement('a');
+    a.href = '#' + h.id; a.textContent = h.textContent;
+    li.appendChild(a); list.appendChild(li); links.push(a);
+  });
+  document.getElementById('gd-toc').hidden = false;
+  if (!('IntersectionObserver' in window)) return;
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e) {
+      if (e.isIntersecting) {
+        links.forEach(function (l) { l.classList.toggle('on', l.getAttribute('href') === '#' + e.target.id); });
+      }
+    });
+  }, { rootMargin: '-80px 0px -70% 0px' });
+  hs.forEach(function (h) { io.observe(h); });
+})();
+</script>
 {% endblock %}

@@ -1,64 +1,148 @@
 {% extends "base.html" %}
-{% block title %}Planning Guides — PlanFind{% endblock %}
+{% block title %}Planning Guides for England | PlanFind{% endblock %}
+{% block head_extra %}
+<meta name="description" content="Plain-English planning guides for England: extensions, conservation areas, objecting to an application, appeals, use classes, section 106 and more.">
+<style>
+  .gx-bar { position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.96); backdrop-filter: blur(6px); border-bottom: 1px solid var(--border); }
+  .gx-bar-in { max-width: 1100px; margin: 0 auto; padding: .8rem 1rem; display: flex; gap: .8rem 1.2rem; align-items: center; flex-wrap: wrap; }
+  .gx-search { flex: 0 1 280px; position: relative; }
+  .gx-search input { width: 100%; box-sizing: border-box; padding: .55rem .9rem .55rem 2.2rem; border: 1px solid var(--border); border-radius: 999px; font: inherit; font-size: .88rem; background: #f7f9fc; }
+  .gx-search input:focus { outline: 2px solid var(--blue); background: #fff; }
+  .gx-search svg { position: absolute; left: .8rem; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--muted); }
+  .gx-chips { display: flex; gap: .4rem; flex-wrap: wrap; }
+  .gx-chip { font-size: .8rem; font-weight: 600; color: var(--blue-dark); background: var(--blue-light); padding: .35rem .8rem; border-radius: 999px; text-decoration: none; }
+  .gx-chip:hover { background: var(--blue); color: #fff; }
+  .gx-wrap { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+  .gx-intro { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1rem; margin-bottom: 2.4rem; }
+  .gx-intro div { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.1rem; font-size: .85rem; color: var(--muted); line-height: 1.55; }
+  .gx-intro b { display: block; color: var(--blue-dark); font-size: .95rem; margin-bottom: .2rem; }
+  .gx-sec { margin-bottom: 2.6rem; scroll-margin-top: 80px; }
+  .gx-sec-h { display: flex; align-items: center; gap: .8rem; margin-bottom: .35rem; }
+  .gx-ico { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; flex: none; }
+  .gx-ico svg { width: 20px; height: 20px; }
+  .gx-sec h2 { font-size: 1.2rem; font-weight: 700; color: var(--blue-dark); margin: 0; }
+  .gx-sec-d { color: var(--muted); font-size: .88rem; margin: 0 0 1rem 3.2rem; }
+  .gx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: .9rem; }
+  .gx-card { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--border); border-top: 3px solid var(--accent, var(--blue)); border-radius: 12px; padding: 1.1rem 1.2rem; text-decoration: none; color: var(--text); box-shadow: 0 1px 4px rgba(10,31,61,.04); transition: transform .15s, box-shadow .15s; }
+  .gx-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(10,31,61,.1); }
+  .gx-card h3 { font-size: .98rem; font-weight: 650; color: var(--blue-dark); margin: 0 0 .4rem; line-height: 1.35; }
+  .gx-card p { font-size: .84rem; color: var(--muted); line-height: 1.55; margin: 0; flex: 1; }
+  .gx-meta { margin-top: .8rem; font-size: .75rem; color: var(--muted); display: flex; justify-content: space-between; }
+  .gx-meta span:last-child { color: var(--accent, var(--blue)); font-weight: 600; }
+  .gx-empty { display: none; text-align: center; color: var(--muted); padding: 2rem 0; }
+  .gx-note { background: var(--blue-light); border-radius: 12px; padding: 1rem 1.2rem; font-size: .85rem; color: var(--blue-dark); line-height: 1.6; }
+  .gx-note a { font-weight: 600; color: var(--blue); }
+  @media (max-width: 760px) { .gx-intro { grid-template-columns: 1fr; } .gx-sec-d { margin-left: 0; } .gx-search { flex-basis: 100%; } }
+</style>
+{% endblock %}
 {% block content %}
+{% set order = ['getting_started','home_improvements','commenting_objecting','decisions_appeals','planning_terms','farm_diversification','commercial_conversion','large_sites'] %}
+{% set accent = {'getting_started':'#1a5fa8','home_improvements':'#c2571a','commenting_objecting':'#7c3aed','decisions_appeals':'#0f766e','planning_terms':'#0e3d6e','farm_diversification':'#2e8b3a','commercial_conversion':'#b7791f','large_sites':'#334e68'} %}
+{% set icons = {
+ 'getting_started':'<path d="M9 2h6a2 2 0 0 1 2 2v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a2 2 0 0 1 2-2Z"/><path d="M9 12l2 2 4-4"/>',
+ 'home_improvements':'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
+ 'commenting_objecting':'<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>',
+ 'decisions_appeals':'<path d="M12 3v18M5 7h14"/><path d="M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"/>',
+ 'planning_terms':'<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5M9 8h6"/>',
+ 'farm_diversification':'<path d="M11 20A7 7 0 0 1 4 13c0-4 3-8 8-13 5 5 8 9 8 13a7 7 0 0 1-7 7z"/><path d="M11 20v-8"/>',
+ 'commercial_conversion':'<path d="M6 22V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v18"/><path d="M6 12h12M6 8h12M6 16h12"/><path d="M10 22v-4h4v4"/>',
+ 'large_sites':'<polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>'} %}
+
 <section class="page-hero page-hero--guides page-hero--short">
   <div class="page-hero-art" aria-hidden="true"></div>
   <div class="page-hero-inner">
     <h1>Planning <em>Guides</em></h1>
-    <p class="page-hero-sub">Clear, practical guides to how the UK planning system actually works — from a first-time application to farm diversification and large-site developments.</p>
+    <p class="page-hero-sub">Plain-English guides to how the planning system works in England, from your first extension to appeals, use classes and developer contributions.</p>
   </div>
 </section>
 
-<main class="main">
-  {% for cat_key, meta in category_meta.items() %}
-  {% if cat_key in guides_by_category %}
-  <div style="margin-bottom:2.5rem">
-    <div class="guide-category-icon cat-{{ cat_key }}">
-      {% if cat_key == 'getting_started' %}
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6a2 2 0 0 1 2 2v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a2 2 0 0 1 2-2Z"/><path d="M9 12l2 2 4-4"/></svg>
-      {% elif cat_key == 'farm_diversification' %}
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 4 13c0-4 3-8 8-13 5 5 8 9 8 13a7 7 0 0 1-7 7z"/><path d="M11 20v-8"/></svg>
-      {% elif cat_key == 'commercial_conversion' %}
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v18"/><path d="M6 12h12"/><path d="M6 8h12"/><path d="M6 16h12"/><path d="M10 22v-4h4v4"/></svg>
-      {% elif cat_key == 'large_sites' %}
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
-      {% endif %}
-    </div>
-    <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-dark);margin-bottom:.3rem">{{ meta.title }}</h2>
-    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">{{ meta.description }}</p>
+<div class="gx-bar">
+  <div class="gx-bar-in">
+    <label class="gx-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="gx-q" type="search" placeholder="Search guides" aria-label="Search guides" autocomplete="off">
+    </label>
+    <nav class="gx-chips" aria-label="Guide categories">
+      {% for k in order %}{% if k in guides_by_category %}<a class="gx-chip" href="#{{ k }}">{{ category_meta[k].title }}</a>{% endif %}{% endfor %}
+    </nav>
+  </div>
+</div>
 
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.75rem">
+<main class="gx-wrap">
+  <div class="gx-intro">
+    <div><b>Written for England</b>Wales, Scotland and Northern Ireland have their own rules, so check locally if you are outside England.</div>
+    <div><b>Checked against current rules</b>Where a rule is changing, the guide says so and tells you who to ask.</div>
+    <div><b>See it in real cases</b>Every guide links back to live applications near you through postcode search.</div>
+  </div>
+
+  {% for cat_key in order %}
+  {% if cat_key in guides_by_category %}
+  <section class="gx-sec" id="{{ cat_key }}" style="--accent: {{ accent[cat_key] }}">
+    <div class="gx-sec-h">
+      <span class="gx-ico" style="background: {{ accent[cat_key] }}1a; color: {{ accent[cat_key] }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{{ icons[cat_key] | safe }}</svg>
+      </span>
+      <h2>{{ category_meta[cat_key].title }}</h2>
+    </div>
+    <p class="gx-sec-d">{{ category_meta[cat_key].description }}</p>
+
+    <div class="gx-grid">
       {% for g in guides_by_category[cat_key] %}
-      <a href="/guides/{{ g.slug }}" class="guide-card cat-{{ cat_key }}">
-        <div class="guide-card-title">{{ g.title }}</div>
-        <div class="guide-card-summary">{{ g.summary }}</div>
-        {% if g.reading_minutes %}
-        <div class="guide-card-meta">{{ g.reading_minutes }} min read</div>
-        {% endif %}
+      <a href="/guides/{{ g.slug }}" class="gx-card" data-s="{{ (g.title ~ ' ' ~ g.summary)|lower }}">
+        <h3>{{ g.title }}</h3>
+        <p>{{ g.summary }}</p>
+        <div class="gx-meta"><span>{% if g.reading_minutes %}{{ g.reading_minutes }} min read{% endif %}</span><span>Read guide</span></div>
       </a>
       {% endfor %}
-
-      {% if cat_key in category_national_stat %}
-      {% set nat = category_national_stat[cat_key] %}
-      <a href="{{ category_search_url[cat_key] }}" class="guide-stat-panel cat-{{ cat_key }}"
-         style="grid-column: {{ guides_by_category[cat_key]|length + 1 }} / -1">
-        <div class="guide-stat-panel-cols">
-          <div class="guide-stat-panel-col">
-            <div class="guide-stat-panel-number">{{ nat.number }}</div>
-            <div class="guide-stat-panel-text">{{ nat.label }} <span class="guide-stat-panel-period">({{ nat.period }})</span></div>
-          </div>
-          <div class="guide-stat-panel-vdivider"></div>
-          <div class="guide-stat-panel-col">
-            <div class="guide-stat-panel-number">{{ "{:,}".format(category_counts[cat_key]) }}</div>
-            <div class="guide-stat-panel-text">tracked live on PlanFind right now →</div>
-          </div>
-        </div>
-        <div class="guide-stat-panel-source">Source: {{ nat.source }}</div>
-      </a>
-      {% endif %}
     </div>
-  </div>
+
+    {% if cat_key in category_national_stat %}
+    {% set nat = category_national_stat[cat_key] %}
+    <a href="{{ category_search_url[cat_key] }}" class="guide-stat-panel cat-{{ cat_key }}" style="margin-top:.9rem;display:block">
+      <div class="guide-stat-panel-cols">
+        <div class="guide-stat-panel-col">
+          <div class="guide-stat-panel-number">{{ nat.number }}</div>
+          <div class="guide-stat-panel-text">{{ nat.label }} <span class="guide-stat-panel-period">({{ nat.period }})</span></div>
+        </div>
+        <div class="guide-stat-panel-vdivider"></div>
+        <div class="guide-stat-panel-col">
+          <div class="guide-stat-panel-number">{{ "{:,}".format(category_counts[cat_key]) }}</div>
+          <div class="guide-stat-panel-text">tracked live on PlanFind right now →</div>
+        </div>
+      </div>
+      <div class="guide-stat-panel-source">Source: {{ nat.source }}</div>
+    </a>
+    {% endif %}
+  </section>
   {% endif %}
   {% endfor %}
+
+  <p class="gx-empty" id="gx-empty">No guides match that search. Try a shorter word such as "appeal" or "extension".</p>
+
+  <div class="gx-note">
+    These guides are general information, not legal or professional advice. For a specific project, ask your council or a qualified planning consultant.
+    Ready to see what is happening near you? <a href="/postcode-search">Search by postcode</a> or <a href="/towns">browse by town</a>.
+  </div>
 </main>
+
+<script>
+(function () {
+  var q = document.getElementById('gx-q');
+  if (!q) return;
+  q.addEventListener('input', function () {
+    var v = q.value.trim().toLowerCase(), any = false;
+    document.querySelectorAll('.gx-sec').forEach(function (sec) {
+      var shown = 0;
+      sec.querySelectorAll('.gx-card').forEach(function (c) {
+        var ok = !v || c.getAttribute('data-s').indexOf(v) !== -1;
+        c.style.display = ok ? '' : 'none';
+        if (ok) shown++;
+      });
+      sec.style.display = (shown || !v) ? '' : 'none';
+      if (shown) any = true;
+    });
+    document.getElementById('gx-empty').style.display = (v && !any) ? 'block' : 'none';
+  });
+})();
+</script>
 {% endblock %}
