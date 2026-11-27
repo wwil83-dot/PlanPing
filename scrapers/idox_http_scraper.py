@@ -128,7 +128,7 @@ SLOW = {267: 6.0, 242: 5.0, 257: 5.0, 364: 10.0, 475: 3.0, 37: 3.5, 223: 3.5, 32
 NO_DETAIL = {351, 79, 181}
 COOLDOWN = int(os.environ.get("DETAIL_COOLDOWN_SECONDS", "300"))      # first wait after a block; grows by 2 min each time a wait was not enough
 # Certificate chains these portals do not send in full (probe 2026-10-29: fine with verification off; public pages, no logins).
-INSECURE = {392, 176, 219, 58, 63, 181, 530, 275, 43, 311, 270, 70, 323}   # 275 Lewes, 43 Hertsmere added 2026-11-19: incomplete certificate chain (CertificateVerifyError on every proxy)
+INSECURE = {392, 176, 219, 58, 63, 181, 530, 275, 43, 311, 270, 70, 323, 242}   # 275 Lewes, 43 Hertsmere added 2026-11-19: incomplete certificate chain (CertificateVerifyError on every proxy)
 # Proxy that got through to each council in the probes (index into HTTP_PROXY_URLS). Several councils block some of our proxy
 # addresses (timeouts on 0, 1, 2), so each council starts on a proxy known to work and falls back to the others.
 # Rebuilt 2026-11-09 from idox_proxy_probe after Webshare replaced the proxy list (195.40.x.x again). The numbers are positions in
@@ -174,7 +174,7 @@ class Blocked(Exception):
     pass
 
 
-FLAKY_SERVERS = {190, 170, 65, 355, 371, 449, 234, 232, 175, 390, 389, 36, 323, 43}      # councils whose own server is known to be unreliable (Sandwell: HTTP 500s and timeouts; Bury: Fortinet 504 Gateway Timeout 2026-11-16; Southampton: search form timeouts on all proxies 2026-11-18); a timeout on every address is reported as info, not as a failure. 2026-11-25 added Bolsover 390 and North East Derbyshire 389 (same server: search form and detail-page timeouts). 2026-11-22 added Watford 449, Kingston 234, Sutton 232 (search form timeouts on every proxy) and Bradford 175 (HTTP 403 firewall block after the big backfill); for these a timeout or a block on a slice is info, never a red run
+FLAKY_SERVERS = {190, 170, 65, 355, 371, 449, 234, 232, 175, 390, 389, 36, 323, 43, 242}      # councils whose own server is known to be unreliable (Sandwell: HTTP 500s and timeouts; Bury: Fortinet 504 Gateway Timeout 2026-11-16; Southampton: search form timeouts on all proxies 2026-11-18); a timeout on every address is reported as info, not as a failure. 2026-11-25 added Bolsover 390 and North East Derbyshire 389 (same server: search form and detail-page timeouts). 2026-11-22 added Watford 449, Kingston 234, Sutton 232 (search form timeouts on every proxy) and Bradford 175 (HTTP 403 firewall block after the big backfill); for these a timeout or a block on a slice is info, never a red run
 
 
 class CouncilDown(Exception):
