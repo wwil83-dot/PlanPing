@@ -29,6 +29,17 @@
   .gx-card p { font-size: .84rem; color: var(--muted); line-height: 1.55; margin: 0; flex: 1; }
   .gx-meta { margin-top: .8rem; font-size: .75rem; color: var(--muted); display: flex; justify-content: space-between; }
   .gx-meta span:last-child { color: var(--accent, var(--blue)); font-weight: 600; }
+  .gx-split { display: flex; flex-wrap: wrap; gap: .9rem; align-items: stretch; }
+  .gx-split .gx-grid { display: flex; flex-wrap: wrap; gap: .9rem; flex: 0 1 auto; }
+  .gx-split .gx-card { flex: 0 1 310px; width: 310px; max-width: 100%; }
+  .gx-split .gx-stat { flex: 0 0 280px; max-width: 100%; }
+  .gx-stat { display: flex; flex-direction: column; justify-content: center; gap: .9rem; background: #fff; border: 1px solid var(--border); border-top: 3px solid var(--accent); border-radius: 12px; padding: 1.1rem 1.2rem; text-decoration: none; color: var(--text); background-image: linear-gradient(180deg, var(--accent-bg, #f3f7fb), #fff 70%); transition: box-shadow .15s; }
+  .gx-stat:hover { box-shadow: 0 10px 24px rgba(10,31,61,.1); }
+  .gx-stat-n { font-size: 1.9rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; color: var(--accent); }
+  .gx-stat-t { font-size: .78rem; color: var(--muted); line-height: 1.45; margin-top: .3rem; }
+  .gx-stat hr { border: 0; border-top: 1px solid var(--border); margin: 0; width: 100%; }
+  .gx-stat-src { font-size: .68rem; color: var(--muted); line-height: 1.4; }
+  .gx-stat-go { font-size: .78rem; font-weight: 700; color: var(--accent); }
   .gx-empty { display: none; text-align: center; color: var(--muted); padding: 2rem 0; }
   .gx-note { background: var(--blue-light); border-radius: 12px; padding: 1rem 1.2rem; font-size: .85rem; color: var(--blue-dark); line-height: 1.6; }
   .gx-note a { font-weight: 600; color: var(--blue); }
@@ -86,33 +97,33 @@
     </div>
     <p class="gx-sec-d">{{ category_meta[cat_key].description }}</p>
 
-    <div class="gx-grid">
-      {% for g in guides_by_category[cat_key] %}
-      <a href="/guides/{{ g.slug }}" class="gx-card" data-s="{{ (g.title ~ ' ' ~ g.summary)|lower }}">
-        <h3>{{ g.title }}</h3>
-        <p>{{ g.summary }}</p>
-        <div class="gx-meta"><span>{% if g.reading_minutes %}{{ g.reading_minutes }} min read{% endif %}</span><span>Read guide</span></div>
-      </a>
-      {% endfor %}
-    </div>
-
-    {% if cat_key in category_national_stat %}
-    {% set nat = category_national_stat[cat_key] %}
-    <a href="{{ category_search_url[cat_key] }}" class="guide-stat-panel cat-{{ cat_key }}" style="margin-top:.9rem;display:block">
-      <div class="guide-stat-panel-cols">
-        <div class="guide-stat-panel-col">
-          <div class="guide-stat-panel-number">{{ nat.number }}</div>
-          <div class="guide-stat-panel-text">{{ nat.label }} <span class="guide-stat-panel-period">({{ nat.period }})</span></div>
-        </div>
-        <div class="guide-stat-panel-vdivider"></div>
-        <div class="guide-stat-panel-col">
-          <div class="guide-stat-panel-number">{{ "{:,}".format(category_counts[cat_key]) }}</div>
-          <div class="guide-stat-panel-text">tracked live on PlanFind right now →</div>
-        </div>
+    {% set nat = category_national_stat.get(cat_key) %}
+    <div class="{{ 'gx-split' if nat else '' }}">
+      <div class="gx-grid">
+        {% for g in guides_by_category[cat_key] %}
+        <a href="/guides/{{ g.slug }}" class="gx-card" data-s="{{ (g.title ~ ' ' ~ g.summary)|lower }}">
+          <h3>{{ g.title }}</h3>
+          <p>{{ g.summary }}</p>
+          <div class="gx-meta"><span>{% if g.reading_minutes %}{{ g.reading_minutes }} min read{% endif %}</span><span>Read guide</span></div>
+        </a>
+        {% endfor %}
       </div>
-      <div class="guide-stat-panel-source">Source: {{ nat.source }}</div>
-    </a>
-    {% endif %}
+      {% if nat %}
+      <a href="{{ category_search_url[cat_key] }}" class="gx-stat">
+        <div>
+          <div class="gx-stat-n">{{ nat.number }}</div>
+          <div class="gx-stat-t">{{ nat.label }} ({{ nat.period }})</div>
+        </div>
+        <hr>
+        <div>
+          <div class="gx-stat-n">{{ "{:,}".format(category_counts[cat_key]) }}</div>
+          <div class="gx-stat-t">tracked live on PlanFind right now</div>
+        </div>
+        <div class="gx-stat-src">Source: {{ nat.source }}</div>
+        <div class="gx-stat-go">Browse them</div>
+      </a>
+      {% endif %}
+    </div>
   </section>
   {% endif %}
   {% endfor %}
