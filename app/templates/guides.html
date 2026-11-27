@@ -3,32 +3,33 @@
 {% block head_extra %}
 <meta name="description" content="Plain-English planning guides for England: extensions, conservation areas, objecting to an application, appeals, use classes, section 106 and more.">
 <style>
-  .gx-bar { position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.96); backdrop-filter: blur(6px); border-bottom: 1px solid var(--border); }
-  .gx-bar-in { max-width: 1100px; margin: 0 auto; padding: .8rem 1rem; display: flex; gap: .8rem 1.2rem; align-items: center; flex-wrap: wrap; }
-  .gx-search { flex: 0 1 280px; position: relative; }
-  .gx-search input { width: 100%; box-sizing: border-box; padding: .55rem .9rem .55rem 2.2rem; border: 1px solid var(--border); border-radius: 999px; font: inherit; font-size: .88rem; background: #f7f9fc; }
-  .gx-search input:focus { outline: 2px solid var(--blue); background: #fff; }
-  .gx-search svg { position: absolute; left: .8rem; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--muted); }
+  .gx-hero-card { margin: auto 0 52px; max-width: 880px; background: rgba(255,255,255,.94); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.7); border-radius: 20px; box-shadow: 0 22px 50px rgba(4,20,50,.34); padding: .9rem 1.1rem 1rem; display: grid; gap: .8rem; }
+  .gx-search { position: relative; display: block; }
+  .gx-search input { width: 100%; box-sizing: border-box; padding: .8rem 1.2rem .8rem 2.9rem; border: 1px solid #dbe5f1; border-radius: 999px; font: inherit; font-size: 1rem; font-weight: 600; color: var(--blue-dark); background: #fff; transition: box-shadow .2s, border-color .2s; }
+  .gx-search input::placeholder { color: #7d8da3; font-weight: 500; }
+  .gx-search input:focus { outline: 0; border-color: #16B86A; box-shadow: 0 0 0 4px rgba(22,184,106,.25); }
+  .gx-search svg { position: absolute; left: 1.05rem; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: #00A862; }
   .gx-chips { display: flex; gap: .4rem; flex-wrap: wrap; }
-  .gx-chip { font-size: .8rem; font-weight: 600; color: var(--blue-dark); background: var(--blue-light); padding: .35rem .8rem; border-radius: 999px; text-decoration: none; }
-  .gx-chip:hover { background: var(--blue); color: #fff; }
-  .gx-wrap { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem 3rem; }
-  .gx-intro { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1rem; margin-bottom: 2.4rem; }
-  .gx-intro div { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.1rem; font-size: .85rem; color: var(--muted); line-height: 1.55; }
-  .gx-intro b { display: block; color: var(--blue-dark); font-size: .95rem; margin-bottom: .2rem; }
-  .gx-sec { margin-bottom: 2.6rem; scroll-margin-top: 80px; }
+  .gx-chip { font-size: .8rem; font-weight: 600; color: var(--blue-dark); background: #eef4fb; border: 1px solid #dbe5f1; padding: .3rem .8rem; border-radius: 999px; text-decoration: none; transition: background .15s, color .15s; }
+  .gx-chip:hover { background: var(--blue-dark); border-color: var(--blue-dark); color: #fff; }
+  .gx-wrap { max-width: 1100px; margin: 0 auto; padding: 2.2rem 1rem 3rem; }
+  .gx-sec { margin-bottom: 3rem; scroll-margin-top: 20px; padding-top: 1.6rem; border-top: 1px solid var(--border); }
+  .gx-sec:first-of-type { border-top: 0; padding-top: 0; }
   .gx-sec-h { display: flex; align-items: center; gap: .8rem; margin-bottom: .35rem; }
   .gx-ico { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; flex: none; }
   .gx-ico svg { width: 20px; height: 20px; }
-  .gx-sec h2 { font-size: 1.2rem; font-weight: 700; color: var(--blue-dark); margin: 0; }
-  .gx-sec-d { color: var(--muted); font-size: .88rem; margin: 0 0 1rem 3.2rem; }
+  .gx-sec h2 { font-size: 1.35rem; letter-spacing: -.01em; font-weight: 700; color: var(--blue-dark); margin: 0; }
+  .gx-sec-d { color: var(--muted); font-size: .9rem; margin: 0 0 1.1rem; max-width: 60ch; }
+  .gx-count { margin-left: auto; font-size: .78rem; font-weight: 600; color: var(--muted); background: #fff; border: 1px solid var(--border); padding: .2rem .65rem; border-radius: 999px; }
   .gx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: .9rem; }
   .gx-card { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--border); border-top: 3px solid var(--accent, var(--blue)); border-radius: 12px; padding: 1.1rem 1.2rem; text-decoration: none; color: var(--text); box-shadow: 0 1px 4px rgba(10,31,61,.04); transition: transform .15s, box-shadow .15s; }
   .gx-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(10,31,61,.1); }
-  .gx-card h3 { font-size: .98rem; font-weight: 650; color: var(--blue-dark); margin: 0 0 .4rem; line-height: 1.35; }
+  .gx-card h3 { font-size: 1rem; font-weight: 650; color: var(--blue-dark); margin: 0 0 .4rem; line-height: 1.35; }
   .gx-card p { font-size: .84rem; color: var(--muted); line-height: 1.55; margin: 0; flex: 1; }
   .gx-meta { margin-top: .8rem; font-size: .75rem; color: var(--muted); display: flex; justify-content: space-between; }
   .gx-meta span:last-child { color: var(--accent, var(--blue)); font-weight: 600; }
+  .gx-meta span:last-child::after { content: ' \2192'; transition: margin .15s; }
+  .gx-card:hover .gx-meta span:last-child::after { margin-left: 3px; }
   .gx-split { display: flex; flex-wrap: wrap; gap: .9rem; align-items: stretch; }
   .gx-split .gx-grid { display: flex; flex-wrap: wrap; gap: .9rem; flex: 0 1 auto; }
   .gx-split .gx-card { flex: 0 1 310px; width: 310px; max-width: 100%; }
@@ -43,7 +44,7 @@
   .gx-empty { display: none; text-align: center; color: var(--muted); padding: 2rem 0; }
   .gx-note { background: var(--blue-light); border-radius: 12px; padding: 1rem 1.2rem; font-size: .85rem; color: var(--blue-dark); line-height: 1.6; }
   .gx-note a { font-weight: 600; color: var(--blue); }
-  @media (max-width: 760px) { .gx-intro { grid-template-columns: 1fr; } .gx-sec-d { margin-left: 0; } .gx-search { flex-basis: 100%; } }
+  @media (max-width: 700px) { .gx-hero-card { margin: 1.4rem 0 80px; } }
 </style>
 {% endblock %}
 {% block content %}
@@ -59,33 +60,24 @@
  'commercial_conversion':'<path d="M6 22V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v18"/><path d="M6 12h12M6 8h12M6 16h12"/><path d="M10 22v-4h4v4"/>',
  'large_sites':'<polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>'} %}
 
-<section class="page-hero page-hero--guides page-hero--short">
+<section class="page-hero page-hero--guides page-hero--short page-hero--tools">
   <div class="page-hero-art" aria-hidden="true"></div>
   <div class="page-hero-inner">
     <h1>Planning <em>Guides</em></h1>
-    <p class="page-hero-sub">Plain-English guides to how the planning system works in England, from your first extension to appeals, use classes and developer contributions.</p>
+    <p class="page-hero-sub">Plain-English guides to how planning works in England, from your first extension to appeals, use classes and developer contributions.</p>
+    <div class="gx-hero-card">
+      <label class="gx-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="gx-q" type="search" placeholder="Search guides, for example appeal or extension" aria-label="Search guides" autocomplete="off">
+      </label>
+      <nav class="gx-chips" aria-label="Guide categories">
+        {% for k in order %}{% if k in guides_by_category %}<a class="gx-chip" href="#{{ k }}">{{ category_meta[k].title }}</a>{% endif %}{% endfor %}
+      </nav>
+    </div>
   </div>
 </section>
 
-<div class="gx-bar">
-  <div class="gx-bar-in">
-    <label class="gx-search">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-      <input id="gx-q" type="search" placeholder="Search guides" aria-label="Search guides" autocomplete="off">
-    </label>
-    <nav class="gx-chips" aria-label="Guide categories">
-      {% for k in order %}{% if k in guides_by_category %}<a class="gx-chip" href="#{{ k }}">{{ category_meta[k].title }}</a>{% endif %}{% endfor %}
-    </nav>
-  </div>
-</div>
-
 <main class="gx-wrap">
-  <div class="gx-intro">
-    <div><b>Written for England</b>Wales, Scotland and Northern Ireland have their own rules, so check locally if you are outside England.</div>
-    <div><b>Checked against current rules</b>Where a rule is changing, the guide says so and tells you who to ask.</div>
-    <div><b>See it in real cases</b>Every guide links back to live applications near you through postcode search.</div>
-  </div>
-
   {% for cat_key in order %}
   {% if cat_key in guides_by_category %}
   <section class="gx-sec" id="{{ cat_key }}" style="--accent: {{ accent[cat_key] }}">
@@ -94,6 +86,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{{ icons[cat_key] | safe }}</svg>
       </span>
       <h2>{{ category_meta[cat_key].title }}</h2>
+      <span class="gx-count">{{ guides_by_category[cat_key]|length }} guide{{ '' if guides_by_category[cat_key]|length == 1 else 's' }}</span>
     </div>
     <p class="gx-sec-d">{{ category_meta[cat_key].description }}</p>
 
