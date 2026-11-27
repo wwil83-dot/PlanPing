@@ -1635,21 +1635,21 @@ GUIDE_CATEGORY_SEARCH_URL = {
 
 GUIDE_CATEGORY_NATIONAL_STAT = {
     "farm_diversification": {
-        "number": "462",
+        "number": "395",
         "label": "new homes from agricultural building conversions in England",
-        "period": "2024–25",
-        "source": "MHCLG, Housing Supply: Net Additional Dwellings",
+        "period": "2025–26",
+        "source": "MHCLG, Housing Supply: Net Additional Dwellings (published 26 Nov 2026)",
     },
     "commercial_conversion": {
-        "number": "6,202",
+        "number": "5,628",
         "label": "new homes from office and commercial building conversions in England",
-        "period": "2024–25",
-        "source": "MHCLG, Housing Supply: Net Additional Dwellings",
+        "period": "2025–26",
+        "source": "MHCLG, Housing Supply: Net Additional Dwellings (published 26 Nov 2026)",
     },
     "large_sites": {
-        "number": "206,000",
+        "number": "246,000",
         "label": "housing units applied for via outline applications in England",
-        "period": "year to Dec 2025",
+        "period": "year to Jun 2026",
         "source": "MHCLG Planning Applications Statistics",
     },
 }
